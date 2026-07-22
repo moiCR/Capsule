@@ -1,0 +1,48 @@
+# Capsule
+
+## Project
+
+- Capsule is a shell for Hyprland and Niri built with Rust and GPUI.
+- Prioritize maintainability, readability, and correctness over clever optimizations.
+- Preserve the project's minimal and contextual UI philosophy.
+
+## Rust
+
+- Write idiomatic Rust.
+- Never use `unwrap()`, `expect()`, or other panicking APIs in production code.
+- Propagate errors using `Result` and `?`.
+- Avoid unnecessary cloning and allocations.
+- Prefer descriptive names over abbreviations.
+- Keep functions focused on a single responsibility.
+- Run `cargo fmt` before finishing changes.
+- Keep `cargo clippy` free of warnings.
+
+## Architecture
+
+- Prefer extending existing modules before creating new ones.
+- Do not create new crates or modules unless there is a clear architectural reason.
+- Keep related functionality together.
+- Avoid introducing traits unless multiple implementations are expected.
+- Favor composition over unnecessary abstractions.
+
+## GPUI
+
+- Keep rendering declarative.
+- Keep business logic outside `render()`.
+- Store application state in entities, not UI components.
+- Never block the UI thread.
+- Background work belongs in background tasks.
+- Reuse UI components whenever practical.
+
+## Code Style
+
+- Comments should explain **why**, never **what**.
+- Remove dead code instead of commenting it out.
+- Avoid TODOs unless explicitly requested.
+- Do not make unrelated refactors while implementing a feature.
+
+## Scope
+
+- Only implement what was requested.
+- Do not add features, configuration options, or dependencies unless explicitly required.
+- Avoid speculative abstractions.
