@@ -1,6 +1,6 @@
 use chrono::{Datelike, Local, Timelike, Weekday};
-use gpui::{div, prelude::*, px, Context, IntoElement, Render, Window};
-use services::{MediaTrack, MprisService};
+use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
+use services::{AppState, MediaTrack};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
@@ -63,21 +63,17 @@ fn get_greeting_info(hour: u32) -> (&'static str, &'static str) {
     }
 }
 
-fn read_battery() -> Option<(i32, bool)> {
-    let cap_path = std::path::Path::new("/sys/class/power_supply/BAT0/capacity");
-    let status_path = std::path::Path::new("/sys/class/power_supply/BAT0/status");
-    if cap_path.exists() && status_path.exists() {
-        let cap = std::fs::read_to_string(cap_path)
-            .ok()?
-            .trim()
-            .parse::<i32>()
-            .ok()?;
-        let status = std::fs::read_to_string(status_path).ok()?;
-        let charging = status.trim() == "Charging";
-        Some((cap, charging))
-    } else {
-        None
-    }
+async fn read_battery() -> Option<(i32, bool)> {
+    let cap_str = tokio::fs::read_to_string("/sys/class/power_supply/BAT0/capacity")
+        .await
+        .ok()?;
+    let status_str = tokio::fs::read_to_string("/sys/class/power_supply/BAT0/status")
+        .await
+        .ok()?;
+
+    let cap = cap_str.trim().parse::<i32>().ok()?;
+    let charging = status_str.trim() == "Charging";
+    Some((cap, charging))
 }
 
 impl IdleHoverModule {
@@ -97,7 +93,7 @@ impl IdleHoverModule {
                 );
 
                 let (greeting, icon) = get_greeting_info(now.hour());
-                let (bat, charging) = read_battery().unwrap_or((100, false));
+                let (bat, charging) = read_battery().await.unwrap_or((100, false));
 
                 let res = this.update(cx, |this: &mut Self, cx| {
                     let changed = this.time_str != time_val
@@ -124,9 +120,10 @@ impl IdleHoverModule {
         .detach();
 
         // MPRIS Media Players polling
+        let mpris_service = cx.global::<AppState>().mpris.clone();
         cx.spawn(async move |this, cx| {
             loop {
-                let players = MprisService::fetch_all_players().await;
+                let players = mpris_service.get_all_players();
 
                 let res = this.update(cx, |this: &mut Self, cx| {
                     let user_interacting = this
@@ -135,19 +132,17 @@ impl IdleHoverModule {
                         .unwrap_or(false);
 
                     if !user_interacting {
-                        let active_idx = players
-                            .iter()
-                            .position(|p| p.is_playing)
-                            .unwrap_or(0);
+                        let active_idx = players.iter().position(|p| p.is_playing).unwrap_or(0);
 
-                        if this.media_players != players {
-                            this.media_players = players;
+                        if this.media_players != *players {
+                            this.media_players = (*players).clone();
                             this.selected_player_idx =
                                 active_idx.min(this.media_players.len().saturating_sub(1));
                             cx.notify();
                         }
                     }
                 });
+
                 if res.is_err() {
                     break;
                 }
@@ -161,7 +156,7 @@ impl IdleHoverModule {
 
         let now = Local::now();
         let (greeting, icon) = get_greeting_info(now.hour());
-        let (bat, charging) = read_battery().unwrap_or((100, false));
+        let (bat, charging) = (100, false);
 
         Self {
             time_str: format!("{:02}:{:02}", now.hour(), now.minute()),
@@ -193,6 +188,7 @@ impl IdleHoverModule {
         self.last_user_action = Some(Instant::now());
     }
 
+    #[allow(dead_code)]
     pub fn update_players(&mut self, players: Vec<MediaTrack>) {
         self.media_players = players;
         self.last_user_action = None;

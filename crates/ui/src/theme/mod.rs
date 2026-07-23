@@ -1,6 +1,10 @@
+pub mod app_theme;
+pub mod templates;
 pub mod theme_manager;
+
 use gpui::{Hsla, Rgba};
 use serde::{Deserialize, Serialize};
+pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, QtApps, YaziApp};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Theme {

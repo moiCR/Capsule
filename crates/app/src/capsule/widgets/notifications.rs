@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, svg, Context, FontWeight, IntoElement};
+use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::NotificationStore;
 use ui::theme::Theme;
 

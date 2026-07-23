@@ -1,6 +1,5 @@
-use gpui::{div, prelude::*, px, svg, Context, FontWeight, IntoElement};
+use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::{MediaTrack, MprisService};
-use std::time::Duration;
 use ui::theme::Theme;
 
 use crate::capsule::modules::idle_hover::IdleHoverModule;
@@ -101,30 +100,18 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-prev")
                 .cursor_pointer()
-                .on_mouse_down(
-                    gpui::MouseButton::Left,
-                    cx.listener(|this, _, _window, cx| {
-                        if let Some(active) = this.get_selected_player() {
-                            let bus_name = active.bus_name.clone();
-                            this.touch_user_action();
-                            cx.notify();
+                .on_click(cx.listener(|this, _, _window, cx| {
+                    if let Some(active) = this.get_selected_player() {
+                        let bus_name = active.bus_name.clone();
+                        this.touch_user_action();
+                        cx.notify();
 
-                            cx.spawn(async move |this, cx| {
-                                MprisService::previous_bus(&bus_name).await;
-                                cx.background_executor()
-                                    .timer(Duration::from_millis(150))
-                                    .await;
-                                let players = MprisService::fetch_all_players().await;
-                                this.update(cx, |this, cx| {
-                                    this.update_players(players);
-                                    cx.notify();
-                                })
-                                .ok();
-                            })
-                            .detach();
-                        }
-                    }),
-                )
+                        cx.spawn(async move |_this, _cx| {
+                            MprisService::previous_bus(&bus_name).await;
+                        })
+                        .detach();
+                    }
+                }))
                 .child(
                     svg()
                         .path("skip-back.svg")
@@ -136,31 +123,19 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-play-pause")
                 .cursor_pointer()
-                .on_mouse_down(
-                    gpui::MouseButton::Left,
-                    cx.listener(|this, _, _window, cx| {
-                        if let Some(active) = this.get_selected_player_mut() {
-                            let bus_name = active.bus_name.clone();
-                            active.is_playing = !active.is_playing;
-                            this.touch_user_action();
-                            cx.notify();
+                .on_click(cx.listener(|this, _, _window, cx| {
+                    if let Some(active) = this.get_selected_player_mut() {
+                        let bus_name = active.bus_name.clone();
+                        active.is_playing = !active.is_playing;
+                        this.touch_user_action();
+                        cx.notify();
 
-                            cx.spawn(async move |this, cx| {
-                                MprisService::play_pause_bus(&bus_name).await;
-                                cx.background_executor()
-                                    .timer(Duration::from_millis(150))
-                                    .await;
-                                let players = MprisService::fetch_all_players().await;
-                                this.update(cx, |this, cx| {
-                                    this.update_players(players);
-                                    cx.notify();
-                                })
-                                .ok();
-                            })
-                            .detach();
-                        }
-                    }),
-                )
+                        cx.spawn(async move |_this, _cx| {
+                            MprisService::play_pause_bus(&bus_name).await;
+                        })
+                        .detach();
+                    }
+                }))
                 .child(
                     div()
                         .flex()
@@ -186,30 +161,18 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-next")
                 .cursor_pointer()
-                .on_mouse_down(
-                    gpui::MouseButton::Left,
-                    cx.listener(|this, _, _window, cx| {
-                        if let Some(active) = this.get_selected_player() {
-                            let bus_name = active.bus_name.clone();
-                            this.touch_user_action();
-                            cx.notify();
+                .on_click(cx.listener(|this, _, _window, cx| {
+                    if let Some(active) = this.get_selected_player() {
+                        let bus_name = active.bus_name.clone();
+                        this.touch_user_action();
+                        cx.notify();
 
-                            cx.spawn(async move |this, cx| {
-                                MprisService::next_bus(&bus_name).await;
-                                cx.background_executor()
-                                    .timer(Duration::from_millis(150))
-                                    .await;
-                                let players = MprisService::fetch_all_players().await;
-                                this.update(cx, |this, cx| {
-                                    this.update_players(players);
-                                    cx.notify();
-                                })
-                                .ok();
-                            })
-                            .detach();
-                        }
-                    }),
-                )
+                        cx.spawn(async move |_this, _cx| {
+                            MprisService::next_bus(&bus_name).await;
+                        })
+                        .detach();
+                    }
+                }))
                 .child(
                     svg()
                         .path("skip-forward.svg")

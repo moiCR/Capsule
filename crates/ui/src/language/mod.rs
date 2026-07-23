@@ -8,9 +8,9 @@ pub struct Language {
 pub struct Days {
     pub monday: String,
     pub tuesday: String,
-    pub wednesday : String,
-    pub thursday : String,
-    pub friday : String,
-    pub saturday : String,
-    pub sunday : String,
+    pub wednesday: String,
+    pub thursday: String,
+    pub friday: String,
+    pub saturday: String,
+    pub sunday: String,
 }

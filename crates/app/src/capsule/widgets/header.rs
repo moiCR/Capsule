@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, svg, FontWeight, IntoElement};
+use gpui::{FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
 pub fn render_header(

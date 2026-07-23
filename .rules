@@ -16,6 +16,7 @@
 - Keep functions focused on a single responsibility.
 - Run `cargo fmt` before finishing changes.
 - Keep `cargo clippy` free of warnings.
+- Don't write comment's in the code
 
 ## Architecture
 

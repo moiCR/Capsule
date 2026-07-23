@@ -128,13 +128,8 @@ impl NotificationServer {
         _hints: std::collections::HashMap<String, zbus::zvariant::Value<'_>>,
         expire_timeout: i32,
     ) -> u32 {
-        self.store.add_notification(
-            app_name,
-            app_icon,
-            summary,
-            body,
-            expire_timeout,
-        )
+        self.store
+            .add_notification(app_name, app_icon, summary, body, expire_timeout)
     }
 
     async fn close_notification(&self, _id: u32) {}
@@ -162,12 +157,14 @@ pub async fn start_notification_server() -> anyhow::Result<()> {
     let store = NotificationStore::global().clone();
     let server = NotificationServer { store };
 
-    let connection = zbus::connection::Builder::session()?
+    let _connection = zbus::connection::Builder::session()?
         .name("org.freedesktop.Notifications")?
         .serve_at("/org/freedesktop/Notifications", server)?
         .build()
         .await?;
 
-    std::mem::forget(connection);
-    Ok(())
+    let mut interval = tokio::time::interval(Duration::from_secs(3600));
+    loop {
+        interval.tick().await;
+    }
 }

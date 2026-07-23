@@ -1,7 +1,7 @@
-pub struct LanguageManager{}
+pub struct LanguageManager {}
 
-impl LanguageManager{
-    pub fn new() -> Self{
+impl LanguageManager {
+    pub fn new() -> Self {
         Self {}
     }
 }

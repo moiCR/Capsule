@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, svg, Context, FontWeight, IntoElement, Render, Window};
+use gpui::{Context, FontWeight, IntoElement, Render, Window, div, prelude::*, px, svg};
 use services::{NotificationItem, NotificationStore};
 use ui::theme::Theme;
 
@@ -8,7 +8,6 @@ pub struct NotificationModule {
 
 impl NotificationModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        // Poll for latest active D-Bus notification
         cx.spawn(async move |this, cx| {
             loop {
                 let store = NotificationStore::global();

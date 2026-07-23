@@ -3,7 +3,10 @@ use std::{fs, path::PathBuf};
 
 pub struct ThemeManager {
     pub current_theme: Theme,
+    pub last_modified: Option<std::time::SystemTime>,
 }
+
+impl gpui::Global for ThemeManager {}
 
 impl Default for ThemeManager {
     fn default() -> Self {
@@ -14,6 +17,7 @@ impl Default for ThemeManager {
 impl ThemeManager {
     pub fn new() -> Self {
         let path = Self::theme_path();
+        let mtime = fs::metadata(&path).and_then(|m| m.modified()).ok();
 
         let theme = if path.exists() {
             Self::load(&path).unwrap_or_default()
@@ -27,9 +31,56 @@ impl ThemeManager {
             theme
         };
 
-        Self {
+        let manager = Self {
             current_theme: theme,
+            last_modified: mtime,
+        };
+        manager.apply_theme_to_apps();
+        manager
+    }
+
+    pub fn check_and_reload(&mut self) -> bool {
+        let path = Self::theme_path();
+        if let Ok(meta) = fs::metadata(&path) {
+            if let Ok(mtime) = meta.modified() {
+                if self.last_modified != Some(mtime) {
+                    self.last_modified = Some(mtime);
+                    if let Ok(theme) = Self::load(&path) {
+                        self.current_theme = theme;
+                        self.apply_theme_to_apps();
+                        return true;
+                    }
+                }
+            }
         }
+        false
+    }
+
+    pub fn apply_theme_to_apps(&self) {
+        use crate::theme::{AppTheme, FishApp, GhosttyApp, GtkApps, QtApps, YaziApp};
+
+        GtkApps::apply_current_theme(&self.current_theme);
+        GtkApps::reload_apps();
+
+        QtApps::apply_current_theme(&self.current_theme);
+        QtApps::reload_apps();
+
+        GhosttyApp::apply_current_theme(&self.current_theme);
+        GhosttyApp::reload_apps();
+
+        FishApp::apply_current_theme(&self.current_theme);
+        FishApp::reload_apps();
+
+        YaziApp::apply_current_theme(&self.current_theme);
+        YaziApp::reload_apps();
+    }
+
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.current_theme = theme;
+        if let Err(error) = Self::save(&Self::theme_path(), &self.current_theme) {
+            eprintln!("Failed to save theme: {error}");
+        }
+        self.apply_theme_to_apps();
     }
 
     pub fn theme_path() -> PathBuf {

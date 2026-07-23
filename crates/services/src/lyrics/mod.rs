@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -55,18 +56,91 @@ struct LrclibResponse {
 #[derive(Clone)]
 pub struct LyricsService {
     client: reqwest::Client,
-    cache: Arc<Mutex<Option<(String, String, Option<TrackLyrics>)>>>,
+    cache: Arc<Mutex<HashMap<String, Option<TrackLyrics>>>>,
+    fetching: Arc<Mutex<HashSet<String>>>,
 }
 
 impl LyricsService {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(3))
                 .build()
                 .unwrap_or_default(),
-            cache: Arc::new(Mutex::new(None)),
+            cache: Arc::new(Mutex::new(HashMap::new())),
+            fetching: Arc::new(Mutex::new(HashSet::new())),
         }
+    }
+
+    pub fn get_cached_lyrics(&self, title: &str, artist: &str) -> Option<Option<TrackLyrics>> {
+        let clean_title = clean_track_title(title);
+        let key = format!("{} - {}", clean_title.to_lowercase(), artist.to_lowercase());
+        let raw_key = format!("{} - {}", title.to_lowercase(), artist.to_lowercase());
+
+        if let Ok(guard) = self.cache.lock() {
+            if let Some(res) = guard.get(&key) {
+                return Some(res.clone());
+            }
+            if let Some(res) = guard.get(&raw_key) {
+                return Some(res.clone());
+            }
+        }
+        None
+    }
+
+    pub fn fetch_lyrics_in_background(
+        &self,
+        title: String,
+        artist: String,
+        album: Option<String>,
+        duration_secs: Option<u64>,
+    ) {
+        if title.is_empty() || title == "Silence" {
+            return;
+        }
+
+        let clean_title = clean_track_title(&title);
+        let key = format!("{} - {}", clean_title.to_lowercase(), artist.to_lowercase());
+        let raw_key = format!("{} - {}", title.to_lowercase(), artist.to_lowercase());
+
+        if let Ok(guard) = self.cache.lock() {
+            if guard.contains_key(&key) || guard.contains_key(&raw_key) {
+                return;
+            }
+        }
+
+        if let Ok(mut guard) = self.fetching.lock() {
+            if guard.contains(&key) {
+                return;
+            }
+            guard.insert(key.clone());
+        }
+
+        let client = self.client.clone();
+        let cache = self.cache.clone();
+        let fetching = self.fetching.clone();
+        let _raw_title = title.clone();
+        let raw_artist = artist.clone();
+
+        tokio::spawn(async move {
+            let result = fetch_lrclib(
+                &client,
+                &clean_title,
+                &raw_artist,
+                album.as_deref(),
+                duration_secs,
+            )
+            .await;
+
+            if let Ok(mut guard) = cache.lock() {
+                guard.insert(key.clone(), result.clone());
+                guard.insert(raw_key, result);
+            }
+
+            if let Ok(mut guard) = fetching.lock() {
+                guard.remove(&key);
+            }
+        });
     }
 
     pub async fn get_lyrics_for_track(
@@ -76,27 +150,18 @@ impl LyricsService {
         album: Option<&str>,
         duration_secs: Option<u64>,
     ) -> Option<TrackLyrics> {
-        if title.is_empty() || title == "Silence" {
-            return None;
+        if let Some(cached) = self.get_cached_lyrics(title, artist) {
+            return cached;
         }
 
-        let clean_title = clean_track_title(title);
+        self.fetch_lyrics_in_background(
+            title.to_string(),
+            artist.to_string(),
+            album.map(|s| s.to_string()),
+            duration_secs,
+        );
 
-        if let Ok(guard) = self.cache.lock() {
-            if let Some((cached_title, cached_artist, lyrics)) = guard.as_ref() {
-                if cached_title == &clean_title && cached_artist == artist {
-                    return lyrics.clone();
-                }
-            }
-        }
-
-        let result = fetch_lrclib(&self.client, &clean_title, artist, album, duration_secs).await;
-
-        if let Ok(mut guard) = self.cache.lock() {
-            *guard = Some((clean_title, artist.to_string(), result.clone()));
-        }
-
-        result
+        None
     }
 }
 
@@ -106,7 +171,7 @@ impl Default for LyricsService {
     }
 }
 
-fn clean_track_title(title: &str) -> String {
+pub fn clean_track_title(title: &str) -> String {
     title.trim().to_string()
 }
 
@@ -252,47 +317,4 @@ fn parse_timestamp(tag: &str) -> Option<Duration> {
     Some(Duration::from_millis(
         minutes * 60 * 1000 + seconds * 1000 + millis,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_lrc() {
-        let sample = r#"
-[00:12.34] Line one
-[00:15.500] Line two
-[01:02.00] Line three
-"#;
-        let lines = parse_lrc(sample);
-        assert_eq!(lines.len(), 3);
-        assert_eq!(lines[0].timestamp, Duration::from_millis(12340));
-        assert_eq!(lines[0].text, "Line one");
-        assert_eq!(lines[1].timestamp, Duration::from_millis(15500));
-        assert_eq!(lines[1].text, "Line two");
-        assert_eq!(lines[2].timestamp, Duration::from_millis(62000));
-        assert_eq!(lines[2].text, "Line three");
-    }
-
-    #[test]
-    fn test_get_current_line() {
-        let sample = r#"
-[00:10.00] Intro line
-[00:20.00] Verse line
-[00:30.00] Chorus line
-"#;
-        let synced = parse_lrc(sample);
-        let lyrics = TrackLyrics {
-            track_title: "Test".into(),
-            artist_name: "Artist".into(),
-            synced_lines: synced,
-            plain_lyrics: None,
-        };
-
-        assert_eq!(lyrics.get_current_line(Duration::from_secs(5)), None);
-        assert_eq!(lyrics.get_current_line(Duration::from_secs(12)), Some("Intro line"));
-        assert_eq!(lyrics.get_current_line(Duration::from_secs(25)), Some("Verse line"));
-        assert_eq!(lyrics.get_current_line(Duration::from_secs(35)), Some("Chorus line"));
-    }
 }

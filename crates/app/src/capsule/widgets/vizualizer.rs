@@ -1,5 +1,6 @@
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
-use std::time::{Duration, Instant};
+use services::AppState;
+use std::time::Instant;
 use ui::theme::Theme;
 
 pub struct Visualizer {
@@ -12,9 +13,13 @@ impl Visualizer {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let start_time = Instant::now();
 
+        let compositor = cx.global::<AppState>().compositor.clone();
+
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_millis(30)).await;
+                cx.background_executor()
+                    .timer(compositor.get_frame_duration())
+                    .await;
                 let res = this.update(cx, |this: &mut Self, cx| {
                     if this.active {
                         let t = this.start_time.elapsed().as_secs_f32();
@@ -23,7 +28,9 @@ impl Visualizer {
 
                         for i in 0..4 {
                             let wave1 = ((t * frequencies[i] + offsets[i]).sin() + 1.0) * 0.5;
-                            let wave2 = ((t * (frequencies[i] * 0.75) + offsets[i] * 1.6).cos() + 1.0) * 0.5;
+                            let wave2 = ((t * (frequencies[i] * 0.75) + offsets[i] * 1.6).cos()
+                                + 1.0)
+                                * 0.5;
                             let combined = wave1 * 0.55 + wave2 * 0.45;
 
                             let target_h = 3.0 + combined * 11.0;
