@@ -3,11 +3,13 @@ use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
+use super::modules::create_theme::CreateThemeModule;
 use super::modules::idle::IdleModule;
 use super::modules::idle_hover::IdleHoverModule;
 use super::modules::launcher::LauncherModule;
 use super::modules::notification::NotificationModule;
 use super::modules::polkit::PolkitModule;
+use super::modules::select_theme::SelectThemeModule;
 use super::modules::volume::VolumeModule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -19,6 +21,8 @@ pub enum CapsuleMode {
     Launcher,
     Volume,
     Polkit,
+    SelectTheme,
+    CreateTheme,
 }
 
 impl CapsuleMode {
@@ -30,6 +34,8 @@ impl CapsuleMode {
             CapsuleMode::Launcher => (348.0, 480.0),
             CapsuleMode::Volume => (280.0, 48.0),
             CapsuleMode::Polkit => (348.0, 240.0),
+            CapsuleMode::SelectTheme => (348.0, 500.0),
+            CapsuleMode::CreateTheme => (348.0, 500.0),
         }
     }
 
@@ -41,6 +47,8 @@ impl CapsuleMode {
             CapsuleMode::Launcher => 28.0,
             CapsuleMode::Volume => 22.0,
             CapsuleMode::Polkit => 28.0,
+            CapsuleMode::SelectTheme => 28.0,
+            CapsuleMode::CreateTheme => 28.0,
         }
     }
 }
@@ -55,6 +63,8 @@ pub struct Capsule {
     launcher_view: Entity<LauncherModule>,
     volume_view: Entity<VolumeModule>,
     polkit_view: Entity<PolkitModule>,
+    select_theme_view: Entity<SelectThemeModule>,
+    create_theme_view: Entity<CreateThemeModule>,
     current_width: f32,
     current_height: f32,
     current_radius: f32,
@@ -99,10 +109,37 @@ impl Capsule {
         })
         .detach();
 
+        cx.subscribe(
+            &idle_view,
+            |capsule, _, event: &super::modules::idle::IdleEvent, cx| match event {
+                super::modules::idle::IdleEvent::ExpandRequested => {
+                    if capsule.mode == CapsuleMode::Default {
+                        capsule.start_transition_internal(CapsuleMode::Dashboard, None, cx);
+                    }
+                }
+            },
+        )
+        .detach();
+
         let idle_hover_view = cx.new(IdleHoverModule::new);
         cx.observe(&idle_hover_view, |_, _, cx| {
             cx.notify();
         })
+        .detach();
+
+        cx.subscribe(
+            &idle_hover_view,
+            |capsule, _, event: &super::modules::idle_hover::IdleHoverEvent, cx| match event {
+                super::modules::idle_hover::IdleHoverEvent::CloseRequested => {
+                    if capsule.mode == CapsuleMode::Dashboard {
+                        capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                    }
+                }
+                super::modules::idle_hover::IdleHoverEvent::SelectThemeRequested => {
+                    capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
+                }
+            },
+        )
         .detach();
 
         let notification_view = cx.new(NotificationModule::new);
@@ -147,13 +184,50 @@ impl Capsule {
         )
         .detach();
 
+        let select_theme_view = cx.new(SelectThemeModule::new);
+        cx.observe(&select_theme_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(
+            &select_theme_view,
+            |capsule, _, event: &super::modules::select_theme::SelectThemeEvent, cx| match event {
+                super::modules::select_theme::SelectThemeEvent::CreateThemeRequested => {
+                    capsule.start_transition_internal(CapsuleMode::CreateTheme, None, cx);
+                }
+                super::modules::select_theme::SelectThemeEvent::ThemeSelected => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            },
+        )
+        .detach();
+
+        let create_theme_view = cx.new(CreateThemeModule::new);
+        cx.observe(&create_theme_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(
+            &create_theme_view,
+            |capsule, _, event: &super::modules::create_theme::CreateThemeEvent, cx| match event {
+                super::modules::create_theme::CreateThemeEvent::ThemeCreated => {
+                    let _ = capsule.select_theme_view.update(cx, |st, cx| {
+                        st.refresh_themes(cx);
+                    });
+                    capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
+                }
+                super::modules::create_theme::CreateThemeEvent::Cancelled => {
+                    capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
+                }
+            },
+        )
+        .detach();
+
         // === HEARTBEAT ===
-        // GPUI on Wayland only processes foreground tasks when Hyprland sends
-        // frame callbacks. Hyprland stops sending them when the layer-shell
-        // surface is idle. Calling cx.notify() every 100 ms requests a new
-        // frame callback continuously, keeping the foreground executor pumping
-        // so IPC, MPRIS, and all other cx.spawn loops never freeze during
-        // periods of user inactivity.
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
@@ -164,6 +238,21 @@ impl Capsule {
                         while let Some(cmd) = services::pop_ipc_command() {
                             services::log_info!("IPC", "Processing queued IPC command: {:?}", cmd);
                             capsule.handle_ipc_command(cmd, cx);
+                        }
+
+                        if cx.has_global::<services::AppState>() {
+                            let polkit = cx.global::<services::AppState>().polkit.clone();
+                            while let Some((req, responder)) = polkit.pop_request() {
+                                services::log_info!(
+                                    "POLKIT",
+                                    "Processing Polkit auth request: '{}'",
+                                    req.action_id
+                                );
+                                let _ = capsule.polkit_view.update(cx, |p, cx| {
+                                    p.set_request(req, responder, cx);
+                                });
+                                capsule.start_transition_internal(CapsuleMode::Polkit, None, cx);
+                            }
                         }
 
                         if cx.has_global::<ui::theme::theme_manager::ThemeManager>() {
@@ -178,9 +267,24 @@ impl Capsule {
                                 cx.set_global(new_theme);
                                 services::log_info!(
                                     "THEME",
-                                    "Reloaded current_theme and applied to GTK/Qt apps!"
+                                    "Reloaded current_theme and applied to GTK/Qt/Ghostty/Fish/Yazi apps!"
                                 );
                             }
+                        }
+
+                        let m_h = match capsule.mode {
+                            CapsuleMode::Dashboard => {
+                                capsule.idle_hover_view.read(cx).measured_size().1
+                            }
+                            _ => 0.0,
+                        };
+
+                        if m_h > 0.0 && (m_h - capsule.target_height).abs() > 0.5 {
+                            capsule.target_height = m_h;
+                            if !capsule.animating {
+                                capsule.current_height = m_h;
+                            }
+                            cx.notify();
                         }
 
                         cx.notify();
@@ -193,22 +297,7 @@ impl Capsule {
         })
         .detach();
 
-        // Start Polkit Agent listener loop for system authentication requests
-        if let Ok(mut polkit_rx) = services::start_polkit_agent() {
-            cx.spawn(async move |this, cx| {
-                while let Some((req, responder)) = polkit_rx.recv().await {
-                    let _ = this.update(cx, |capsule: &mut Self, cx| {
-                        if capsule.mode != CapsuleMode::Dashboard {
-                            let _ = capsule.polkit_view.update(cx, |p, cx| {
-                                p.set_request(req, responder, cx);
-                            });
-                            capsule.start_transition_internal(CapsuleMode::Polkit, None, cx);
-                        }
-                    });
-                }
-            })
-            .detach();
-        }
+        services::start_polkit_agent();
 
         let volume_view = cx.new(VolumeModule::new);
         cx.observe(&volume_view, |capsule, _, cx| {
@@ -217,93 +306,109 @@ impl Capsule {
         })
         .detach();
 
-        // Monitor volume changes for dedicated Volume OSD mode transition
-        let sys_service_clone = cx.global::<AppState>().system.clone();
-
         cx.spawn(async move |this, cx| {
             loop {
-                let status = sys_service_clone.get_status();
-                let current_status = (status.volume, status.is_muted);
-
-                let res = this.update(cx, |capsule: &mut Self, cx| {
-                    if let Some(last) = capsule.last_vol_status {
-                        if last != current_status {
-                            let (vol, muted) = current_status;
-                            let _ = capsule.volume_view.update(cx, |v, cx| {
-                                v.update_status(vol, muted, cx);
-                            });
-
-                            capsule.volume_timer_gen += 1;
-                            let current_gen = capsule.volume_timer_gen;
-
-                            if capsule.mode != CapsuleMode::Dashboard
-                                && capsule.mode != CapsuleMode::Launcher
-                                && capsule.mode != CapsuleMode::Polkit
-                            {
-                                capsule.start_transition_internal(CapsuleMode::Volume, None, cx);
-
-                                cx.spawn(async move |weak, cx| {
-                                    cx.background_executor()
-                                        .timer(Duration::from_millis(2000))
-                                        .await;
-
-                                    let _ = weak.update(cx, |capsule: &mut Self, cx| {
-                                        if capsule.mode == CapsuleMode::Volume
-                                            && capsule.volume_timer_gen == current_gen
-                                        {
-                                            capsule.start_transition_internal(
-                                                CapsuleMode::Default,
-                                                None,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                })
-                                .detach();
-                            }
-                        }
-                    }
-                    capsule.last_vol_status = Some(current_status);
-                });
-
-                if res.is_err() {
-                    break;
-                }
-
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(Duration::from_millis(150))
                     .await;
+
+                let state = this
+                    .update(cx, |_, cx| {
+                        let sys = cx.global::<AppState>().system.get_status();
+                        (sys.volume, sys.is_muted)
+                    })
+                    .ok();
+
+                if let Some((vol, muted)) = state {
+                    let changed = this
+                        .update(cx, |capsule: &mut Self, cx| {
+                            if capsule.last_vol_status.is_none() {
+                                capsule.last_vol_status = Some((vol, muted));
+                                return false;
+                            }
+                            if capsule.last_vol_status != Some((vol, muted)) {
+                                capsule.last_vol_status = Some((vol, muted));
+
+                                if capsule.mode == CapsuleMode::Default
+                                    || capsule.mode == CapsuleMode::Volume
+                                {
+                                    capsule.start_transition_internal(
+                                        CapsuleMode::Volume,
+                                        None,
+                                        cx,
+                                    );
+                                    capsule.volume_timer_gen += 1;
+                                    let current_gen = capsule.volume_timer_gen;
+
+                                    cx.spawn(async move |weak, cx| {
+                                        cx.background_executor()
+                                            .timer(Duration::from_secs(2))
+                                            .await;
+                                        let _ = weak.update(cx, |capsule: &mut Self, cx| {
+                                            if capsule.volume_timer_gen == current_gen
+                                                && capsule.mode == CapsuleMode::Volume
+                                            {
+                                                capsule.start_transition_internal(
+                                                    CapsuleMode::Default,
+                                                    None,
+                                                    cx,
+                                                );
+                                            }
+                                        });
+                                    })
+                                    .detach();
+                                }
+                                return true;
+                            }
+                            false
+                        })
+                        .unwrap_or(false);
+
+                    if changed {
+                        let _ = this.update(cx, |_, cx| cx.notify());
+                    }
+                }
             }
         })
         .detach();
 
-        // Monitor D-Bus active notification status for mode transition
+        let mut last_seen_notif_id: Option<u32> = None;
         cx.spawn(async move |this, cx| {
             loop {
-                let store = NotificationStore::global();
-                let latest = store.get_latest_active_notification();
-                let has_notif = latest.is_some();
-
-                let res = this.update(cx, |capsule: &mut Self, cx| {
-                    if capsule.mode != CapsuleMode::Dashboard
-                        && capsule.mode != CapsuleMode::Launcher
-                        && capsule.mode != CapsuleMode::Volume
-                        && capsule.mode != CapsuleMode::Polkit
-                    {
-                        if has_notif && capsule.mode != CapsuleMode::Notification {
-                            capsule.start_transition_internal(CapsuleMode::Notification, None, cx);
-                        } else if !has_notif && capsule.mode == CapsuleMode::Notification {
-                            capsule.start_transition_internal(CapsuleMode::Default, None, cx);
-                        }
-                    }
-                });
-                if res.is_err() {
-                    break;
-                }
-
                 cx.background_executor()
                     .timer(Duration::from_millis(150))
                     .await;
+
+                let latest = NotificationStore::global().get_latest_active_notification();
+                let latest_id = latest.as_ref().map(|n| n.id);
+
+                let res = this.update(cx, |capsule: &mut Self, cx| {
+                    if latest_id != last_seen_notif_id {
+                        last_seen_notif_id = latest_id;
+                        if let Some(item) = latest {
+                            let _ = capsule.notification_view.update(cx, |notif, cx| {
+                                notif.set_item(Some(item), cx);
+                            });
+                            if capsule.mode == CapsuleMode::Default
+                                || capsule.mode == CapsuleMode::Notification
+                            {
+                                capsule.start_transition_internal(
+                                    CapsuleMode::Notification,
+                                    None,
+                                    cx,
+                                );
+                            }
+                        } else if capsule.mode == CapsuleMode::Notification {
+                            capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                        }
+                    } else if latest_id.is_none() && capsule.mode == CapsuleMode::Notification {
+                        capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                    }
+                });
+
+                if res.is_err() {
+                    break;
+                }
             }
         })
         .detach();
@@ -316,6 +421,8 @@ impl Capsule {
             launcher_view,
             volume_view,
             polkit_view,
+            select_theme_view,
+            create_theme_view,
             current_width: initial_w,
             current_height: initial_h,
             current_radius: r,
@@ -338,33 +445,25 @@ impl Capsule {
         }
     }
 
-    fn update_target_dimensions(&mut self, desired_w: f32, desired_h: f32, cx: &mut Context<Self>) {
+    pub fn update_target_dimensions(
+        &mut self,
+        target_w: f32,
+        target_h: f32,
+        cx: &mut Context<Self>,
+    ) {
         if self.mode == CapsuleMode::Default {
-            if (self.current_width - desired_w).abs() > 0.5
-                || (self.current_height - desired_h).abs() > 0.5
-            {
-                self.target_width = desired_w;
-                self.target_height = desired_h;
-                if !self.animating {
-                    self.current_width = desired_w;
-                    self.current_height = desired_h;
-                    cx.notify();
-                }
+            self.target_width = target_w;
+            self.target_height = target_h;
+            if !self.animating {
+                self.current_width = target_w;
+                self.current_height = target_h;
             }
+            cx.notify();
         }
     }
 
-    pub fn reset_inactivity_timer(&mut self) {
+    fn reset_inactivity_timer(&mut self) {
         self.last_activity_time = Instant::now();
-    }
-
-    pub fn start_transition(
-        &mut self,
-        mode: CapsuleMode,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.start_transition_internal(mode, Some(window), cx);
     }
 
     fn start_transition_internal(
@@ -384,6 +483,14 @@ impl Capsule {
         if mode == CapsuleMode::Launcher {
             let _ = self.launcher_view.update(cx, |launcher, cx| {
                 launcher.reset_search(cx);
+            });
+        } else if mode == CapsuleMode::SelectTheme {
+            let _ = self.select_theme_view.update(cx, |st, cx| {
+                st.refresh_themes(cx);
+            });
+        } else if mode == CapsuleMode::CreateTheme {
+            let _ = self.create_theme_view.update(cx, |ct, cx| {
+                ct.reset_form(cx);
             });
         }
 
@@ -428,11 +535,16 @@ impl Capsule {
             .detach();
         }
 
-        let (mut target_w, target_h) = mode.dimensions();
+        let (mut target_w, mut target_h) = mode.dimensions();
         if mode == CapsuleMode::Default {
             let (w, h) = self.idle_view.read(cx).desired_dimensions();
             target_w = w;
             let _ = h;
+        } else if mode == CapsuleMode::Dashboard {
+            let (_, h) = self.idle_hover_view.read(cx).measured_size();
+            if h > 0.0 {
+                target_h = h;
+            }
         }
         let target_r = mode.radius();
 
@@ -507,6 +619,22 @@ impl Capsule {
                 };
                 self.start_transition_internal(target, None, cx);
             }
+            services::IpcCommand::ToggleSelectTheme => {
+                let target = if self.mode == CapsuleMode::SelectTheme {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::SelectTheme
+                };
+                self.start_transition_internal(target, None, cx);
+            }
+            services::IpcCommand::ToggleCreateTheme => {
+                let target = if self.mode == CapsuleMode::CreateTheme {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::CreateTheme
+                };
+                self.start_transition_internal(target, None, cx);
+            }
             services::IpcCommand::ShowLauncher => {
                 self.start_transition_internal(CapsuleMode::Launcher, None, cx);
             }
@@ -572,7 +700,11 @@ impl Render for Capsule {
         let theme = cx.global::<Theme>().clone();
 
         let win_w: f32 = window.bounds().size.width.into();
-        let is_modal = self.mode == CapsuleMode::Launcher || self.mode == CapsuleMode::Dashboard;
+        let is_modal = self.mode == CapsuleMode::Launcher
+            || self.mode == CapsuleMode::Dashboard
+            || self.mode == CapsuleMode::Polkit
+            || self.mode == CapsuleMode::SelectTheme
+            || self.mode == CapsuleMode::CreateTheme;
 
         if is_modal {
             window.set_input_region(None);
@@ -596,7 +728,12 @@ impl Render for Capsule {
 
         if self.last_rendered_mode != Some(self.mode) {
             self.last_rendered_mode = Some(self.mode);
-            if self.mode == CapsuleMode::Launcher || self.mode == CapsuleMode::Dashboard {
+            if self.mode == CapsuleMode::Launcher
+                || self.mode == CapsuleMode::Dashboard
+                || self.mode == CapsuleMode::Polkit
+                || self.mode == CapsuleMode::SelectTheme
+                || self.mode == CapsuleMode::CreateTheme
+            {
                 window.activate_window();
             }
             if self.mode == CapsuleMode::Launcher {
@@ -638,6 +775,38 @@ impl Render for Capsule {
                     .opacity(polkit_opacity)
                     .child(self.polkit_view.clone().into_any_element()),
             );
+        } else if self.mode == CapsuleMode::SelectTheme {
+            let select_opacity = if self.animating { eased } else { 1.0 };
+
+            content_container = content_container.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .overflow_hidden()
+                    .opacity(select_opacity)
+                    .child(self.select_theme_view.clone().into_any_element()),
+            );
+        } else if self.mode == CapsuleMode::CreateTheme {
+            let create_opacity = if self.animating { eased } else { 1.0 };
+
+            content_container = content_container.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .overflow_hidden()
+                    .opacity(create_opacity)
+                    .child(self.create_theme_view.clone().into_any_element()),
+            );
         } else if self.mode == CapsuleMode::Volume {
             let volume_opacity = if self.animating { eased } else { 1.0 };
 
@@ -672,6 +841,8 @@ impl Render for Capsule {
             );
         } else {
             let default_opacity = (1.0 - self.anim_progress).clamp(0.0, 1.0);
+            let hover_opacity = (self.anim_progress).clamp(0.0, 1.0);
+
             if default_opacity > 0.001 {
                 content_container = content_container.child(
                     div()
@@ -688,7 +859,7 @@ impl Render for Capsule {
                 );
             }
 
-            if self.anim_progress > 0.001 {
+            if hover_opacity > 0.001 {
                 content_container = content_container.child(
                     div()
                         .absolute()
@@ -699,48 +870,74 @@ impl Render for Capsule {
                         .items_center()
                         .justify_center()
                         .overflow_hidden()
-                        .opacity(self.anim_progress)
+                        .opacity(hover_opacity)
                         .child(self.idle_hover_view.clone().into_any_element()),
                 );
             }
         }
 
-        let is_modal = self.mode == CapsuleMode::Launcher || self.mode == CapsuleMode::Dashboard;
+        let is_dashboard = self.mode == CapsuleMode::Dashboard;
+        let border_opacity = if is_dashboard {
+            0.6
+        } else {
+            (0.12 + 0.4 * (1.0 - self.anim_progress)).clamp(0.12, 0.5)
+        };
+        let border_color = theme.surface().opacity(border_opacity);
 
-        let mut root = div()
-            .id("capsule-backdrop")
+        let shadow_class = if is_dashboard {
+            "shadow-2xl shadow-black/60"
+        } else {
+            "shadow-xl shadow-black/40"
+        };
+
+        let active_theme = cx.global::<Theme>().clone();
+
+        let mut pill_container = div()
+            .id("capsule-pill")
+            .w(px(self.current_width))
+            .h(px(self.current_height))
+            .rounded(px(self.current_radius))
+            .bg(active_theme.background())
+            .border_1()
+            .border_color(border_color)
+            .shadow_lg()
+            .overflow_hidden();
+
+        if self.mode == CapsuleMode::Default {
+            pill_container =
+                pill_container
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.start_transition_internal(CapsuleMode::Dashboard, None, cx);
+                    }));
+        }
+        let mut flex_container = div()
+            .flex()
+            .flex_row()
+            .items_start()
+            .justify_center()
+            .gap_3();
+
+        if self.mode == CapsuleMode::Dashboard && cx.has_global::<AppState>() {
+            let sni = cx.global::<AppState>().sni_host.clone();
+            if let Some(idx) = sni.get_selected_idx() {
+                if let Some(item) = sni.get_items().get(idx) {
+                    let side_panel = self.idle_hover_view.update(cx, |_, cx| {
+                        super::widgets::tray::render_side_tray_panel(item, idx, &active_theme, cx)
+                    });
+                    flex_container = flex_container.child(side_panel);
+                }
+            }
+        }
+
+        flex_container = flex_container.child(pill_container.child(content_container));
+
+        div()
+            .size_full()
             .flex()
             .items_start()
             .justify_center()
-            .size_full()
-            .pt(px(MARGIN_TOP / 2.0));
-
-        if is_modal {
-            root = root.on_click(cx.listener(|capsule, _event, _window, cx| {
-                capsule.start_transition_internal(CapsuleMode::Default, None, cx);
-            }));
-        }
-
-        root.child(
-            div()
-                .id("capsule-pill")
-                .on_click(|_event, _window, _cx| {})
-                .flex()
-                .flex_col()
-                .overflow_hidden()
-                .w(px(self.current_width))
-                .h(px(self.current_height))
-                .bg(theme.background())
-                .border_1()
-                .border_color(theme.background_alt())
-                .rounded(px(self.current_radius))
-                .shadow_lg()
-                .on_click(cx.listener(|capsule, _event, window, cx| {
-                    if capsule.mode == CapsuleMode::Default {
-                        capsule.start_transition(CapsuleMode::Dashboard, window, cx);
-                    }
-                }))
-                .child(content_container),
-        )
+            .pt(px(MARGIN_TOP / 2.0))
+            .child(flex_container)
     }
 }

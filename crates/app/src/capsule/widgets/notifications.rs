@@ -9,27 +9,37 @@ pub fn render_notifications_widget(
     cx: &mut Context<IdleHoverModule>,
 ) -> impl IntoElement {
     let notifications = NotificationStore::global().get_all_notifications();
+    let is_empty = notifications.is_empty();
+
+    let box_height = if is_empty { px(56.0) } else { px(130.0) };
 
     let notifications_box = div()
         .id("notifications-container-box")
         .flex()
         .flex_col()
         .w_full()
-        .h(px(160.0))
+        .h(box_height)
         .bg(theme.background_alt())
         .border_1()
         .border_color(theme.surface())
-        .rounded(px(18.0))
+        .rounded(px(16.0))
         .p_3()
         .overflow_hidden();
 
-    let box_content = if notifications.is_empty() {
+    let box_content = if is_empty {
         div()
             .flex()
-            .flex_col()
+            .flex_row()
             .items_center()
             .justify_center()
             .size_full()
+            .gap_2()
+            .child(
+                svg()
+                    .path("bell-off.svg")
+                    .size(px(13.0))
+                    .text_color(theme.foreground_muted()),
+            )
             .child(
                 div()
                     .text_size(px(11.0))
@@ -113,7 +123,7 @@ pub fn render_notifications_widget(
         .flex()
         .flex_col()
         .w_full()
-        .gap_2()
+        .gap_1p5()
         .child(
             div()
                 .flex()
@@ -128,7 +138,7 @@ pub fn render_notifications_widget(
                         .text_color(theme.foreground_muted())
                         .child("Notificaciones"),
                 )
-                .child(if !notifications.is_empty() {
+                .child(if !is_empty {
                     div()
                         .id("clear-all-notifs")
                         .cursor_pointer()

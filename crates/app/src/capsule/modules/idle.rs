@@ -1,10 +1,18 @@
 use chrono::{Local, Timelike};
-use gpui::{Context, Entity, FontWeight, IntoElement, Render, Task, Window, div, prelude::*, px};
+use gpui::{
+    Context, Entity, EventEmitter, FontWeight, IntoElement, Render, Task, Window, div, prelude::*,
+    px,
+};
 use services::{AppState, LyricsService};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
 use super::super::widgets::vizualizer::Visualizer;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IdleEvent {
+    ExpandRequested,
+}
 
 fn ease_out_cubic(t: f32) -> f32 {
     let p = 1.0 - t.clamp(0.0, 1.0);
@@ -316,6 +324,8 @@ impl IdleModule {
     }
 }
 
+impl EventEmitter<IdleEvent> for IdleModule {}
+
 impl Render for IdleModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
@@ -325,6 +335,11 @@ impl Render for IdleModule {
             .unwrap_or_else(|| self.time_str.clone());
 
         let mut row = div()
+            .id("idle-row")
+            .cursor_pointer()
+            .on_click(cx.listener(|_this, _, _, cx| {
+                cx.emit(IdleEvent::ExpandRequested);
+            }))
             .flex()
             .flex_row()
             .items_center()

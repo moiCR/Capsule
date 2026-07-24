@@ -1,4 +1,7 @@
-use crate::{CompositorService, LauncherService, LyricsService, MprisService, SystemService};
+use crate::{
+    CompositorService, LauncherService, LyricsService, MprisService, PolkitService, SniHostService,
+    SystemService,
+};
 
 /// Global application state holding all singleton services.
 /// Initialize once in `main.rs` via `cx.set_global(AppState::new())`.
@@ -10,18 +13,24 @@ pub struct AppState {
     pub system: SystemService,
     pub lyrics: LyricsService,
     pub compositor: CompositorService,
+    pub polkit: PolkitService,
+    pub sni_host: SniHostService,
 }
 
 impl gpui::Global for AppState {}
 
 impl AppState {
     pub fn new() -> Self {
+        let sni_host = SniHostService::new();
+        sni_host.start();
         Self {
             launcher: LauncherService::new(),
             mpris: MprisService::new(),
             system: SystemService::new(),
             lyrics: LyricsService::new(),
             compositor: CompositorService::new(),
+            polkit: PolkitService::new(),
+            sni_host,
         }
     }
 }

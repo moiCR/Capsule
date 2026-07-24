@@ -1,5 +1,7 @@
-use gpui::{FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
+
+use crate::capsule::modules::idle_hover::{IdleHoverEvent, IdleHoverModule};
 
 pub fn render_header(
     battery_percentage: Option<i32>,
@@ -9,6 +11,7 @@ pub fn render_header(
     date_str: &str,
     time_str: &str,
     theme: &Theme,
+    cx: &mut Context<IdleHoverModule>,
 ) -> impl IntoElement {
     div()
         .flex()
@@ -47,20 +50,69 @@ pub fn render_header(
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap_1_5()
-                        .text_color(theme.foreground_muted())
-                        .text_size(px(11.0))
+                        .gap_2()
                         .child(
-                            svg()
-                                .path(if battery_charging {
-                                    "battery-charging.svg"
-                                } else {
-                                    "battery.svg"
-                                })
-                                .size(px(15.0))
-                                .text_color(theme.foreground_muted()),
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap_1_5()
+                                .text_color(theme.foreground_muted())
+                                .text_size(px(11.0))
+                                .child(
+                                    svg()
+                                        .path(if battery_charging {
+                                            "battery-charging.svg"
+                                        } else {
+                                            "battery.svg"
+                                        })
+                                        .size(px(15.0))
+                                        .text_color(theme.foreground_muted()),
+                                )
+                                .child(format!("{}%", battery_percentage.unwrap_or(100))),
                         )
-                        .child(format!("{}%", battery_percentage.unwrap_or(100))),
+                        .child(
+                            div()
+                                .id("header-theme-btn")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .w(px(24.0))
+                                .h(px(24.0))
+                                .rounded_full()
+                                .bg(theme.surface())
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    cx.emit(IdleHoverEvent::SelectThemeRequested);
+                                }))
+                                .child(
+                                    svg()
+                                        .path("palette.svg")
+                                        .size(px(13.0))
+                                        .text_color(theme.accent()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("header-close-btn")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .w(px(24.0))
+                                .h(px(24.0))
+                                .rounded_full()
+                                .bg(theme.surface())
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    cx.emit(IdleHoverEvent::CloseRequested);
+                                }))
+                                .child(
+                                    svg()
+                                        .path("close.svg")
+                                        .size(px(12.0))
+                                        .text_color(theme.foreground_muted()),
+                                ),
+                        ),
                 ),
         )
         .child(

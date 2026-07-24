@@ -1,15 +1,27 @@
 use chrono::{Datelike, Local, Timelike, Weekday};
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
+use gpui::{
+    Context, EventEmitter, FocusHandle, Focusable, IntoElement, KeyDownEvent, Render, Window,
+    canvas, div, prelude::*, px,
+};
 use services::{AppState, MediaTrack};
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
 use crate::capsule::widgets::{
     header::render_header, media_player::render_media_player_widget,
-    notifications::render_notifications_widget,
+    notifications::render_notifications_widget, tray::render_tray_widget,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IdleHoverEvent {
+    CloseRequested,
+    SelectThemeRequested,
+}
+
 pub struct IdleHoverModule {
+    pub focus_handle: FocusHandle,
     pub time_str: String,
     pub date_str: String,
     pub greeting_str: String,
@@ -19,6 +31,8 @@ pub struct IdleHoverModule {
     pub media_players: Vec<MediaTrack>,
     pub selected_player_idx: usize,
     pub last_user_action: Option<Instant>,
+    pub measured_top: Rc<Cell<f32>>,
+    pub measured_bottom: Rc<Cell<f32>>,
 }
 
 fn weekday_es(weekday: Weekday) -> &'static str {
@@ -78,6 +92,8 @@ async fn read_battery() -> Option<(i32, bool)> {
 
 impl IdleHoverModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let focus_handle = cx.focus_handle();
+
         // Clock & battery status polling
         cx.spawn(async move |this, cx| {
             loop {
@@ -159,6 +175,7 @@ impl IdleHoverModule {
         let (bat, charging) = (100, false);
 
         Self {
+            focus_handle,
             time_str: format!("{:02}:{:02}", now.hour(), now.minute()),
             date_str: format!(
                 "{}, {} de {}",
@@ -173,7 +190,14 @@ impl IdleHoverModule {
             media_players: Vec::new(),
             selected_player_idx: 0,
             last_user_action: None,
+            measured_top: Rc::new(Cell::new(0.0)),
+            measured_bottom: Rc::new(Cell::new(0.0)),
         }
+    }
+
+    pub fn measured_size(&self) -> (f32, f32) {
+        let height = (self.measured_bottom.get() - self.measured_top.get()).max(0.0);
+        (348.0, height)
     }
 
     pub fn get_selected_player(&self) -> Option<&MediaTrack> {
@@ -193,6 +217,25 @@ impl IdleHoverModule {
         self.media_players = players;
         self.last_user_action = None;
     }
+
+    fn handle_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.keystroke.key == "escape" {
+            cx.emit(IdleHoverEvent::CloseRequested);
+        }
+    }
+}
+
+impl EventEmitter<IdleHoverEvent> for IdleHoverModule {}
+
+impl Focusable for IdleHoverModule {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl Render for IdleHoverModule {
@@ -207,13 +250,29 @@ impl Render for IdleHoverModule {
 
         let total_players = self.media_players.len();
 
+        let measured_top = self.measured_top.clone();
+        let measured_bottom = self.measured_bottom.clone();
+
         div()
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
             .w(px(348.0))
-            .h(px(500.0))
             .p_4()
             .gap_3p5()
+            .rounded(px(28.0))
+            .overflow_hidden()
+            .bg(theme.background())
+            .child(
+                canvas(
+                    move |bounds, _window, _cx| {
+                        measured_top.set(bounds.origin.y.into());
+                    },
+                    |_, _, _, _| {},
+                )
+                .w_full(),
+            )
             .child(render_header(
                 self.battery_percentage,
                 self.battery_charging,
@@ -222,6 +281,7 @@ impl Render for IdleHoverModule {
                 &self.date_str,
                 &self.time_str,
                 &theme,
+                cx,
             ))
             .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
             .child(render_media_player_widget(
@@ -232,5 +292,15 @@ impl Render for IdleHoverModule {
                 cx,
             ))
             .child(render_notifications_widget(&theme, cx))
+            .child(render_tray_widget(&theme, cx))
+            .child(
+                canvas(
+                    move |bounds, _window, _cx| {
+                        measured_bottom.set(bounds.origin.y.into());
+                    },
+                    |_, _, _, _| {},
+                )
+                .w_full(),
+            )
     }
 }

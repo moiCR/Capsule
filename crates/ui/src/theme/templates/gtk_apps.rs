@@ -40,7 +40,6 @@ impl AppTheme for GtkApps {
             ])
             .status();
 
-        // 2. Update dconf directly for portal & GTK live sync
         let _ = Command::new("dconf")
             .args([
                 "write",
@@ -57,7 +56,6 @@ impl AppTheme for GtkApps {
             ])
             .status();
 
-        // 3. Write GTK 3.0 & GTK 4.0 settings.ini and custom gtk.css
         if let Some(config_dir) = dirs::config_dir() {
             let ini_content = format!(
                 "[Settings]\ngtk-theme-name={gtk_theme_name}\ngtk-application-prefer-dark-theme={prefer_dark_val}\n"

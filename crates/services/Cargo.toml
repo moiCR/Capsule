@@ -15,10 +15,12 @@ serde = { workspace = true }
 serde_json = "1.0"
 dirs = { workspace = true }
 zbus = "5.18.0"
+ksni = { version = "0.3.6", features = ["tokio"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 sha2 = "0.10"
 chrono = { workspace = true }
 regex = "1.10"
+image = "0.25"
 arc-swap = "1.7"
 futures = "0.3"
 

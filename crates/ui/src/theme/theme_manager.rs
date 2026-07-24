@@ -1,6 +1,14 @@
 use crate::theme::Theme;
 use std::{fs, path::PathBuf};
 
+#[derive(Debug, Clone)]
+pub struct ThemeItem {
+    pub name: String,
+    pub path: PathBuf,
+    pub theme: Theme,
+    pub is_default: bool,
+}
+
 pub struct ThemeManager {
     pub current_theme: Theme,
     pub last_modified: Option<std::time::SystemTime>,
@@ -16,6 +24,8 @@ impl Default for ThemeManager {
 
 impl ThemeManager {
     pub fn new() -> Self {
+        Self::ensure_default_theme_exists();
+
         let path = Self::theme_path();
         let mtime = fs::metadata(&path).and_then(|m| m.modified()).ok();
 
@@ -37,6 +47,58 @@ impl ThemeManager {
         };
         manager.apply_theme_to_apps();
         manager
+    }
+
+    pub fn ensure_default_theme_exists() {
+        let presets = Self::themes_path();
+        let default_path = presets.join("default.toml");
+        if !default_path.exists() {
+            let default_theme = Theme::default();
+            if let Err(error) = Self::save(&default_path, &default_theme) {
+                eprintln!("Failed to save default theme preset: {error}");
+            }
+        }
+    }
+
+    pub fn list_themes(&self) -> Vec<ThemeItem> {
+        Self::ensure_default_theme_exists();
+        let presets_dir = Self::themes_path();
+        let mut items = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(&presets_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                    let stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Theme")
+                        .to_string();
+
+                    if let Ok(theme) = Self::load(&path) {
+                        let is_default = stem == "default";
+                        items.push(ThemeItem {
+                            name: stem,
+                            path,
+                            theme,
+                            is_default,
+                        });
+                    }
+                }
+            }
+        }
+
+        items.sort_by(|a, b| {
+            if a.is_default {
+                std::cmp::Ordering::Less
+            } else if b.is_default {
+                std::cmp::Ordering::Greater
+            } else {
+                a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            }
+        });
+
+        items
     }
 
     pub fn check_and_reload(&mut self) -> bool {

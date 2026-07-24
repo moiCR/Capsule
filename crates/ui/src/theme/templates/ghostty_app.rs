@@ -2,7 +2,6 @@ use crate::theme::Theme;
 use crate::theme::templates::AppTheme;
 use std::collections::BTreeMap;
 use std::fs;
-use std::process::Command;
 
 pub struct GhosttyApp;
 
@@ -62,7 +61,6 @@ impl AppTheme for GhosttyApp {
                 let new_content = format!("config-file = theme\n{existing_content}");
                 let _ = fs::write(&main_config, new_content);
             } else {
-                // Touch main_config to trigger Ghostty's file watcher on config
                 let _ = fs::write(&main_config, &existing_content);
             }
         }
@@ -74,14 +72,14 @@ impl AppTheme for GhosttyApp {
         if let Some(config_dir) = dirs::config_dir() {
             let main_config = config_dir.join("ghostty").join("config");
             if main_config.exists() {
-                let _ = Command::new("touch").arg(&main_config).status();
+                let _ = std::process::Command::new("touch")
+                    .arg(&main_config)
+                    .status();
             }
         }
-        let _ = Command::new("pkill")
-            .args(["-USR1", "-x", "ghostty"])
-            .status();
-        let _ = Command::new("pkill")
-            .args(["-SIGUSR1", "-x", "ghostty"])
+
+        let _ = std::process::Command::new("pkill")
+            .args(["-USR2", "-x", "ghostty"])
             .status();
     }
 }
