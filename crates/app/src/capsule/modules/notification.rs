@@ -73,7 +73,6 @@ impl Render for NotificationModule {
             .px(px(14.0))
             .py(px(10.0))
             .gap(px(12.0))
-            // Left circular icon
             .child(
                 div()
                     .flex_shrink_0()

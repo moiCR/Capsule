@@ -39,16 +39,16 @@ impl CapsuleMode {
         }
     }
 
-    pub fn radius(&self) -> f32 {
+    pub fn radius(&self) -> f32{
         match self {
-            CapsuleMode::Default => 21.0,
-            CapsuleMode::Dashboard => 28.0,
-            CapsuleMode::Notification => 22.0,
-            CapsuleMode::Launcher => 28.0,
-            CapsuleMode::Volume => 22.0,
-            CapsuleMode::Polkit => 28.0,
-            CapsuleMode::SelectTheme => 28.0,
-            CapsuleMode::CreateTheme => 28.0,
+            CapsuleMode::Default => 42.0,
+            CapsuleMode::Dashboard => 42.0,
+            CapsuleMode::Notification => 42.0,
+            CapsuleMode::Launcher => 42.0,
+            CapsuleMode::Volume => 42.0,
+            CapsuleMode::Polkit => 42.0,
+            CapsuleMode::SelectTheme => 42.0,
+            CapsuleMode::CreateTheme => 42.0,
         }
     }
 }

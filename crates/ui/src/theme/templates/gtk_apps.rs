@@ -21,7 +21,6 @@ impl AppTheme for GtkApps {
         let fg = &theme.foreground_color.hex;
         let accent = &theme.accent_color.hex;
 
-        // 1. Update gsettings for GNOME/GTK desktop & XDG Desktop Portal
         let _ = Command::new("gsettings")
             .args([
                 "set",
@@ -103,7 +102,6 @@ impl AppTheme for GtkApps {
             .args(["get", "org.gnome.desktop.interface", "color-scheme"])
             .status();
 
-        // Brief gsettings toggle forces GTK applications to clear CSS cache and reload gtk.css
         let current_theme = Command::new("gsettings")
             .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
             .output()

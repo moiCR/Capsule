@@ -170,7 +170,6 @@ impl Render for LauncherModule {
             .size_full()
             .p_3p5()
             .gap_2p5()
-            // Search Bar Header
             .child(
                 div()
                     .flex()
@@ -180,7 +179,7 @@ impl Render for LauncherModule {
                     .px_3p5()
                     .py_2p5()
                     .bg(theme.surface())
-                    .rounded_xl()
+                    .rounded(px(42.0))
                     .child(
                         svg()
                             .path("search.svg")

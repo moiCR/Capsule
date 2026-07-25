@@ -47,3 +47,28 @@
 - Only implement what was requested.
 - Do not add features, configuration options, or dependencies unless explicitly required.
 - Avoid speculative abstractions.
+
+## Codebase Structure
+```
+crates/
+├── app/         Main binary, UI components (capsule, capsule modules, modules widgets)
+├── services/    System integration (D-Bus, compositor, audio, network, etc.)
+├── ui/          Shared components, theme system and language system
+└── assets/      Embedded SVG icons
+```
+
+## Capsule Modules Widgets
+Each module should have its own widgets. What does this mean? It means you shouldn't cram everything into the module. See the example below.
+
+```
+crates/
+├── app/
+    ├── modules/
+    |    ├── launcher.rs
+    ├── widgets/
+        ├── launcher/
+            ├── search_input.rs
+```
+
+## Multiples Instances
+Avoid creating multiple instances of a single object. What does this mean? It means that if it's a utility, manager, service, etc., it should be instantiated and accessed globally (AppState).

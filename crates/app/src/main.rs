@@ -11,12 +11,7 @@ use gpui_platform::application;
 
 unsafe fn daemonize() {
     unsafe {
-        // Create a new session so the process is no longer associated with
-        // any controlling terminal. This makes it immune to SIGHUP and the
-        // SIGTERM sent when the terminal session ends.
         libc::setsid();
-
-        // Also ignore SIGHUP and SIGPIPE defensively.
         libc::signal(libc::SIGHUP, libc::SIG_IGN);
         libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
@@ -26,9 +21,6 @@ unsafe fn daemonize() {
 async fn main() {
     #[cfg(not(target_os = "linux"))]
     compile_error!("This application is only supported on Linux.");
-
-    // Detach from the controlling terminal so `Capsule &` survives
-    // when the launching shell/terminal exits.
     unsafe {
         daemonize();
     }
@@ -56,8 +48,6 @@ async fn main() {
         }
     }
 
-    // Initialize IPC subscriber (single-instance handling).
-    // If a primary instance is already running, this signals it synchronously and returns None (exiting cleanly).
     let ipc_subscriber = match services::IpcSubscriber::init(cmd_arg.as_deref()) {
         Some(sub) => sub,
         None => return,
@@ -72,7 +62,6 @@ async fn main() {
     let app = application().with_assets(Assets {});
 
     app.run(|cx| {
-        // Initialize all singleton services once and register as GPUI globals.
         let app_state = services::AppState::new();
         cx.set_global(app_state);
 
@@ -82,7 +71,7 @@ async fn main() {
 
         let max_w = 3840.0;
         let max_h = 2160.0;
-        let idle_h = 42.0 + 8.0;
+        let idle_h = 25.0 + 8.0;
 
         let options = WindowOptions {
             titlebar: None,

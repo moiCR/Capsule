@@ -1,4 +1,3 @@
-pub mod app_theme;
 pub mod templates;
 pub mod theme_manager;
 
@@ -40,6 +39,8 @@ impl Default for Theme {
         }
     }
 }
+
+
 
 impl Theme {
     pub fn background(&self) -> Hsla {

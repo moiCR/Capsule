@@ -135,7 +135,6 @@ impl IdleHoverModule {
         })
         .detach();
 
-        // MPRIS Media Players polling
         let mpris_service = cx.global::<AppState>().mpris.clone();
         cx.spawn(async move |this, cx| {
             loop {
@@ -196,8 +195,13 @@ impl IdleHoverModule {
     }
 
     pub fn measured_size(&self) -> (f32, f32) {
-        let height = (self.measured_bottom.get() - self.measured_top.get()).max(0.0);
-        (348.0, height)
+        let content_height = (self.measured_bottom.get() - self.measured_top.get()).max(0.0);
+        let total_height = if content_height > 0.0 {
+            content_height + 32.0
+        } else {
+            0.0
+        };
+        (348.0, total_height)
     }
 
     pub fn get_selected_player(&self) -> Option<&MediaTrack> {
@@ -261,9 +265,7 @@ impl Render for IdleHoverModule {
             .w(px(348.0))
             .p_4()
             .gap_3p5()
-            .rounded(px(28.0))
             .overflow_hidden()
-            .bg(theme.background())
             .child(
                 canvas(
                     move |bounds, _window, _cx| {
