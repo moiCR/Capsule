@@ -6,7 +6,7 @@ use std::process::Command;
 pub struct GtkApps;
 
 impl AppTheme for GtkApps {
-    fn apply_current_theme(theme: &Theme) {
+    fn apply_current_theme(&self, theme: &Theme) {
         let is_dark = matches!(theme.mode, ThemeMode::Dark);
         let color_scheme = if is_dark {
             "prefer-dark"
@@ -121,10 +121,10 @@ impl AppTheme for GtkApps {
                 }
             }
         }
-        Self::reload_apps();
+        &self.reload_apps();
     }
 
-    fn reload_apps() {
+    fn reload_apps(&self) {
         let _ = Command::new("nwg-look").arg("-a").status();
 
         let _ = Command::new("systemctl")

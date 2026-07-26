@@ -6292,6 +6292,7 @@ dependencies = [
  "dirs",
  "gpui",
  "serde",
+ "tokio",
  "toml 1.1.3+spec-1.1.0",
 ]
 

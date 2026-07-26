@@ -10,7 +10,7 @@ fn clean_hex(hex: &str) -> String {
 }
 
 impl AppTheme for FishApp {
-    fn apply_current_theme(theme: &Theme) {
+    fn apply_current_theme(&self, theme: &Theme) {
         let fg = clean_hex(&theme.foreground_color.hex);
         let fg_muted = clean_hex(&theme.foreground_color_muted.hex);
         let accent = clean_hex(&theme.accent_color.hex);
@@ -67,5 +67,7 @@ set -U fish_color_accent {accent}
         let _ = Command::new("fish").args(["-c", &fish_cmd]).status();
     }
 
-    fn reload_apps() {}
+    fn reload_apps(&self) {
+        
+    }
 }

@@ -78,7 +78,7 @@ fn make_color_list(
 }
 
 impl AppTheme for QtApps {
-    fn apply_current_theme(theme: &Theme) {
+    fn apply_current_theme(&self, theme: &Theme) {
         let is_dark = matches!(theme.mode, ThemeMode::Dark);
 
         let bg = &theme.background_color.hex;
@@ -204,10 +204,10 @@ inactiveForeground={fg_muted_rgb}
             let _ = fs::write(color_schemes_dir.join("Capsule.colors"), capsule_colors);
         }
 
-        Self::reload_apps();
+        &self.reload_apps();
     }
 
-    fn reload_apps() {
+    fn reload_apps(&self) {
         let _ = Command::new("dbus-send")
             .args([
                 "--session",
@@ -320,4 +320,6 @@ fn update_qtct_conf(conf_path: &Path, color_scheme_path: &str) {
         let _ = fs::create_dir_all(parent);
     }
     let _ = fs::write(conf_path, new_lines.join("\n") + "\n");
+
+    
 }

@@ -6,7 +6,7 @@ use std::process::Command;
 pub struct YaziApp;
 
 impl AppTheme for YaziApp {
-    fn apply_current_theme(theme: &Theme) {
+    fn apply_current_theme(&self, theme: &Theme) {
         let bg = &theme.background_color.hex;
         let bg_alt = &theme.background_color_alt.hex;
         let surface = &theme.surface_color.hex;
@@ -84,10 +84,11 @@ impl AppTheme for YaziApp {
             let _ = fs::write(&theme_path, &yazi_theme);
         }
 
-        Self::reload_apps();
+        &self.reload_apps();
+        
     }
 
-    fn reload_apps() {
+    fn reload_apps(&self) {
         if let Some(config_dir) = dirs::config_dir() {
             let theme_path = config_dir.join("yazi").join("theme.toml");
             if theme_path.exists() {
@@ -95,4 +96,5 @@ impl AppTheme for YaziApp {
             }
         }
     }
+
 }

@@ -2,10 +2,11 @@ use crate::theme::Theme;
 use crate::theme::templates::AppTheme;
 use std::collections::BTreeMap;
 use std::fs;
+use std::process::Command;
 
-pub struct GhosttyApp;
+pub struct KittyApp;
 
-impl AppTheme for GhosttyApp {
+impl AppTheme for KittyApp {
     fn apply_current_theme(&self, theme: &Theme) {
         let bg = &theme.background_color.hex;
         let bg_alt = &theme.background_color_alt.hex;
@@ -34,52 +35,56 @@ impl AppTheme for GhosttyApp {
         palette_colors.insert(14, "#89dceb");
         palette_colors.insert(15, fg.as_str());
 
-        let mut ghostty_config = format!("background = {bg}\nforeground = {fg}\n");
+        let mut kitty_config = String::new();
+
+        // 1. UI & Cursor colors
+        kitty_config.push_str(&format!("background {bg}\n"));
+        kitty_config.push_str(&format!("foreground {fg}\n"));
+        kitty_config.push_str(&format!("cursor {fg}\n"));
+        kitty_config.push_str(&format!("cursor_text_color {bg}\n"));
+        kitty_config.push_str(&format!("selection_foreground {fg}\n"));
+        kitty_config.push_str(&format!("selection_background {surface}\n"));
+        kitty_config.push_str(&format!("active_border_color {accent}\n"));
+        kitty_config.push_str(&format!("inactive_border_color {bg_alt}\n"));
+        kitty_config.push_str(&format!("url_color {accent}\n"));
+        kitty_config.push_str(&format!("active_tab_foreground {bg}\n"));
+        kitty_config.push_str(&format!("active_tab_background {accent}\n"));
+        kitty_config.push_str(&format!("inactive_tab_foreground {fg_muted}\n"));
+        kitty_config.push_str(&format!("inactive_tab_background {bg_alt}\n\n"));
+
+        // 2. ANSI Palette colors (0-15)
         for (index, color) in palette_colors {
-            ghostty_config.push_str(&format!("palette = {index}={color}\n"));
+            kitty_config.push_str(&format!("color{index} {color}\n"));
         }
 
         if let Some(config_dir) = dirs::config_dir() {
-            let ghostty_dir = config_dir.join("ghostty");
-            let _ = fs::create_dir_all(&ghostty_dir);
+            let kitty_dir = config_dir.join("kitty");
+            let _ = fs::create_dir_all(&kitty_dir);
 
-            // Write theme file
-            let theme_file = ghostty_dir.join("theme");
-            let _ = fs::write(&theme_file, &ghostty_config);
+            let theme_file = kitty_dir.join("theme.conf");
+            let _ = fs::write(&theme_file, &kitty_config);
 
-            // Ensure config file includes config-file = theme
-            let main_config = ghostty_dir.join("config");
+            let main_config = kitty_dir.join("kitty.conf");
             let existing_content = if main_config.exists() {
                 fs::read_to_string(&main_config).unwrap_or_default()
             } else {
                 String::new()
             };
 
-            if !existing_content.contains("config-file = theme")
-                && !existing_content.contains("config-file=theme")
+            if !existing_content.contains("include theme.conf")
+                && !existing_content.contains("include ./theme.conf")
             {
-                let new_content = format!("config-file = theme\n{existing_content}");
+                let new_content = format!("include theme.conf\n{existing_content}");
                 let _ = fs::write(&main_config, new_content);
-            } else {
-                let _ = fs::write(&main_config, &existing_content);
             }
         }
 
-        &self.reload_apps();
+        self.reload_apps();
     }
 
     fn reload_apps(&self) {
-        if let Some(config_dir) = dirs::config_dir() {
-            let main_config = config_dir.join("ghostty").join("config");
-            if main_config.exists() {
-                let _ = std::process::Command::new("touch")
-                    .arg(&main_config)
-                    .status();
-            }
-        }
-
-        let _ = std::process::Command::new("pkill")
-            .args(["-USR2", "-x", "ghostty"])
+        let _ = Command::new("pkill")
+            .args(["-USR1", "-x", "kitty"])
             .status();
     }
 }

@@ -1,4 +1,5 @@
-use crate::theme::Theme;
+use crate::theme::{AppTheme, Theme};
+use std::sync::Arc;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
@@ -12,6 +13,7 @@ pub struct ThemeItem {
 pub struct ThemeManager {
     pub current_theme: Theme,
     pub last_modified: Option<std::time::SystemTime>,
+    apps: Vec<Arc<dyn AppTheme>>,
 }
 
 impl gpui::Global for ThemeManager {}
@@ -40,10 +42,21 @@ impl ThemeManager {
 
             theme
         };
+        use crate::theme::{FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
+
+        let apps: Vec<Arc<dyn AppTheme>> = vec![
+            Arc::new(GtkApps),
+            Arc::new(QtApps),
+            Arc::new(GhosttyApp),
+            Arc::new(FishApp),
+            Arc::new(YaziApp),
+            Arc::new(KittyApp),
+        ];
 
         let manager = Self {
             current_theme: theme,
             last_modified: mtime,
+            apps,
         };
         manager.apply_theme_to_apps();
         manager
@@ -119,22 +132,14 @@ impl ThemeManager {
     }
 
     pub fn apply_theme_to_apps(&self) {
-        use crate::theme::{AppTheme, FishApp, GhosttyApp, GtkApps, QtApps, YaziApp};
+        let theme = self.current_theme.clone();
+        let apps = self.apps.clone();
 
-        GtkApps::apply_current_theme(&self.current_theme);
-        GtkApps::reload_apps();
-
-        QtApps::apply_current_theme(&self.current_theme);
-        QtApps::reload_apps();
-
-        GhosttyApp::apply_current_theme(&self.current_theme);
-        GhosttyApp::reload_apps();
-
-        FishApp::apply_current_theme(&self.current_theme);
-        FishApp::reload_apps();
-
-        YaziApp::apply_current_theme(&self.current_theme);
-        YaziApp::reload_apps();
+        tokio::task::spawn_blocking(move || {
+            for app in &apps {
+                app.apply_current_theme(&theme);
+            }
+        });
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
