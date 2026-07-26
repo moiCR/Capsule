@@ -1,9 +1,10 @@
 use crate::CompositorService;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WallpaperEngine {
@@ -49,7 +50,6 @@ impl WallpaperService {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
             .join("capsule");
-
         let _ = fs::create_dir_all(&config_dir);
         let config_file = config_dir.join("current_wallpaper");
         let engine = WallpaperEngine::detect();
@@ -61,29 +61,35 @@ impl WallpaperService {
             config_file,
         };
 
-        // Start daemon in background when Capsule boots
         service.ensure_daemon_in_background();
-
-        // Restore saved wallpaper if present
         service.restore_saved_wallpaper();
-
         service
     }
 
-    /// Spawns a background thread to check and launch daemon if needed.
-    pub fn ensure_daemon_in_background(&self) {
-        let engine = self.engine;
-        thread::spawn(move || {
-            let running = Command::new(engine.cli_cmd())
-                .arg("query")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
+    /// Checks if the daemon is active.
+    fn is_daemon_running(&self) -> bool {
+        Command::new(self.engine.cli_cmd())
+            .arg("query")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
 
-            if !running {
-                let _ = Command::new(engine.daemon_cmd()).spawn();
-            }
-        });
+    pub fn ensure_daemon_in_background(&self) {
+        if self.is_daemon_running() {
+            return;
+        }
+
+        let daemon = self.engine.daemon_cmd();
+        println!("[WallpaperService] Spawning background daemon: {}", daemon);
+
+        let _ = Command::new(daemon)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
 
     /// Restores previously saved wallpaper from disk.
@@ -97,7 +103,6 @@ impl WallpaperService {
             }
         }
     }
-
 
     pub async fn pick_wallpaper_file() -> Option<PathBuf> {
         tokio::task::spawn_blocking(|| {
@@ -135,89 +140,76 @@ impl WallpaperService {
         .unwrap_or(None)
     }
 
-    /// Sets wallpaper and persists path to disk.
     pub fn set_wallpaper(&self, path: impl AsRef<Path>) -> bool {
         self.set_wallpaper_internal(path.as_ref(), true)
     }
 
-    fn set_wallpaper_internal(&self, path: &Path, save_to_disk: bool) -> bool {
-        if !path.exists() {
-            eprintln!("[WallpaperService] File does not exist: {:?}", path);
-            return false;
-        }
+fn set_wallpaper_internal(&self, path: &Path, save_to_disk: bool) -> bool {
+    if !path.exists() {
+        eprintln!("[WallpaperService] File does not exist: {:?}", path);
+        return false;
+    }
 
-        let path_buf = path.to_path_buf();
-        let path_str = path_buf.to_string_lossy().to_string();
-        let current_fps = (self.compositor.get_refresh_rate().round() as u32).max(30);
-        let engine = self.engine;
+    let path_buf = path.to_path_buf();
+    let path_str = path_buf.to_string_lossy().to_string();
+    let engine = self.engine;
+    let compositor = self.compositor.clone();
 
-        // 1. Memory update
-        if let Ok(mut current_guard) = self.current.lock() {
-            *current_guard = Some(path_buf);
-        }
+    if let Ok(mut current_guard) = self.current.lock() {
+        *current_guard = Some(path_buf);
+    }
 
-        // 2. Persist path
-        if save_to_disk {
-            let _ = fs::write(&self.config_file, &path_str);
-        }
+    if save_to_disk {
+        let _ = fs::write(&self.config_file, &path_str);
+    }
 
-        // 3. Dispatch image change via awww / swww in a background thread
-        thread::spawn(move || {
-            // Ensure daemon is active right before executing the command
-            let running = Command::new(engine.cli_cmd())
-                .arg("query")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
+    thread::spawn(move || {
+        let refresh_rate = compositor.get_refresh_rate();
+        let current_fps = if refresh_rate.is_finite() && refresh_rate > 0.0 {
+            (refresh_rate.round() as u32).max(30)
+        } else {
+            60
+        };
 
-            if !running {
-                println!(
-                    "[WallpaperService] Daemon not active. Restarting {}...",
-                    engine.daemon_cmd()
-                );
-                let _ = Command::new(engine.daemon_cmd()).spawn();
-                thread::sleep(std::time::Duration::from_millis(250));
-            }
+        let output = Command::new(engine.cli_cmd())
+            .args([
+                "img",
+                &path_str,
+                "--transition-type",
+                "outer",
+                "--transition-step",
+                "90",
+                "--transition-fps",
+                &current_fps.to_string(),
+                "--transition-duration",
+                "0.8",
+            ])
+            .output();
 
-            let output = Command::new(engine.cli_cmd())
-                .args([
-                    "img",
-                    &path_str,
-                    "--transition-type",
-                    "outer",
-                    "--transition-step",
-                    "90",
-                    "--transition-fps",
-                    &current_fps.to_string(),
-                    "--transition-duration",
-                    "0.8",
-                ])
-                .output();
-
-            match output {
-                Ok(out) => {
-                    if !out.status.success() {
-                        let err = String::from_utf8_lossy(&out.stderr);
-                        eprintln!("[WallpaperService] {} img error: {}", engine.cli_cmd(), err);
-                    } else {
-                        println!(
-                            "[WallpaperService] Wallpaper successfully changed to: {}",
-                            path_str
-                        );
-                    }
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[WallpaperService] Failed to execute {}: {}",
-                        engine.cli_cmd(),
-                        e
+        match output {
+            Ok(out) => {
+                if !out.status.success() {
+                    let err = String::from_utf8_lossy(&out.stderr);
+                    eprintln!("[WallpaperService] {} img error: {}", engine.cli_cmd(), err);
+                } else {
+                    println!(
+                        "[WallpaperService] Wallpaper successfully changed to: {}",
+                        path_str
                     );
                 }
             }
-        });
+            Err(e) => {
+                eprintln!(
+                    "[WallpaperService] Failed to execute {}: {}",
+                    engine.cli_cmd(),
+                    e
+                );
+            }
+        }
+    });
 
-        true
-    }
+    true
+}
 
     pub fn get_current(&self) -> Option<PathBuf> {
         self.current.lock().ok().and_then(|guard| guard.clone())

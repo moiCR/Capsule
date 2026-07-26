@@ -227,7 +227,6 @@ impl Capsule {
         )
         .detach();
 
-        // === HEARTBEAT ===
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
