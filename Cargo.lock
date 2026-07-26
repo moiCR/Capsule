@@ -3,20 +3,6 @@
 version = 4
 
 [[package]]
-name = "Capsule"
-version = "0.1.0"
-dependencies = [
- "assets",
- "chrono",
- "gpui",
- "gpui_platform",
- "libc",
- "services",
- "tokio",
- "ui",
-]
-
-[[package]]
 name = "accesskit"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -795,6 +781,20 @@ dependencies = [
  "rustix 1.1.4",
  "wayland-backend",
  "wayland-client",
+]
+
+[[package]]
+name = "capsule"
+version = "0.1.0"
+dependencies = [
+ "assets",
+ "chrono",
+ "gpui",
+ "gpui_platform",
+ "libc",
+ "services",
+ "tokio",
+ "ui",
 ]
 
 [[package]]
