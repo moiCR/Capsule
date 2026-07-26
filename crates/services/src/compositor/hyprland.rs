@@ -35,6 +35,6 @@ impl Compositor for Hyprland {
                 }
             }
         }
-        144.0
+        60.0
     }
 }
