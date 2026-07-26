@@ -9,6 +9,7 @@ pub mod notifications;
 pub mod polkit;
 pub mod system;
 pub mod tray;
+pub mod wallpaper;
 
 pub use app_state::AppState;
 pub use compositor::CompositorService;

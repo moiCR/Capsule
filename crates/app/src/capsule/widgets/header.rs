@@ -1,4 +1,5 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{Context, FontWeight, IntoElement, PathPromptOptions, div, prelude::*, px, svg};
+use services::{AppState, wallpaper::WallpaperService};
 use ui::theme::Theme;
 
 use crate::capsule::modules::idle_hover::{IdleHoverEvent, IdleHoverModule};
@@ -82,12 +83,51 @@ pub fn render_header(
                                 .rounded_full()
                                 .bg(theme.surface())
                                 .cursor_pointer()
+                                .items_center()
+                                .justify_center()
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     cx.emit(IdleHoverEvent::SelectThemeRequested);
                                 }))
                                 .child(
                                     svg()
-                                        .path("palette.svg")
+                                        .path("palette_2.svg")
+                                        .size(px(13.0))
+                                        .text_color(theme.accent()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("header-wallpaper-btn")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .w(px(24.0))
+                                .h(px(24.0))
+                                .rounded_full()
+                                .bg(theme.surface())
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    cx.emit(IdleHoverEvent::CloseRequested);
+                                    cx.spawn(async move |_this, cx| {
+                                        if let Some(selected_path) =
+                                            WallpaperService::pick_wallpaper_file().await
+                                        {
+                                            let _ = cx.update(|cx| {
+                                                if cx.has_global::<AppState>() {
+                                                    cx.global::<AppState>()
+                                                        .wallpaper
+                                                        .set_wallpaper(selected_path);
+                                                }
+                                            });
+                                        }
+                                    })
+                                    .detach();
+                                }))
+                                .child(
+                                    svg()
+                                        .path("wallpaper.svg")
                                         .size(px(13.0))
                                         .text_color(theme.accent()),
                                 ),

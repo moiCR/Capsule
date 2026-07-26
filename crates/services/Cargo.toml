@@ -22,7 +22,8 @@ chrono = { workspace = true }
 regex = "1.10"
 image = "0.25"
 arc-swap = "1.7"
-futures = "0.3"
+futures.workspace = true
+futures-signals.workspace = true
 
 niri-ipc.workspace = true
 hyprland.workspace = true
