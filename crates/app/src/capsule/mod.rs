@@ -18,6 +18,7 @@ pub enum CapsuleMode {
     SelectTheme,
     CreateTheme,
     Wallpaper,
+    Clipboard,
 }
 
 impl CapsuleMode {
@@ -32,6 +33,7 @@ impl CapsuleMode {
             CapsuleMode::SelectTheme => (348.0, 500.0),
             CapsuleMode::CreateTheme => (348.0, 500.0),
             CapsuleMode::Wallpaper => (700.0, 240.0),
+            CapsuleMode::Clipboard => (360.0, 480.0),
         }
     }
 
@@ -46,6 +48,7 @@ impl CapsuleMode {
             CapsuleMode::SelectTheme => 42.0,
             CapsuleMode::CreateTheme => 42.0,
             CapsuleMode::Wallpaper => 32.0,
+            CapsuleMode::Clipboard => 42.0,
         }
     }
 }

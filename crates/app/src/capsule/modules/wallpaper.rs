@@ -7,10 +7,54 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
+use std::process::Command;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WallpaperItem {
     pub name: String,
     pub path: PathBuf,
+    pub thumb_path: PathBuf,
+}
+
+fn get_or_create_thumbnail(original_path: &PathBuf) -> PathBuf {
+    let thumbs_dir = PathBuf::from("/tmp/capsule_thumbs");
+    let _ = std::fs::create_dir_all(&thumbs_dir);
+
+    let filename = original_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("thumb");
+    let thumb_filename = format!("thumb_{}", filename);
+    let thumb_path = thumbs_dir.join(&thumb_filename);
+
+    if thumb_path.exists() {
+        return thumb_path;
+    }
+
+    let orig_str = original_path.to_string_lossy().to_string();
+    let thumb_str = thumb_path.to_string_lossy().to_string();
+
+    let res = Command::new("magick")
+        .args([&orig_str, "-resize", "300x", &thumb_str])
+        .status();
+
+    if let Ok(st) = res {
+        if st.success() && thumb_path.exists() {
+            return thumb_path;
+        }
+    }
+
+    let res_ff = Command::new("ffmpeg")
+        .args(["-y", "-i", &orig_str, "-vf", "scale=300:-1", &thumb_str])
+        .status();
+
+    if let Ok(st) = res_ff {
+        if st.success() && thumb_path.exists() {
+            return thumb_path;
+        }
+    }
+
+    original_path.clone()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -156,7 +200,12 @@ impl WallpaperModule {
                                 .and_then(|n| n.to_str())
                                 .unwrap_or("Wallpaper")
                                 .to_string();
-                            new_items.push(WallpaperItem { name, path: p });
+                            let thumb = get_or_create_thumbnail(&p);
+                            new_items.push(WallpaperItem {
+                                name,
+                                path: p,
+                                thumb_path: thumb,
+                            });
                         }
                     }
                 }
@@ -193,6 +242,15 @@ impl WallpaperModule {
             self.is_initialized = true;
             cx.notify();
         }
+    }
+
+    pub fn clear_cache(&mut self, cx: &mut Context<Self>) {
+        self.items.clear();
+        self.anim_task = None;
+        self.is_initialized = false;
+        self.is_animating = false;
+        self.selected_idx = 0;
+        cx.notify();
     }
 
     fn handle_key_down(
@@ -320,7 +378,7 @@ impl Render for WallpaperModule {
                             .opacity(opacity)
                             .shadow_lg()
                             .child(
-                                img(item.path.clone())
+                                img(item.thumb_path.clone())
                                     .w_full()
                                     .h_full(),
                             ),

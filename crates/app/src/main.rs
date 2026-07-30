@@ -119,9 +119,11 @@ COMMANDS:
     toggle-launcher     Toggle application launcher (alias: launcher)
     toggle-dashboard    Toggle main dashboard panel (alias: dashboard)
     toggle-notification Toggle notification panel (alias: notifications)
+    toggle-clipboard    Toggle clipboard history manager (alias: clipboard, clip)
     show-launcher       Show application launcher
     show-dashboard      Show main dashboard panel
     show-notification   Show notification panel
+    show-clipboard      Show clipboard history manager
     hide                Hide panels and return to compact pill (alias: close)
     quit                Stop running Capsule daemon (alias: exit)
     ping                Check if Capsule daemon is running

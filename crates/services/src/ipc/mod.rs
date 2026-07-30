@@ -15,9 +15,11 @@ pub enum IpcCommand {
     ToggleNotification,
     ToggleSelectTheme,
     ToggleCreateTheme,
+    ToggleClipboard,
     ShowLauncher,
     ShowDashboard,
     ShowNotification,
+    ShowClipboard,
     Hide,
     Default,
     Ping,
@@ -41,9 +43,13 @@ impl FromStr for IpcCommand {
                 Ok(IpcCommand::ToggleSelectTheme)
             }
             "create-theme" | "toggle-create-theme" => Ok(IpcCommand::ToggleCreateTheme),
+            "toggle-clipboard" | "toggle clipboard" | "clipboard" | "clip" => {
+                Ok(IpcCommand::ToggleClipboard)
+            }
             "show-launcher" | "show launcher" => Ok(IpcCommand::ShowLauncher),
             "show-dashboard" | "show dashboard" => Ok(IpcCommand::ShowDashboard),
             "show-notification" | "show notification" => Ok(IpcCommand::ShowNotification),
+            "show-clipboard" | "show clipboard" => Ok(IpcCommand::ShowClipboard),
             "hide" | "close" => Ok(IpcCommand::Hide),
             "default" => Ok(IpcCommand::Default),
             "ping" => Ok(IpcCommand::Ping),
@@ -60,9 +66,11 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::ToggleNotification => "toggle-notification".to_string(),
         IpcCommand::ToggleSelectTheme => "select-theme".to_string(),
         IpcCommand::ToggleCreateTheme => "create-theme".to_string(),
+        IpcCommand::ToggleClipboard => "toggle-clipboard".to_string(),
         IpcCommand::ShowLauncher => "show-launcher".to_string(),
         IpcCommand::ShowDashboard => "show-dashboard".to_string(),
         IpcCommand::ShowNotification => "show-notification".to_string(),
+        IpcCommand::ShowClipboard => "show-clipboard".to_string(),
         IpcCommand::Hide => "hide".to_string(),
         IpcCommand::Default => "default".to_string(),
         IpcCommand::Ping => "ping".to_string(),

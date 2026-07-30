@@ -7,9 +7,10 @@ use ui::tracker::DimensionTracker;
 use super::widgets::dashboard::panel_manager::PanelManager;
 use super::{CapsuleMode, MARGIN_TOP, apple_island_ease};
 
+use super::modules::clipboard::{ClipboardEvent, ClipboardModule};
 use super::modules::create_theme::CreateThemeModule;
-use super::modules::idle::IdleModule;
 use super::modules::dashboard::DashboardModule;
+use super::modules::idle::IdleModule;
 use super::modules::launcher::LauncherModule;
 use super::modules::notification::NotificationModule;
 use super::modules::polkit::PolkitModule;
@@ -28,6 +29,7 @@ pub struct Capsule {
     select_theme_view: Entity<SelectThemeModule>,
     create_theme_view: Entity<CreateThemeModule>,
     wallpaper_view: Entity<WallpaperModule>,
+    clipboard_view: Entity<ClipboardModule>,
     panel_manager: PanelManager,
     current_width: f32,
     current_height: f32,
@@ -370,12 +372,18 @@ impl Capsule {
         cx.subscribe(&wallpaper_view, |capsule, _, event: &WallpaperEvent, cx| {
             match event {
                 WallpaperEvent::CloseRequested => {
+                    capsule.wallpaper_view.update(cx, |wallpaper, cx| {
+                        wallpaper.clear_cache(cx);
+                    });
                     capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                 }
                 WallpaperEvent::WallpaperSelected(path) => {
                     if cx.has_global::<AppState>() {
                         cx.global::<AppState>().wallpaper.set_wallpaper(path);
                     }
+                    capsule.wallpaper_view.update(cx, |wallpaper, cx| {
+                        wallpaper.clear_cache(cx);
+                    });
                     capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                 }
             }
@@ -493,6 +501,23 @@ impl Capsule {
         })
         .detach();
 
+        let clipboard_view = cx.new(ClipboardModule::new);
+        cx.observe(&clipboard_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(
+            &clipboard_view,
+            |capsule, _, event: &ClipboardEvent, cx| match event {
+                ClipboardEvent::Close => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            },
+        )
+        .detach();
+
         Self {
             mode: CapsuleMode::Default,
             idle_view,
@@ -504,6 +529,7 @@ impl Capsule {
             select_theme_view,
             create_theme_view,
             wallpaper_view,
+            clipboard_view,
             panel_manager: PanelManager::new(),
             current_width: initial_w,
             current_height: initial_h,
@@ -617,9 +643,16 @@ impl Capsule {
             return;
         }
 
+        let old_mode = self.mode;
         self.reset_inactivity_timer();
         self.mode = mode;
         services::log_info!("UI", "Transitioning to mode: {:?}", mode);
+
+        if old_mode == CapsuleMode::Wallpaper && mode != CapsuleMode::Wallpaper {
+            let _ = self.wallpaper_view.update(cx, |wallpaper, cx| {
+                wallpaper.clear_cache(cx);
+            });
+        }
 
         if mode == CapsuleMode::Launcher {
             let _ = self.launcher_view.update(cx, |launcher, cx| {
@@ -780,6 +813,14 @@ impl Capsule {
                 };
                 self.start_transition_internal(target, None, cx);
             }
+            services::IpcCommand::ToggleClipboard => {
+                let target = if self.mode == CapsuleMode::Clipboard {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::Clipboard
+                };
+                self.start_transition_internal(target, None, cx);
+            }
             services::IpcCommand::ShowLauncher => {
                 self.start_transition_internal(CapsuleMode::Launcher, None, cx);
             }
@@ -788,6 +829,9 @@ impl Capsule {
             }
             services::IpcCommand::ShowNotification => {
                 self.start_transition_internal(CapsuleMode::Notification, None, cx);
+            }
+            services::IpcCommand::ShowClipboard => {
+                self.start_transition_internal(CapsuleMode::Clipboard, None, cx);
             }
             services::IpcCommand::Hide | services::IpcCommand::Default => {
                 self.start_transition_internal(CapsuleMode::Default, None, cx);
@@ -851,7 +895,8 @@ impl Render for Capsule {
             || self.mode == CapsuleMode::Dashboard
             || self.mode == CapsuleMode::Polkit
             || self.mode == CapsuleMode::SelectTheme
-            || self.mode == CapsuleMode::CreateTheme;
+            || self.mode == CapsuleMode::CreateTheme
+            || self.mode == CapsuleMode::Clipboard;
 
         if is_modal {
             window.set_input_region(None);
@@ -881,12 +926,19 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::SelectTheme
                 || self.mode == CapsuleMode::CreateTheme
                 || self.mode == CapsuleMode::Wallpaper
+                || self.mode == CapsuleMode::Clipboard
             {
                 window.activate_window();
             }
             if self.mode == CapsuleMode::Launcher {
                 let _ = self.launcher_view.update(cx, |launcher, cx| {
                     launcher.focus(window, cx);
+                });
+            }
+            if self.mode == CapsuleMode::Clipboard {
+                let _ = self.clipboard_view.update(cx, |clip, cx| {
+                    clip.reload_items(cx);
+                    clip.focus(window, cx);
                 });
             }
             if self.mode == CapsuleMode::Wallpaper {
@@ -902,6 +954,7 @@ impl Render for Capsule {
             CapsuleMode::SelectTheme => Some(self.select_theme_view.clone().into_any_element()),
             CapsuleMode::CreateTheme => Some(self.create_theme_view.clone().into_any_element()),
             CapsuleMode::Wallpaper => Some(self.wallpaper_view.clone().into_any_element()),
+            CapsuleMode::Clipboard => Some(self.clipboard_view.clone().into_any_element()),
             CapsuleMode::Volume => Some(self.volume_view.clone().into_any_element()),
             CapsuleMode::Notification => Some(self.notification_view.clone().into_any_element()),
             CapsuleMode::Dashboard => Some(self.dashboard_view.clone().into_any_element()),

@@ -92,11 +92,7 @@ pub fn render_header(
                                 .size(px(13.0))
                                 .text_color(theme.accent()),
                         )
-                        .child(
-                            div()
-                                .text_color(theme.foreground())
-                                .child(power_label),
-                        ),
+                        .child(div().text_color(theme.foreground()).child(power_label)),
                 )
                 .child(
                     div()

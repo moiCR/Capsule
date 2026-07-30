@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod create_theme;
 pub mod dashboard;
 pub mod idle;
