@@ -17,7 +17,7 @@ Capsule is designed to be lighter and faster than shells created with Quickshell
 - **Dynamic Island Architecture**: Context-aware expanding bar with fluid transitions between Idle, Compact, Expanded, and Module states.
 - **Header Status Bar**: Workspaces indicator, active window title, system indicators, volume, media player, language switcher, quick settings, calendar, and power menu.
 - **Interactive Widgets**: Media player with album art & playback controls, volume output selector, notification center with actions, interactive calendar, and quick system controls.
-- **Custom Design System & Themes**: Built-in glassmorphism aesthetics, dynamic color tokens, custom theme creation (`create_theme`), and live theme switcher (`select_theme`).
+- **Custom Design System & Themes**: Sleek dark mode aesthetics, dynamic color tokens, custom theme creation (`create_theme`), and live theme switcher (`select_theme`).
 
 ### Satellites
 - **Volume Satellite**: Quick audio output device selection and master volume control.
@@ -26,11 +26,9 @@ Capsule is designed to be lighter and faster than shells created with Quickshell
 - **Tray Satellite**: System tray integration for background application icons and menus.
 - **Language Satellite**: On-the-fly system language switcher supporting dynamic `.toml` translation variants (`es`, `en`, and custom files).
 - **Calendar Satellite**: Monthly calendar view with quick navigation.
-- **Power Satellite**: Instant system power options (Lock, Logout, Suspend, Reboot, Shutdown).
 
 ### Launcher
 - **App Launcher**: Ultra-fast desktop application search and launch via `freedesktop` `.desktop` entries.
-- **Calculator**: Real-time mathematical expression evaluation directly inside the search bar.
 - **Clipboard History**: Dedicated clipboard manager for searching history, previews, and instant copying.
 - **Theme Creator & Switcher**: Dedicated modules to customize visual tokens or switch themes live.
 - **Wallpaper Switcher**: Interactive wallpaper browser and switcher integrated with `awww`.
