@@ -50,4 +50,4 @@ curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | b
 - [zed](https://github.com/zed-industries/zed): for creating gpui and making it open source
 - [tide-island](https://github.com/enhaoswen/Tide-island): for the inspiration
 - [saneAspect](https://github.com/enhaoswen/Tide-island): for the inspiration (Your course is way too expensive, bro.)
-- [Akira Toriyama](https://en.wikipedia.org/wiki/Akira_Toriyama): for creating Dragon Ball, inspiring millions around the world, and giving me a childhood I'll never forget. 
+- [Akira Toriyama](https://en.wikipedia.org/wiki/Akira_Toriyama): for creating Dragon Ball, inspiring millions around the world, and giving me a childhood I'll never forget.
