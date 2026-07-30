@@ -29,7 +29,9 @@ jobs:
             libvulkan-dev \
             libssl-dev \
             libdbus-1-dev \
-            libasound2-dev
+            libasound2-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
