@@ -29,6 +29,7 @@ pub enum PanelKind {
     Bluetooth,
     Calendar,
     Volume,
+    Power,
 }
 
 use ui::tracker::DimensionTracker;

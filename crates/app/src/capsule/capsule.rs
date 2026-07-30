@@ -181,6 +181,15 @@ impl Capsule {
                     });
                     capsule.start_transition_internal(CapsuleMode::Wallpaper, None, cx);
                 }
+                super::modules::dashboard::DashboardEvent::PowerClicked => {
+                    let max_h = capsule.current_height;
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Power,
+                        130.0,
+                        max_h,
+                    );
+                    cx.notify();
+                }
             },
         )
         .detach();
@@ -1106,6 +1115,12 @@ impl Render for Capsule {
                             cx,
                         )
                     })),
+                    PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::power::render_power_widget(
+                            &active_theme,
+                            cx,
+                        ).into_any_element()
+                    })),
                 };
 
                 if let Some(mini) = mini_opt {
@@ -1188,6 +1203,12 @@ impl Render for Capsule {
                             &active_theme,
                             cx,
                         )
+                    })),
+                    PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::power::render_power_widget(
+                            &active_theme,
+                            cx,
+                        ).into_any_element()
                     })),
                 };
 

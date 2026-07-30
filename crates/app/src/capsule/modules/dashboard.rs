@@ -23,6 +23,7 @@ pub enum DashboardEvent {
     CalendarClicked,
     VolumeChevronClicked,
     WallpaperRequested,
+    PowerClicked,
 }
 
 pub struct DashboardModule {
@@ -84,29 +85,27 @@ impl DashboardModule {
 
         let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
 
-        let mut bat: i32 = 100;
+        let mut bat: Option<i32> = None;
         let mut charging = false;
-        if cx.has_global::<AppState>() {
-            let status = cx.global::<AppState>().system.get_status();
-            let _ = status;
-            if let Ok(out) = std::process::Command::new("cat")
-                .arg("/sys/class/power_supply/BAT0/capacity")
-                .output()
-            {
-                if let Ok(s) = String::from_utf8(out.stdout) {
-                    if let Ok(val) = s.trim().parse::<i32>() {
-                        bat = val;
+
+        if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("BAT") {
+                    let cap_path = entry.path().join("capacity");
+                    if let Ok(cap_str) = std::fs::read_to_string(cap_path) {
+                        if let Ok(val) = cap_str.trim().parse::<i32>() {
+                            bat = Some(val);
+                        }
                     }
-                }
-            }
-            if let Ok(out) = std::process::Command::new("cat")
-                .arg("/sys/class/power_supply/BAT0/status")
-                .output()
-            {
-                if let Ok(s) = String::from_utf8(out.stdout) {
-                    if s.trim().to_lowercase().contains("charging") {
-                        charging = true;
+                    let stat_path = entry.path().join("status");
+                    if let Ok(stat_str) = std::fs::read_to_string(stat_path) {
+                        if stat_str.trim().to_lowercase().contains("charging") {
+                            charging = true;
+                        }
                     }
+                    break;
                 }
             }
         }
@@ -132,7 +131,7 @@ impl DashboardModule {
             ),
             greeting_str: greeting.to_string(),
             greeting_icon: icon,
-            battery_percentage: Some(bat),
+            battery_percentage: bat,
             battery_charging: charging,
             media_players: Vec::new(),
             selected_player_idx: 0,

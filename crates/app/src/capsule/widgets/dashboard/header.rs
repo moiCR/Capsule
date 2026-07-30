@@ -16,6 +16,14 @@ pub fn render_header(
 ) -> impl IntoElement {
     let date_time_text = format!("{date_str} • {time_str}");
 
+    let (power_icon, power_label) = match (battery_percentage, battery_charging) {
+        (Some(pct), true) => ("battery-charging.svg", format!("{pct}%")),
+        (Some(pct), false) if pct <= 20 => ("battery-low.svg", format!("{pct}%")),
+        (Some(pct), false) if pct <= 60 => ("battery-medium.svg", format!("{pct}%")),
+        (Some(pct), false) => ("battery-full.svg", format!("{pct}%")),
+        (None, _) => ("plug.svg", "AC Desktop".to_string()),
+    };
+
     div()
         .flex()
         .flex_row()
@@ -61,23 +69,34 @@ pub fn render_header(
                 .gap_2()
                 .child(
                     div()
+                        .id("header-power-btn")
                         .flex()
                         .flex_row()
                         .items_center()
                         .gap_1_5()
-                        .text_color(theme.foreground_muted())
+                        .px_2()
+                        .py_1()
+                        .rounded_full()
+                        .bg(theme.surface())
+                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                        .cursor_pointer()
+                        .on_click(cx.listener(|_this, _, _, cx| {
+                            cx.emit(DashboardEvent::PowerClicked);
+                        }))
+                        .text_color(theme.foreground())
                         .text_size(px(11.0))
+                        .font_weight(FontWeight::MEDIUM)
                         .child(
                             svg()
-                                .path(if battery_charging {
-                                    "battery-charging.svg"
-                                } else {
-                                    "battery.svg"
-                                })
-                                .size(px(15.0))
-                                .text_color(theme.foreground_muted()),
+                                .path(power_icon)
+                                .size(px(13.0))
+                                .text_color(theme.accent()),
                         )
-                        .child(format!("{}%", battery_percentage.unwrap_or(100))),
+                        .child(
+                            div()
+                                .text_color(theme.foreground())
+                                .child(power_label),
+                        ),
                 )
                 .child(
                     div()

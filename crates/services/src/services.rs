@@ -10,6 +10,7 @@ pub mod mpris;
 pub mod network;
 pub mod notifications;
 pub mod polkit;
+pub mod power;
 pub mod system;
 pub mod tray;
 pub mod wallpaper;
@@ -32,5 +33,6 @@ pub use polkit::{
     PolkitAuthRequest, PolkitService, authenticate_user, pop_polkit_request, push_polkit_request,
     start_polkit_agent,
 };
+pub use power::{PowerProfile, PowerService};
 pub use system::{SystemService, SystemStatus};
 pub use tray::{SniHostService, SniItem, TrayAction, TrayService};
