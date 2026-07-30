@@ -17,27 +17,29 @@ Capsule is designed to be lighter and faster than shells created with Quickshell
 - **Dynamic Island Architecture**: Context-aware expanding bar with fluid transitions between Idle, Compact, Expanded, and Module states.
 - **Header Status Bar**: Workspaces indicator, active window title, system indicators, volume, media player, language switcher, quick settings, calendar, and power menu.
 - **Interactive Widgets**: Media player with album art & playback controls, volume output selector, notification center with actions, interactive calendar, and quick system controls.
-- **Custom Design System & Themes**: Sleek dark mode aesthetics, dynamic color tokens, custom theme creation (`create_theme`), and live theme switcher (`select_theme`).
+- **Custom Design System & Themes**: Custom theme creation (`create_theme`) and live theme switcher (`select_theme`).
 
 ### Satellites
-- **Volume Satellite**: Quick audio output device selection and master volume control.
-- **Wi-Fi Satellite**: Real-time Wi-Fi network scanning, signal strength indicators, and connection status.
+- **Volume Satellite**: Audio output device selection and volume control.
+- **Wi-Fi Satellite**: Wi-Fi network scanning, signal strength indicators, and connection status.
 - **Bluetooth Satellite**: Nearby device discovery, paired device management, and connection toggle.
 - **Tray Satellite**: System tray integration for background application icons and menus.
-- **Language Satellite**: On-the-fly system language switcher supporting dynamic `.toml` translation variants (`es`, `en`, and custom files).
+- **Language Satellite**: System language switcher supporting dynamic `.toml` translation variants (`es`, `en`, and custom files).
 - **Calendar Satellite**: Monthly calendar view with quick navigation.
+- **Power Satellite**: System power options (Lock, Logout, Suspend, Reboot, Shutdown).
 
 ### Launcher
-- **App Launcher**: Ultra-fast desktop application search and launch via `freedesktop` `.desktop` entries.
-- **Clipboard History**: Dedicated clipboard manager for searching history, previews, and instant copying.
-- **Theme Creator & Switcher**: Dedicated modules to customize visual tokens or switch themes live.
-- **Wallpaper Switcher**: Interactive wallpaper browser and switcher integrated with `awww`.
+- **App Launcher**: Application search and launch via `freedesktop` `.desktop` entries.
+- **Calculator**: Mathematical expression evaluation directly inside the search bar.
+- **Clipboard History**: Dedicated clipboard manager for searching history, previews, and copying.
+- **Theme Creator & Switcher**: Modules to customize visual tokens or switch themes live.
+- **Wallpaper Switcher**: Wallpaper browser and switcher integrated with `awww`.
 
 ### System Integration
-- **Polkit Authentication Agent**: Integrated `org.freedesktop.PolicyKit1.AuthenticationAgent` D-Bus service with native password prompt dialogs.
-- **Multi-language Support (i18n)**: System-wide localization system saved in `~/.config/capsule/languages/`, automatically applying system locales (`LANG`, `LANGUAGE`).
-- **Hyprland Native Integration**: Built via `hyprland-rs` for IPC events, workspace tracking, and active window monitoring on Wayland.
-- **High-Performance GPUI Engine**: Powered by Zed's GPU-accelerated UI framework for smooth 60+ FPS animations and minimal CPU/memory usage.
+- **Polkit Authentication Agent**: Native `org.freedesktop.PolicyKit1.AuthenticationAgent` D-Bus service with password prompt dialogs.
+- **Multi-language Support (i18n)**: System-wide localization saved in `~/.config/capsule/languages/`, applying system locales (`LANG`, `LANGUAGE`).
+- **Compositor Integration**: IPC support for Hyprland and Niri.
+- **GPUI Powered**: Built with Zed's GPU-accelerated UI framework.
 
 ## Installation
 ```bash
