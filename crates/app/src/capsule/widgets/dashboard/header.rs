@@ -14,6 +14,12 @@ pub fn render_header(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
+    } else {
+        ui::language::Language::default()
+    };
+
     let date_time_text = format!("{date_str} • {time_str}");
 
     let (power_icon, power_label) = match (battery_percentage, battery_charging) {
@@ -21,7 +27,7 @@ pub fn render_header(
         (Some(pct), false) if pct <= 20 => ("battery-low.svg", format!("{pct}%")),
         (Some(pct), false) if pct <= 60 => ("battery-medium.svg", format!("{pct}%")),
         (Some(pct), false) => ("battery-full.svg", format!("{pct}%")),
-        (None, _) => ("plug.svg", "AC Desktop".to_string()),
+        (None, _) => ("plug.svg", lang.power.ac_desktop),
     };
 
     div()
@@ -125,6 +131,7 @@ pub fn render_header(
                         .h(px(24.0))
                         .rounded_full()
                         .bg(theme.surface())
+                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
                         .cursor_pointer()
                         .on_click(cx.listener(|_this, _, _, cx| {
                             cx.emit(DashboardEvent::WallpaperRequested);
@@ -132,6 +139,28 @@ pub fn render_header(
                         .child(
                             svg()
                                 .path("wallpaper.svg")
+                                .size(px(13.0))
+                                .text_color(theme.accent()),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("header-language-btn")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .w(px(24.0))
+                        .h(px(24.0))
+                        .rounded_full()
+                        .bg(theme.surface())
+                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                        .cursor_pointer()
+                        .on_click(cx.listener(|_this, _, _, cx| {
+                            cx.emit(DashboardEvent::LanguageClicked);
+                        }))
+                        .child(
+                            svg()
+                                .path("languages.svg")
                                 .size(px(13.0))
                                 .text_color(theme.accent()),
                         ),

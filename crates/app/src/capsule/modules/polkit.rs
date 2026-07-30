@@ -84,7 +84,16 @@ impl PolkitModule {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
-            let res = authenticate_user(&user_name, &cookie, &password).await;
+            let res = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                authenticate_user(&user_name, &cookie, &password),
+            )
+            .await;
+
+            let res = match res {
+                Ok(inner) => inner,
+                Err(_) => Err("La autenticación ha tardado demasiado y ha expirado.".to_string()),
+            };
 
             let _ = this.update(cx, |this: &mut Self, cx| {
                 this.is_authenticating = false;

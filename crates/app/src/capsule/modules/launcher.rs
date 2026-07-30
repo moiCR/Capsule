@@ -213,6 +213,12 @@ impl Render for LauncherModule {
             app_list = app_list.child(render_app_item(idx, app, is_selected, &theme, cx));
         }
 
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
@@ -251,11 +257,11 @@ impl Render for LauncherModule {
                             .flex()
                             .items_center()
                             .gap_1()
-                            .child("↑↓ navegar")
+                            .child(lang.launcher.navigate_hint)
                             .child("·")
-                            .child("↵ abrir"),
+                            .child(lang.launcher.open_hint),
                     )
-                    .child("esc cerrar"),
+                    .child(lang.launcher.close_hint),
             )
     }
 }

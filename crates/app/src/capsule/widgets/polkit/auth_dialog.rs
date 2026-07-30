@@ -13,37 +13,33 @@ pub fn render_auth_dialog(
     theme: &Theme,
     cx: &mut Context<PolkitModule>,
 ) -> impl IntoElement {
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
+    } else {
+        ui::language::Language::default()
+    };
+
     let masked_password = "•".repeat(password.len());
     let err_text = error_msg.unwrap_or_else(|| "Contraseña incorrecta. Reintenta...".to_string());
 
     div()
         .flex()
         .flex_col()
-        .w(px(348.0))
+        .w(px(360.0))
         .p_4()
         .gap_3()
+        .border_1()
+        .shadow_xl()
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap_2p5()
-                .w_full()
+                .gap_3()
                 .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w_7()
-                        .h_7()
-                        .rounded_lg()
-                        .bg(theme.accent())
-                        .child(
-                            svg()
-                                .path("sparkles.svg")
-                                .w_4()
-                                .h_4()
-                                .text_color(theme.background()),
-                        ),
+                    svg()
+                        .path("shield.svg")
+                        .size(px(24.0))
+                        .text_color(theme.accent()),
                 )
                 .child(
                     div()
@@ -55,13 +51,13 @@ pub fn render_auth_dialog(
                                 .text_sm()
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.foreground())
-                                .child("Autenticación Requerida"),
+                                .child(lang.polkit.auth_required),
                         )
                         .child(
                             div()
                                 .text_xs()
                                 .text_color(theme.foreground_muted())
-                                .child(format!("Usuario: {user_name}")),
+                                .child(format!("{}{user_name}", lang.polkit.user_prefix)),
                         ),
                 ),
         )
@@ -99,7 +95,7 @@ pub fn render_auth_dialog(
                         .child(div().flex_1().text_sm().child(if is_authenticating {
                             div()
                                 .text_color(theme.foreground_muted())
-                                .child("Verificando contraseña...")
+                                .child(lang.polkit.verifying.clone())
                         } else if password.is_empty() {
                             div()
                                 .text_color(if is_error {
@@ -152,7 +148,7 @@ pub fn render_auth_dialog(
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(theme.foreground_muted())
-                                .child("Cancelar"),
+                                .child(lang.common.cancel),
                         ),
                 )
                 .child(
@@ -180,9 +176,9 @@ pub fn render_auth_dialog(
                                     theme.background()
                                 })
                                 .child(if is_authenticating {
-                                    "Verificando..."
+                                    lang.polkit.verifying
                                 } else {
-                                    "Autenticar"
+                                    "Autenticar".to_string()
                                 }),
                         ),
                 ),

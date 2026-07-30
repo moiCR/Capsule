@@ -26,6 +26,12 @@ pub fn render_notifications_widget(
         .p_3()
         .overflow_hidden();
 
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
+    } else {
+        ui::language::Language::default()
+    };
+
     let box_content = if is_empty {
         div()
             .flex()
@@ -44,7 +50,7 @@ pub fn render_notifications_widget(
                 div()
                     .text_size(px(11.0))
                     .text_color(theme.foreground_muted())
-                    .child("Sin notificaciones"),
+                    .child(lang.dashboard.no_notifications),
             )
             .into_any_element()
     } else {
@@ -136,7 +142,7 @@ pub fn render_notifications_widget(
                         .text_size(px(11.0))
                         .font_weight(FontWeight::BOLD)
                         .text_color(theme.foreground_muted())
-                        .child("Notificaciones"),
+                        .child(lang.dashboard.notifications_title.clone()),
                 )
                 .child(if !is_empty {
                     div()
@@ -164,7 +170,7 @@ pub fn render_notifications_widget(
                             div()
                                 .text_size(px(10.0))
                                 .text_color(theme.foreground_muted())
-                                .child("Borrar todas"),
+                                .child(lang.dashboard.clear_all),
                         )
                         .into_any_element()
                 } else {

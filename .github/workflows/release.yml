@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Release Binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libssl-dev \
+            libdbus-1-dev \
+            libasound2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Package Release Assets
+        run: |
+          mkdir -p dist
+          if [ -f target/x86_64-unknown-linux-gnu/release/capsule ]; then
+            cp target/x86_64-unknown-linux-gnu/release/capsule dist/capsule
+          else
+            cp target/x86_64-unknown-linux-gnu/release/Capsule dist/capsule
+          fi
+          chmod +x dist/capsule
+          tar -czvf capsule-x86_64-unknown-linux-gnu.tar.gz -C dist capsule
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            capsule-x86_64-unknown-linux-gnu.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

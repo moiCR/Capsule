@@ -34,10 +34,28 @@ pub type PolkitPendingAuth = (
 );
 
 static POLKIT_QUEUE: OnceLock<Arc<Mutex<VecDeque<PolkitPendingAuth>>>> = OnceLock::new();
-static POLKIT_AGENT_CONN: OnceLock<zbus::Connection> = OnceLock::new();
+static POLKIT_AGENT_CONN: OnceLock<Arc<Mutex<Option<zbus::Connection>>>> = OnceLock::new();
 
 fn polkit_queue() -> &'static Arc<Mutex<VecDeque<PolkitPendingAuth>>> {
     POLKIT_QUEUE.get_or_init(|| Arc::new(Mutex::new(VecDeque::new())))
+}
+
+fn polkit_agent_conn() -> &'static Arc<Mutex<Option<zbus::Connection>>> {
+    POLKIT_AGENT_CONN.get_or_init(|| Arc::new(Mutex::new(None)))
+}
+
+fn set_agent_connection(conn: Option<zbus::Connection>) {
+    if let Ok(mut lock) = polkit_agent_conn().lock() {
+        *lock = conn;
+    }
+}
+
+fn get_agent_connection() -> Option<zbus::Connection> {
+    if let Ok(lock) = polkit_agent_conn().lock() {
+        lock.clone()
+    } else {
+        None
+    }
 }
 
 pub fn push_polkit_request(
@@ -55,6 +73,18 @@ pub fn pop_polkit_request() -> Option<PolkitPendingAuth> {
     } else {
         None
     }
+}
+
+pub fn cancel_polkit_request(cookie: &str) -> bool {
+    if let Ok(mut queue) = polkit_queue().lock() {
+        if let Some(pos) = queue.iter().position(|(req, _)| req.cookie == cookie) {
+            if let Some((_, responder)) = queue.remove(pos) {
+                let _ = responder.send(Err("Cancelled by Polkit Authority".to_string()));
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[derive(Clone, Default)]
@@ -130,15 +160,14 @@ impl PolkitAgentServer {
         let (tx, rx) = tokio::sync::oneshot::channel();
         push_polkit_request(req, tx);
 
-        match rx.await {
-            Ok(Ok(())) => {
+        match tokio::time::timeout(std::time::Duration::from_secs(120), rx).await {
+            Ok(Ok(Ok(()))) => {
                 crate::log_info!(
                     "POLKIT",
                     "User authentication verified, sending AuthenticationAgentResponse2 to Authority..."
                 );
 
-                let agent_conn_opt = POLKIT_AGENT_CONN.get().cloned();
-                if let Some(system_conn) = agent_conn_opt {
+                if let Some(system_conn) = get_agent_connection() {
                     let response_res = system_conn
                         .call_method(
                             Some("org.freedesktop.PolicyKit1"),
@@ -192,7 +221,7 @@ impl PolkitAgentServer {
             _ => {
                 crate::log_warn!(
                     "POLKIT",
-                    "Polkit authentication failed or cancelled by user!"
+                    "Polkit authentication failed, cancelled by user, or timed out!"
                 );
                 Err(zbus::fdo::Error::Failed(
                     "Authentication failed".to_string(),
@@ -200,13 +229,34 @@ impl PolkitAgentServer {
             }
         }
     }
+
+    async fn cancel_authentication(&self, cookie: String) -> zbus::fdo::Result<()> {
+        crate::log_info!(
+            "POLKIT",
+            "Polkit Authority requested CancelAuthentication for cookie='{cookie}'"
+        );
+        cancel_polkit_request(&cookie);
+        Ok(())
+    }
 }
 
 pub fn start_polkit_agent() {
+    static STARTED: OnceLock<()> = OnceLock::new();
+    if STARTED.set(()).is_err() {
+        return;
+    }
+
     tokio::spawn(async move {
-        let server = PolkitAgentServer;
-        if let Err(err) = register_agent(server).await {
-            crate::log_warn!("POLKIT", "Polkit Agent warning: {err}");
+        loop {
+            crate::log_info!("POLKIT", "Registering Polkit AuthenticationAgent on System Bus...");
+            let server = PolkitAgentServer;
+            if let Err(err) = register_agent(server).await {
+                crate::log_warn!("POLKIT", "Polkit Agent error: {err:?}. Re-registering in 4s...");
+            } else {
+                crate::log_warn!("POLKIT", "Polkit Agent loop exited unexpectedly. Re-registering in 4s...");
+            }
+            set_agent_connection(None);
+            tokio::time::sleep(std::time::Duration::from_secs(4)).await;
         }
     });
 }
@@ -217,7 +267,7 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         .build()
         .await?;
 
-    let _ = POLKIT_AGENT_CONN.set(system_conn.clone());
+    set_agent_connection(Some(system_conn.clone()));
 
     let locale = std::env::var("LANG").unwrap_or_else(|_| "es_ES.UTF-8".to_string());
     let object_path = "/org/freedesktop/PolicyKit1/AuthenticationAgent";
@@ -274,9 +324,73 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         "Successfully registered Polkit AuthenticationAgent on System Bus with PolicyKit1.Authority"
     );
 
-    std::future::pending::<()>().await;
+    // Keep service active and monitor connection liveness
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        if system_conn.peer_creds().await.is_err() {
+            break;
+        }
+    }
 
-    Ok(())
+    Err(anyhow::anyhow!("System D-Bus connection closed"))
+}
+
+async fn run_helper_process(
+    path: &str,
+    args: &[&str],
+    stdin_data: &str,
+    timeout_secs: u64,
+) -> Result<std::process::Output, String> {
+    let mut cmd = Command::new(path);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("No se pudo iniciar {path}: {e}"))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(stdin_data.as_bytes()).await;
+        let _ = stdin.flush().await;
+        drop(stdin);
+    }
+
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+
+    let wait_fut = async {
+        let mut stdout_buf = Vec::new();
+        let mut stderr_buf = Vec::new();
+
+        if let Some(ref mut out) = stdout_pipe {
+            use tokio::io::AsyncReadExt;
+            let _ = out.read_to_end(&mut stdout_buf).await;
+        }
+        if let Some(ref mut err) = stderr_pipe {
+            use tokio::io::AsyncReadExt;
+            let _ = err.read_to_end(&mut stderr_buf).await;
+        }
+
+        let status = child.wait().await?;
+        Ok::<_, std::io::Error>(std::process::Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        })
+    };
+
+    match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), wait_fut).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(format!("Error en ejecución: {e}")),
+        Err(_) => {
+            let _ = child.kill().await;
+            Err("El proceso superó el tiempo límite.".to_string())
+        }
+    }
 }
 
 pub async fn authenticate_user(
@@ -309,28 +423,11 @@ pub async fn authenticate_user(
             if !is_setuid(helper_path) {
                 crate::log_info!(
                     "POLKIT",
-                    "polkit-agent-helper-1 ({}) lacks setuid bit. Repairing permission via sudo chmod u+s...",
+                    "polkit-agent-helper-1 ({}) lacks setuid bit. Attempting permission fix...",
                     helper
                 );
-
-                if let Ok(mut sudo_chmod) = Command::new("sudo")
-                    .arg("-S")
-                    .arg("chmod")
-                    .arg("u+s")
-                    .arg(helper)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                {
-                    if let Some(mut stdin) = sudo_chmod.stdin.take() {
-                        let _ = stdin.write_all(password.as_bytes()).await;
-                        let _ = stdin.write_all(b"\n").await;
-                        let _ = stdin.flush().await;
-                        drop(stdin);
-                    }
-                    let _ = sudo_chmod.wait_with_output().await;
-                }
+                let stdin_sudo = format!("{password}\n");
+                let _ = run_helper_process("sudo", &["-S", "chmod", "u+s", helper], &stdin_sudo, 3).await;
             }
 
             crate::log_info!(
@@ -340,24 +437,9 @@ pub async fn authenticate_user(
                 user_name
             );
 
-            let child = Command::new(helper)
-                .arg(user_name)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
-
-            if let Ok(mut c) = child {
-                if let Some(mut stdin) = c.stdin.take() {
-                    let _ = stdin.write_all(cookie.as_bytes()).await;
-                    let _ = stdin.write_all(b"\n").await;
-                    let _ = stdin.write_all(password.as_bytes()).await;
-                    let _ = stdin.write_all(b"\n").await;
-                    let _ = stdin.flush().await;
-                    drop(stdin);
-                }
-
-                if let Ok(output) = c.wait_with_output().await {
+            let stdin_content = format!("{cookie}\n{password}\n");
+            match run_helper_process(helper, &[user_name], &stdin_content, 4).await {
+                Ok(output) => {
                     let ok = output.status.success();
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     crate::log_info!(
@@ -385,57 +467,41 @@ pub async fn authenticate_user(
 
                     return Err("Contraseña incorrecta. Inténtalo de nuevo.".to_string());
                 }
+                Err(err) => {
+                    crate::log_warn!("POLKIT", "polkit-agent-helper-1 process error: {err}");
+                }
             }
         }
     }
 
     // Fallback: Sudo PAM check
-    let _ = Command::new("sudo").arg("-k").output().await;
+    crate::log_info!("POLKIT", "Attempting sudo PAM check fallback...");
+    let _ = run_helper_process("sudo", &["-k"], "", 2).await;
 
-    let mut child = match Command::new("sudo")
-        .arg("-S")
-        .arg("-v")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            crate::log_warn!("POLKIT", "Failed to spawn sudo -S -v: {e}");
-            return Err("No se pudo iniciar la verificación PAM.".to_string());
+    let stdin_sudo = format!("{password}\n");
+    match run_helper_process("sudo", &["-S", "-v"], &stdin_sudo, 4).await {
+        Ok(output) => {
+            let ok = output.status.success();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            if ok {
+                return Ok(());
+            }
+
+            let stderr_lower = stderr.to_lowercase();
+            if stderr_lower.contains("delay")
+                || stderr_lower.contains("lockout")
+                || stderr_lower.contains("try again")
+                || stderr_lower.contains("pruebe otra vez")
+            {
+                return Err(
+                    "Contraseña incorrecta o límite de reintentos alcanzado. Por favor espera unos segundos..."
+                        .to_string(),
+                );
+            }
+
+            Err("Contraseña incorrecta. Inténtalo de nuevo.".to_string())
         }
-    };
-
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(password.as_bytes()).await;
-        let _ = stdin.write_all(b"\n").await;
-        let _ = stdin.flush().await;
-        drop(stdin);
+        Err(err_msg) => Err(format!("Error en autenticación: {err_msg}")),
     }
-
-    if let Ok(output) = child.wait_with_output().await {
-        let ok = output.status.success();
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        if ok {
-            return Ok(());
-        }
-
-        let stderr_lower = stderr.to_lowercase();
-        if stderr_lower.contains("delay")
-            || stderr_lower.contains("lockout")
-            || stderr_lower.contains("try again")
-            || stderr_lower.contains("pruebe otra vez")
-        {
-            return Err(
-                "Contraseña incorrecta o límite de reintentos alcanzado. Por favor espera unos segundos..."
-                    .to_string(),
-            );
-        }
-
-        return Err("Contraseña incorrecta. Inténtalo de nuevo.".to_string());
-    }
-
-    Err("Error inesperado en la verificación de credenciales.".to_string())
 }

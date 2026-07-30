@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
-use super::widgets::dashboard::panel_manager::PanelManager;
+use super::satellites::PanelManager;
 use super::{CapsuleMode, MARGIN_TOP, apple_island_ease};
 
 use super::modules::clipboard::{ClipboardEvent, ClipboardModule};
@@ -107,13 +107,13 @@ impl Capsule {
                         if let Some(item) = cx.global::<AppState>().sni_host.get_items().get(idx) {
                             super::widgets::dashboard::tray::compute_panel_height(item)
                         } else {
-                            super::widgets::dashboard::panel_manager::DEFAULT_PANEL_H
+                            super::satellites::DEFAULT_PANEL_H
                         }
                     } else {
-                        super::widgets::dashboard::panel_manager::DEFAULT_PANEL_H
+                        super::satellites::DEFAULT_PANEL_H
                     };
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Tray(idx),
+                        super::satellites::PanelKind::Tray(idx),
                         panel_h,
                         max_h,
                     );
@@ -124,12 +124,12 @@ impl Capsule {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let panel_h = if cx.has_global::<AppState>() {
                         let status = cx.global::<AppState>().network.get_status();
-                        super::widgets::dashboard::quick_settings::compute_wifi_panel_height(&status)
+                        super::satellites::wifi::compute_wifi_panel_height(&status)
                     } else {
                         180.0
                     };
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Wifi,
+                        super::satellites::PanelKind::Wifi,
                         panel_h,
                         max_h,
                     );
@@ -139,14 +139,14 @@ impl Capsule {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let panel_h = if cx.has_global::<AppState>() {
                         let status = cx.global::<AppState>().network.get_status();
-                        super::widgets::dashboard::quick_settings::compute_bluetooth_panel_height(
+                        super::satellites::bluetooth::compute_bluetooth_panel_height(
                             &status,
                         )
                     } else {
                         180.0
                     };
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Bluetooth,
+                        super::satellites::PanelKind::Bluetooth,
                         panel_h,
                         max_h,
                     );
@@ -154,9 +154,9 @@ impl Capsule {
                 }
                 super::modules::dashboard::DashboardEvent::CalendarClicked => {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
-                    let panel_h = super::widgets::dashboard::calendar::compute_calendar_panel_height();
+                    let panel_h = super::satellites::calendar::compute_calendar_panel_height();
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Calendar,
+                        super::satellites::PanelKind::Calendar,
                         panel_h,
                         max_h,
                     );
@@ -169,9 +169,9 @@ impl Capsule {
                     } else {
                         1
                     };
-                    let panel_h = super::widgets::dashboard::volume::compute_volume_panel_height(sink_count);
+                    let panel_h = super::satellites::volume::compute_volume_panel_height(sink_count);
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Volume,
+                        super::satellites::PanelKind::Volume,
                         panel_h,
                         max_h,
                     );
@@ -186,8 +186,17 @@ impl Capsule {
                 super::modules::dashboard::DashboardEvent::PowerClicked => {
                     let max_h = capsule.current_height;
                     capsule.panel_manager.toggle(
-                        super::widgets::dashboard::panel_manager::PanelKind::Power,
+                        super::satellites::PanelKind::Power,
                         130.0,
+                        max_h,
+                    );
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::LanguageClicked => {
+                    let max_h = capsule.current_height;
+                    capsule.panel_manager.toggle(
+                        super::satellites::PanelKind::Language,
+                        110.0,
                         max_h,
                     );
                     cx.notify();
@@ -321,6 +330,23 @@ impl Capsule {
                                 services::log_info!(
                                     "THEME",
                                     "Reloaded current_theme and applied to GTK/Qt/Ghostty/Fish/Yazi apps!"
+                                );
+                            }
+                        }
+
+                        if cx.has_global::<ui::language::language_manager::LanguageManager>() {
+                            let lang_updated = cx
+                                .global_mut::<ui::language::language_manager::LanguageManager>()
+                                .check_and_reload();
+                            if lang_updated {
+                                let new_lang = cx
+                                    .global::<ui::language::language_manager::LanguageManager>()
+                                    .current_language
+                                    .clone();
+                                cx.set_global(new_lang);
+                                services::log_info!(
+                                    "LANG",
+                                    "Reloaded current_language.toml!"
                                 );
                             }
                         }
@@ -564,7 +590,7 @@ impl Capsule {
             .iter()
             .chain(self.panel_manager.right.iter())
             .filter_map(|p| match p.kind {
-                super::widgets::dashboard::panel_manager::PanelKind::Tray(idx) => Some(idx),
+                super::satellites::PanelKind::Tray(idx) => Some(idx),
                 _ => None,
             })
             .collect();
@@ -1070,7 +1096,7 @@ impl Render for Capsule {
         let has_panels =
             !self.panel_manager.left.is_empty() || !self.panel_manager.right.is_empty();
         if self.mode == CapsuleMode::Dashboard && has_panels && cx.has_global::<AppState>() {
-            use super::widgets::dashboard::panel_manager as PM;
+            use super::satellites as PM;
 
             let dash_w = self.current_width;
             let dash_h = self.current_height;
@@ -1123,7 +1149,7 @@ impl Render for Capsule {
                     PM::PanelKind::Tray(sni_idx) => {
                         if let Some(item) = sni_items.get(sni_idx) {
                             Some(self.dashboard_view.update(cx, |_, cx| {
-                                super::widgets::dashboard::tray::render_mini_panel(
+                                super::satellites::tray::render_mini_panel(
                                     item,
                                     sni_idx,
                                     anim_t,
@@ -1137,7 +1163,7 @@ impl Render for Capsule {
                         }
                     }
                     PM::PanelKind::Wifi => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::quick_settings::render_wifi_mini_panel(
+                        super::satellites::wifi::render_wifi_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1145,7 +1171,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Bluetooth => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::quick_settings::render_bluetooth_mini_panel(
+                        super::satellites::bluetooth::render_bluetooth_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1153,7 +1179,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Calendar => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::calendar::render_calendar_mini_panel(
+                        super::satellites::calendar::render_calendar_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1161,7 +1187,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Volume => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::volume::render_volume_mini_panel(
+                        super::satellites::volume::render_volume_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1169,7 +1195,13 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::power::render_power_widget(
+                        super::satellites::power::render_power_widget(
+                            &active_theme,
+                            cx,
+                        ).into_any_element()
+                    })),
+                    PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::satellites::language::render_language_widget(
                             &active_theme,
                             cx,
                         ).into_any_element()
@@ -1212,7 +1244,7 @@ impl Render for Capsule {
                     PM::PanelKind::Tray(sni_idx) => {
                         if let Some(item) = sni_items.get(sni_idx) {
                             Some(self.dashboard_view.update(cx, |_, cx| {
-                                super::widgets::dashboard::tray::render_mini_panel(
+                                super::satellites::tray::render_mini_panel(
                                     item,
                                     sni_idx,
                                     anim_t,
@@ -1226,7 +1258,7 @@ impl Render for Capsule {
                         }
                     }
                     PM::PanelKind::Wifi => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::quick_settings::render_wifi_mini_panel(
+                        super::satellites::wifi::render_wifi_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1234,7 +1266,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Bluetooth => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::quick_settings::render_bluetooth_mini_panel(
+                        super::satellites::bluetooth::render_bluetooth_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1242,7 +1274,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Calendar => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::calendar::render_calendar_mini_panel(
+                        super::satellites::calendar::render_calendar_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1250,7 +1282,7 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Volume => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::volume::render_volume_mini_panel(
+                        super::satellites::volume::render_volume_mini_panel(
                             anim_t,
                             panel_h,
                             &active_theme,
@@ -1258,7 +1290,13 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::widgets::dashboard::power::render_power_widget(
+                        super::satellites::power::render_power_widget(
+                            &active_theme,
+                            cx,
+                        ).into_any_element()
+                    })),
+                    PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::satellites::language::render_language_widget(
                             &active_theme,
                             cx,
                         ).into_any_element()

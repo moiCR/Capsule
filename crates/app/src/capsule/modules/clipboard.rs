@@ -158,6 +158,11 @@ impl ClipboardModule {
 impl Render for ClipboardModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
 
         window.focus(&self.focus_handle, cx);
 
@@ -177,6 +182,7 @@ impl Render for ClipboardModule {
         for (idx, item) in self.filtered_items.iter().enumerate() {
             let is_selected = idx == selected_index;
             let item_clone = item.clone();
+            let empty_text = lang.clipboard.empty_item.clone();
 
             let row = div()
                 .id(format!("clip-item-{idx}"))
@@ -248,7 +254,7 @@ impl Render for ClipboardModule {
                                 })
                                 .truncate()
                                 .child(if item.preview.is_empty() {
-                                    "[Elemento vacío]".to_string()
+                                    empty_text
                                 } else {
                                     item.preview.clone()
                                 }),
@@ -292,7 +298,7 @@ impl Render for ClipboardModule {
                                     .font_weight(FontWeight::BOLD)
                                     .text_size(px(13.0))
                                     .text_color(theme.foreground())
-                                    .child("PORTAPAPELES"),
+                                    .child(lang.clipboard.title),
                             ),
                     )
                     .child(
@@ -345,7 +351,7 @@ impl Render for ClipboardModule {
                                 theme.foreground()
                             })
                             .child(if query.is_empty() {
-                                "Buscar en el historial...".to_string()
+                                lang.clipboard.search_placeholder
                             } else {
                                 query
                             }),
@@ -362,7 +368,7 @@ impl Render for ClipboardModule {
                         .justify_center()
                         .text_size(px(12.0))
                         .text_color(theme.foreground_muted())
-                        .child("No hay elementos en el historial")
+                        .child(lang.clipboard.empty_history)
                 } else {
                     list_container
                 },

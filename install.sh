@@ -14,15 +14,17 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 APP_NAME="capsule"
 GITHUB_REPO="moiCR/Capsule"
+DOTFILES_REPO="https://github.com/moiCR/Capsule-Plus.git"
 INSTALL_DIR="${HOME}/.local/bin"
 DESKTOP_DIR="${HOME}/.local/share/applications"
+CONFIG_DIR="${HOME}/.config/capsule"
 
 echo -e "${BLUE}"
 cat << 'EOF'
-  ____    _    ____  ____  _   _ _     _____
+  ____    _    ____  ____  _   _ _     _____ 
  / ___|  / \  |  _ \/ ___|| | | | |   | ____|
-| |     / _ \ | |_) \___ \| | | | |   |  _|
-| |___ / ___ \|  __/ ___) | |_| | |___| |___
+| |     / _ \ | |_) \___ \| | | | |   |  _|  
+| |___ / ___ \|  __/ ___) | |_| | |___| |___ 
  \____/_/   \_\_|   |____/ \___/|_____|_____|
 EOF
 echo -e "${NC}"
@@ -45,9 +47,8 @@ elif command -v yay &>/dev/null; then
 fi
 
 if [[ -z "$AUR_HELPER" ]]; then
-    error "Neither 'paru' nor 'yay' was found on your system."
-    error "Please install paru or yay and run this installer again."
-    exit 1
+    warn "Neither 'paru' nor 'yay' was found on your system."
+    warn "Package dependency checks will be skipped. Ensure required libraries are installed."
 fi
 
 ARCH_LINUX_DEPENDENCIES=(
@@ -64,43 +65,156 @@ ARCH_LINUX_DEPENDENCIES=(
     "xdg-desktop-portal"
     "xdg-desktop-portal-gtk"
     "adw-gtk-theme"
+    "git"
+    "curl"
+    "tar"
 )
 
-TO_INSTALL=()
-
-info "Checking system dependencies..."
-for pkg in "${ARCH_LINUX_DEPENDENCIES[@]}"; do
-    if "$AUR_HELPER" -Qq "$pkg" &>/dev/null; then
-        echo -e "  \e[1;32m✔ \e[0m $pkg \e[2minstalled\e[0m"
-    else
-        echo -e "  \e[1;33m➜ \e[0m $pkg \e[1mwill be installed\e[0m"
-        TO_INSTALL+=("$pkg")
-    fi
-done
-
-if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
-    echo -e "----------------------------------------"
-    info "Packages to install: ${#TO_INSTALL[@]}"
-
-    confirm="y"
-    if [[ -t 0 ]]; then
-        read -rp "Do you want to proceed with the installation of dependencies? [Y/n] " confirm
-    fi
-    confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-
-    if [[ "$confirm" == "n" || "$confirm" == "no" ]]; then
-        info "Package installation skipped by user."
-    else
-
-        info "Starting installation using $AUR_HELPER..."
-        if $AUR_HELPER -S --needed "${TO_INSTALL[@]}"; then
-            success "All packages installed successfully!"
+if [[ -n "$AUR_HELPER" ]]; then
+    TO_INSTALL=()
+    info "Checking system dependencies..."
+    for pkg in "${ARCH_LINUX_DEPENDENCIES[@]}"; do
+        if "$AUR_HELPER" -Qq "$pkg" &>/dev/null; then
+            echo -e "  \e[1;32m✔ \e[0m $pkg \e[2minstalled\e[0m"
         else
-            error "Installation failed. Please check the logs above."
-            exit 1
+            echo -e "  \e[1;33m➜ \e[0m $pkg \e[1mwill be installed\e[0m"
+            TO_INSTALL+=("$pkg")
+        fi
+    done
+
+    if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
+        echo -e "----------------------------------------"
+        info "Packages to install: ${#TO_INSTALL[@]}"
+
+        confirm="y"
+        if [[ -t 0 ]]; then
+            read -rp "Do you want to proceed with the installation of dependencies? [Y/n] " confirm
+        fi
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
+
+        if [[ "$confirm" == "n" || "$confirm" == "no" ]]; then
+            info "Package installation skipped by user."
+        else
+            info "Starting installation using $AUR_HELPER..."
+            if $AUR_HELPER -S --needed "${TO_INSTALL[@]}"; then
+                success "All packages installed successfully!"
+            else
+                error "Installation failed. Please check the logs above."
+            fi
+        fi
+    else
+        echo -e "----------------------------------------"
+        info "All dependencies are already installed!"
+    fi
+fi
+
+# 1. Fetch Latest Release Binary or Compile from Source via Temporary Clone
+echo -e "----------------------------------------"
+info "Installing Capsule binary for $ARCH ($TARGET)..."
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$DESKTOP_DIR"
+
+BINARY_INSTALLED=false
+
+RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/capsule-${TARGET}.tar.gz"
+info "Downloading latest binary release from ${RELEASE_URL}..."
+
+TEMP_BIN_DIR=$(mktemp -d)
+if curl -sSL --fail "$RELEASE_URL" -o "$TEMP_BIN_DIR/capsule.tar.gz"; then
+    info "Extracting release asset..."
+    if tar -xzf "$TEMP_BIN_DIR/capsule.tar.gz" -C "$TEMP_BIN_DIR"; then
+        if [[ -f "$TEMP_BIN_DIR/capsule" ]]; then
+            cp "$TEMP_BIN_DIR/capsule" "$INSTALL_DIR/capsule"
+            chmod +x "$INSTALL_DIR/capsule"
+            BINARY_INSTALLED=true
+            success "Capsule binary installed from GitHub Release to $INSTALL_DIR/capsule"
         fi
     fi
-else
-    echo -e "----------------------------------------"
-    info "All dependencies are already installed!"
 fi
+rm -rf "$TEMP_BIN_DIR"
+
+# Fallback to cloning & compiling if pre-compiled release binary is unavailable
+if [[ "$BINARY_INSTALLED" == false ]]; then
+    warn "Pre-compiled release binary is unavailable."
+    if command -v cargo &>/dev/null; then
+        info "Cargo detected. Cloning ${GITHUB_REPO} to compile from source..."
+        SRC_TEMP_DIR=$(mktemp -d)
+        if git clone "https://github.com/${GITHUB_REPO}.git" "$SRC_TEMP_DIR"; then
+            info "Compiling Capsule release binary via cargo..."
+            (
+                cd "$SRC_TEMP_DIR"
+                cargo build --release
+            )
+            if [[ -f "$SRC_TEMP_DIR/target/release/capsule" ]]; then
+                cp "$SRC_TEMP_DIR/target/release/capsule" "$INSTALL_DIR/capsule"
+                chmod +x "$INSTALL_DIR/capsule"
+                BINARY_INSTALLED=true
+                success "Capsule binary compiled from source and installed to $INSTALL_DIR/capsule"
+            elif [[ -f "$SRC_TEMP_DIR/target/release/Capsule" ]]; then
+                cp "$SRC_TEMP_DIR/target/release/Capsule" "$INSTALL_DIR/capsule"
+                chmod +x "$INSTALL_DIR/capsule"
+                BINARY_INSTALLED=true
+                success "Capsule binary compiled from source and installed to $INSTALL_DIR/capsule"
+            fi
+        fi
+        rm -rf "$SRC_TEMP_DIR"
+    fi
+fi
+
+if [[ "$BINARY_INSTALLED" == false ]]; then
+    error "Failed to install Capsule binary! Pre-compiled release was not found and cargo build from source failed."
+fi
+
+# Desktop Entry
+DESKTOP_FILE="$DESKTOP_DIR/capsule.desktop"
+cat << EOF > "$DESKTOP_FILE"
+[Desktop Entry]
+Name=Capsule
+Comment=Dynamic Island Bar for Linux
+Exec=$INSTALL_DIR/capsule
+Icon=capsule
+Terminal=false
+Type=Application
+NoDisplay=true
+Categories=Utility;System;
+EOF
+success "Desktop entry created at $DESKTOP_FILE"
+
+echo -e "----------------------------------------"
+confirm_dotfiles="y"
+if [[ -t 0 ]]; then
+    read -rp "Do you want to install Capsule-Plus (dotfiles)? [Y/n] " confirm_dotfiles
+fi
+
+confirm_dotfiles=$(echo "$confirm_dotfiles" | tr '[:upper:]' '[:lower:]')
+if [[ "$confirm_dotfiles" == "n" || "$confirm_dotfiles" == "no" ]]; then
+    info "Dotfiles installation skipped by user."
+else
+    info "Installing Capsule-Plus dotfiles directly in $CONFIG_DIR..."
+
+    if [[ -d "$CONFIG_DIR/.git" ]]; then
+        info "Existing Capsule-Plus repository found at $CONFIG_DIR. Updating via git pull..."
+        (cd "$CONFIG_DIR" && git pull) || warn "Git pull failed, proceeding with existing files."
+    elif [[ -d "$CONFIG_DIR" && "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
+        BACKUP_DIR="${CONFIG_DIR}.bak.$(date +%Y%m%d_%H%M%S)"
+        info "Backing up existing $CONFIG_DIR to $BACKUP_DIR..."
+        mv "$CONFIG_DIR" "$BACKUP_DIR"
+        git clone "$DOTFILES_REPO" "$CONFIG_DIR"
+    else
+        mkdir -p "$(dirname "$CONFIG_DIR")"
+        git clone "$DOTFILES_REPO" "$CONFIG_DIR"
+    fi
+
+    if [[ -f "$CONFIG_DIR/install.sh" ]]; then
+        info "Executing Capsule-Plus installer script from $CONFIG_DIR..."
+        chmod +x "$CONFIG_DIR/install.sh"
+        (cd "$CONFIG_DIR" && ./install.sh) || warn "Capsule-Plus install.sh finished with warnings."
+        success "Capsule-Plus dotfiles installed successfully in $CONFIG_DIR!"
+    else
+        warn "No install.sh script found in $CONFIG_DIR."
+    fi
+fi
+
+echo -e "----------------------------------------"
+success "Capsule installation completed successfully!"
+info "You can start Capsule by running 'capsule' in your terminal."

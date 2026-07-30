@@ -218,7 +218,12 @@ pub fn render_media_player_widget(
                                 .child(if active_track.has_media {
                                     active_track.title.clone()
                                 } else {
-                                    "No media playing".to_string()
+                                    let lang = if cx.has_global::<ui::language::Language>() {
+                                        cx.global::<ui::language::Language>().clone()
+                                    } else {
+                                        ui::language::Language::default()
+                                    };
+                                    lang.dashboard.no_media
                                 }),
                         )
                         .child(

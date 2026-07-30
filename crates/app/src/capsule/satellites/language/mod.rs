@@ -1,37 +1,33 @@
 use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
-use services::{AppState, PowerProfile};
+use ui::language::language_manager::{LanguageItem, LanguageManager};
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
 
-pub fn render_power_widget(
+pub fn render_language_widget(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let current_profile = if cx.has_global::<AppState>() {
-        cx.global::<AppState>().power.get_active_profile()
+    let languages: Vec<LanguageItem> = if cx.has_global::<LanguageManager>() {
+        cx.global::<LanguageManager>().list_languages()
     } else {
-        PowerProfile::Balanced
+        Vec::new()
     };
 
-    let profiles = [
-        (PowerProfile::Performance, "Performance", "zap.svg", "power-profile-perf"),
-        (PowerProfile::Balanced, "Balanced", "scale.svg", "power-profile-bal"),
-        (PowerProfile::PowerSaver, "Power Saver", "leaf.svg", "power-profile-saver"),
-    ];
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
+    } else {
+        ui::language::Language::default()
+    };
 
-    let mut profile_rows = div()
-        .flex()
-        .flex_col()
-        .gap_1p5()
-        .w_full();
+    let mut rows = div().flex().flex_col().gap_1p5().w_full();
 
-    for (profile_val, label, icon_file, element_id) in profiles {
-        let is_selected = current_profile == profile_val;
-        let prof_clone = profile_val.clone();
+    for item in languages {
+        let is_selected = item.is_current;
+        let item_lang = item.language.clone();
 
         let row = div()
-            .id(element_id)
+            .id(format!("lang-item-{}", item.code))
             .flex()
             .flex_row()
             .items_center()
@@ -59,8 +55,9 @@ pub fn render_power_widget(
                 }
             })
             .on_click(cx.listener(move |_this, _, _, cx| {
-                if cx.has_global::<AppState>() {
-                    cx.global::<AppState>().power.set_active_profile(prof_clone.clone());
+                if cx.has_global::<LanguageManager>() {
+                    cx.global_mut::<LanguageManager>().set_language(item_lang.clone());
+                    cx.set_global(cx.global::<LanguageManager>().current_language.clone());
                 }
                 cx.notify();
             }))
@@ -72,7 +69,7 @@ pub fn render_power_widget(
                     .gap_2()
                     .child(
                         svg()
-                            .path(icon_file)
+                            .path("languages.svg")
                             .size(px(14.0))
                             .text_color(if is_selected {
                                 theme.accent()
@@ -93,11 +90,11 @@ pub fn render_power_widget(
                             } else {
                                 theme.foreground_muted()
                             })
-                            .child(label),
+                            .child(item.name),
                     ),
             );
 
-        profile_rows = profile_rows.child(row);
+        rows = rows.child(row);
     }
 
     div()
@@ -117,7 +114,7 @@ pub fn render_power_widget(
                 .text_size(px(11.0))
                 .text_color(theme.foreground_muted())
                 .px_1()
-                .child("POWER PLAN"),
+                .child(lang.language_section.title),
         )
-        .child(profile_rows)
+        .child(rows)
 }

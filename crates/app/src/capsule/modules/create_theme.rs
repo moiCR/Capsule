@@ -242,6 +242,11 @@ impl Render for CreateThemeModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
         let preview = self.current_preview_theme();
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
 
         let header = div()
             .flex()
@@ -258,16 +263,15 @@ impl Render for CreateThemeModule {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .w_8()
-                            .h_8()
+                            .w_7()
+                            .h_7()
                             .rounded_xl()
-                            .bg(theme.accent().opacity(0.15))
+                            .bg(theme.accent())
                             .child(
                                 svg()
-                                    .path("sparkles.svg")
-                                    .w_4()
-                                    .h_4()
-                                    .text_color(theme.accent()),
+                                    .path("palette_2.svg")
+                                    .size(px(14.0))
+                                    .text_color(theme.background()),
                             ),
                     )
                     .child(
@@ -279,13 +283,13 @@ impl Render for CreateThemeModule {
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(theme.foreground())
-                                    .child("Crear Tema"),
+                                    .child(lang.themes.create_title.clone()),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(theme.foreground_muted())
-                                    .child("Personaliza los colores"),
+                                    .child(lang.themes.customize_colors.clone()),
                             ),
                     ),
             )
@@ -309,7 +313,7 @@ impl Render for CreateThemeModule {
                                 div()
                                     .text_xs()
                                     .text_color(theme.foreground_muted())
-                                    .child("Cancelar"),
+                                    .child(lang.common.cancel.clone()),
                             ),
                     )
                     .child(
@@ -328,7 +332,7 @@ impl Render for CreateThemeModule {
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(theme.background())
-                                    .child("Guardar"),
+                                    .child(lang.common.save.clone()),
                             ),
                     ),
             );

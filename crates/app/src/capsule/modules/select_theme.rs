@@ -80,8 +80,15 @@ impl Render for SelectThemeModule {
 
         window.focus(&self.focus_handle, cx);
 
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
+
         let header = div()
             .flex()
+            .flex_row()
             .items_center()
             .justify_between()
             .w_full()
@@ -101,7 +108,7 @@ impl Render for SelectThemeModule {
                             .font_weight(FontWeight::BOLD)
                             .text_size(px(14.0))
                             .text_color(theme.foreground())
-                            .child("Temas"),
+                            .child(lang.themes.select_title),
                     ),
             )
             .child(
@@ -120,7 +127,7 @@ impl Render for SelectThemeModule {
                             .text_xs()
                             .font_weight(FontWeight::BOLD)
                             .text_color(theme.background())
-                            .child("+ Crear"),
+                            .child(lang.themes.create_button),
                     ),
             );
 

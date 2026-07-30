@@ -9,10 +9,16 @@ pub fn render_search_input(
     theme: &Theme,
     cx: &mut Context<LauncherModule>,
 ) -> impl IntoElement {
-    let placeholder = if query.is_empty() {
-        "Buscar aplicación..."
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
     } else {
-        ""
+        ui::language::Language::default()
+    };
+
+    let placeholder = if query.is_empty() {
+        lang.launcher.search_placeholder
+    } else {
+        String::new()
     };
 
     div()

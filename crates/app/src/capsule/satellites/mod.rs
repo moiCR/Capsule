@@ -1,5 +1,14 @@
+pub mod bluetooth;
+pub mod calendar;
+pub mod language;
+pub mod power;
+pub mod tray;
+pub mod volume;
+pub mod wifi;
+
 use std::collections::VecDeque;
 use std::time::Instant;
+use ui::tracker::DimensionTracker;
 
 /// Emerge animation duration in seconds.
 pub const PANEL_ANIM_DURATION: f32 = 0.25;
@@ -30,9 +39,8 @@ pub enum PanelKind {
     Calendar,
     Volume,
     Power,
+    Language,
 }
-
-use ui::tracker::DimensionTracker;
 
 /// A single open satellite panel.
 #[derive(Clone, Debug)]
@@ -72,11 +80,6 @@ impl OpenPanel {
 }
 
 /// Manages left/right lane-based dynamic panel layout.
-///
-/// Panels stack from top within each lane.
-/// Lane height is capped at the Dashboard's current height.
-/// When a new panel doesn't fit, the oldest in that lane is evicted until
-/// there is enough space (or the lane can hold just this one panel).
 pub struct PanelManager {
     pub left: VecDeque<OpenPanel>,
     pub right: VecDeque<OpenPanel>,
@@ -96,9 +99,6 @@ impl PanelManager {
         Self::default()
     }
 
-    // ── Queries ──────────────────────────────────────────────────────────
-
-    /// Total height consumed by active panels in a lane (including inter-panel gaps).
     pub fn lane_used(lane: &VecDeque<OpenPanel>) -> f32 {
         let active: Vec<_> = lane.iter().filter(|p| !p.is_closing()).collect();
         if active.is_empty() {
@@ -109,7 +109,6 @@ impl PanelManager {
         h_sum + gaps
     }
 
-    /// Free vertical pixels in a lane given the maximum available height.
     pub fn lane_free(lane: &VecDeque<OpenPanel>, max_h: f32) -> f32 {
         let used = Self::lane_used(lane);
         let active_count = lane.iter().filter(|p| !p.is_closing()).count();
@@ -117,7 +116,6 @@ impl PanelManager {
         free.max(0.0)
     }
 
-    /// True if `kind` is already open (and not closing) in either lane.
     pub fn is_open(&self, kind: &PanelKind) -> bool {
         self.left
             .iter()
@@ -133,20 +131,12 @@ impl PanelManager {
         })
     }
 
-    /// Remove panels that have finished their closing animation.
     pub fn update_animations(&mut self) {
         self.left.retain(|p| !p.is_finished_closing());
         self.right.retain(|p| !p.is_finished_closing());
     }
 
-    // ── Mutation ─────────────────────────────────────────────────────────
-
-    /// Toggle a panel open/closed.
-    ///
-    /// `panel_h` is the height of this panel.
-    /// `max_lane_h` is the current Dashboard height (lane height cap).
     pub fn toggle(&mut self, kind: PanelKind, panel_h: f32, max_lane_h: f32) {
-        // If already open and active, start closing it
         if let Some(p) = self.left.iter_mut().find(|p| p.kind == kind) {
             if !p.is_closing() {
                 p.closing_at = Some(Instant::now());
@@ -168,12 +158,10 @@ impl PanelManager {
             }
         }
 
-        // Choose the lane that has more free space
         let lf = Self::lane_free(&self.left, max_lane_h);
         let rf = Self::lane_free(&self.right, max_lane_h);
         let use_left = lf >= rf;
 
-        // Make room by evicting the oldest active panel until the new one fits
         if use_left {
             let active_count = self.left.iter().filter(|p| !p.is_closing()).count();
             let needed = panel_h + if active_count == 0 { 0.0 } else { PANEL_GAP };
@@ -213,7 +201,6 @@ impl PanelManager {
         }
     }
 
-    /// Mark a panel as closing by kind.
     pub fn close(&mut self, kind: &PanelKind) {
         if let Some(p) = self.left.iter_mut().find(|p| p.kind == *kind) {
             p.closing_at = Some(Instant::now());
@@ -232,7 +219,6 @@ impl PanelManager {
         }
     }
 
-    /// Prune open panels whose tray sni_idx is no longer valid (e.g. app was closed).
     pub fn prune_invalid(&mut self, valid_tray_len: usize) {
         for p in self.left.iter_mut().chain(self.right.iter_mut()) {
             if let PanelKind::Tray(sni_idx) = p.kind {
@@ -243,9 +229,6 @@ impl PanelManager {
         }
     }
 
-    // ── Animation helpers ─────────────────────────────────────────────────
-
-    /// Emerge animation origin: pill center (in pill_wrapper coordinates).
     pub fn emerge_origin(dash_w: f32, dash_h: f32) -> (f32, f32) {
         (
             dash_w / 2.0 - PANEL_W / 2.0,
@@ -264,9 +247,6 @@ impl PanelManager {
         let (ox, oy) = Self::emerge_origin(dash_w, dash_h);
 
         let e = if is_closing {
-            // When closing, t goes from 1.0 down to 0.0.
-            // We want the inverse of ease_out_back, which is ease_in_back.
-            // But since t is backwards, 1.0 - t gives us the forward closing progress.
             1.0 - ease_in_back(1.0 - t)
         } else {
             ease_out_back(t)
@@ -276,14 +256,12 @@ impl PanelManager {
     }
 }
 
-/// Ease-in-back: pull back slightly before accelerating.
 pub fn ease_in_back(t: f32) -> f32 {
     let c1: f32 = 1.70158;
     let c3 = c1 + 1.0;
     c3 * t * t * t - c1 * t * t
 }
 
-/// Ease-out-back: snappy pop with slight overshoot.
 pub fn ease_out_back(t: f32) -> f32 {
     if t >= 1.0 {
         return 1.0;

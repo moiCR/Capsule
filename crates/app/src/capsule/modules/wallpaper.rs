@@ -296,13 +296,18 @@ impl WallpaperModule {
 impl Render for WallpaperModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
         let total = self.items.len();
 
         let active_name = self
             .items
             .get(self.selected_idx)
             .map(|i| i.name.clone())
-            .unwrap_or_else(|| "Sin fondos".to_string());
+            .unwrap_or_else(|| lang.wallpaper.no_wallpapers.clone());
 
         let mut carousel_row = div()
             .flex()
@@ -321,7 +326,7 @@ impl Render for WallpaperModule {
                     .justify_center()
                     .text_color(theme.foreground_muted())
                     .text_size(px(13.0))
-                    .child("No hay imágenes en ~/Wallpapers"),
+                    .child(lang.wallpaper.no_wallpapers),
             );
         } else {
             let eased = if self.is_animating {

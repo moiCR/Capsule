@@ -4,6 +4,7 @@ use services::{AppState, calendar::NavDirection};
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
+use crate::capsule::satellites::PANEL_W;
 
 pub fn compute_calendar_panel_height() -> f32 {
     250.0
@@ -34,8 +35,6 @@ pub fn render_calendar_mini_panel(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    use super::panel_manager::PANEL_W;
-
     let now = Local::now();
     let now_year = now.year();
     let now_month = now.month();
@@ -54,21 +53,18 @@ pub fn render_calendar_mini_panel(
 
     let is_current_month = view_year == now_year && view_month == now_month;
 
-    let month_name = match view_month {
-        1 => "Enero",
-        2 => "Febrero",
-        3 => "Marzo",
-        4 => "Abril",
-        5 => "Mayo",
-        6 => "Junio",
-        7 => "Julio",
-        8 => "Agosto",
-        9 => "Septiembre",
-        10 => "Octubre",
-        11 => "Noviembre",
-        12 => "Diciembre",
-        _ => "",
+    let lang = if cx.has_global::<ui::language::Language>() {
+        cx.global::<ui::language::Language>().clone()
+    } else {
+        ui::language::Language::default()
     };
+
+    let month_name = lang
+        .datetime
+        .months
+        .get((view_month as usize).saturating_sub(1))
+        .cloned()
+        .unwrap_or_default();
 
     let days_in_month = match view_month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -90,7 +86,6 @@ pub fn render_calendar_mini_panel(
 
     let mut day_cells: Vec<AnyElement> = Vec::new();
 
-    // Empty padding slots for days before the 1st
     for _ in 0..start_weekday {
         day_cells.push(
             div()
@@ -103,7 +98,6 @@ pub fn render_calendar_mini_panel(
         );
     }
 
-    // Days 1..=days_in_month
     for day in 1..=days_in_month {
         let is_today = is_current_month && day == now_day;
         day_cells.push(
@@ -146,7 +140,6 @@ pub fn render_calendar_mini_panel(
         .w_full()
         .gap_1();
 
-    // Header row for day names
     let mut header_row = div()
         .flex()
         .flex_row()
@@ -174,7 +167,6 @@ pub fn render_calendar_mini_panel(
 
     grid = grid.child(header_row);
 
-    // Chunk day cells into rows of 7
     let mut chunks = Vec::new();
     let mut current_chunk = Vec::new();
     for cell in day_cells {
@@ -201,7 +193,6 @@ pub fn render_calendar_mini_panel(
             row = row.child(cell);
         }
 
-        // Fill remaining spaces in last row if needed
         if chunk_len < 7 {
             for _ in 0..(7 - chunk_len) {
                 row = row.child(
@@ -218,7 +209,6 @@ pub fn render_calendar_mini_panel(
         grid = grid.child(row);
     }
 
-    // Compute slide & fade animation for month navigation
     let eased_nav = 1.0 - (1.0 - nav_t) * (1.0 - nav_t);
     let grid_opacity = 0.2 + 0.8 * eased_nav;
     let slide_offset = match nav_dir {
@@ -247,7 +237,6 @@ pub fn render_calendar_mini_panel(
         .flex()
         .flex_col()
         .child(
-            // Header with month title and navigation controls
             div()
                 .flex()
                 .flex_row()
@@ -302,7 +291,7 @@ pub fn render_calendar_mini_panel(
                                             .text_size(px(9.0))
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(theme.accent())
-                                            .child("Hoy"),
+                                            .child(lang.datetime.today.clone()),
                                     ),
                             )
                         } else {

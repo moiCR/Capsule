@@ -69,6 +69,10 @@ async fn main() {
         cx.set_global(theme_manager.current_theme.clone());
         cx.set_global(theme_manager);
 
+        let lang_manager = ui::language::language_manager::LanguageManager::new();
+        cx.set_global(lang_manager.current_language.clone());
+        cx.set_global(lang_manager);
+
         let max_w = 3840.0;
         let max_h = 2160.0;
         let idle_h = 25.0 + 8.0;
