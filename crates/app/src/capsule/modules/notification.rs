@@ -68,8 +68,7 @@ impl Render for NotificationModule {
             .flex()
             .flex_row()
             .items_center()
-            .w_full()
-            .h_full()
+            .w(px(348.0))
             .px(px(14.0))
             .py(px(10.0))
             .gap(px(12.0))
@@ -90,7 +89,6 @@ impl Render for NotificationModule {
                             .text_color(theme.accent()),
                     ),
             )
-            // Right text column (App Name, Summary, Body)
             .child(
                 div()
                     .flex_1()

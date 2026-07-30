@@ -2,7 +2,7 @@
 
 ## Project
 
-- Capsule is a shell for Hyprland and Niri built with Rust and GPUI.
+- Capsule is a shell for Tiling Windows Managers and Wayland Compositors built with Rust and GPUI.
 - Prioritize maintainability, readability, and correctness over clever optimizations.
 - Preserve the project's minimal and contextual UI philosophy.
 
@@ -38,7 +38,7 @@
 ## Code Style
 
 - Comments should explain **why**, never **what**.
-- Remove dead code instead of commenting it out.
+- Remove dead code instead of commenting it out.a
 - Avoid TODOs unless explicitly requested.
 - Do not make unrelated refactors while implementing a feature.
 
@@ -72,3 +72,20 @@ crates/
 
 ## Multiples Instances
 Avoid creating multiple instances of a single object. What does this mean? It means that if it's a utility, manager, service, etc., it should be instantiated and accessed globally (AppState).
+
+## Components
+crates/
+├── ui/
+    ├── components/
+    |    ├── select.rs
+    |    ├── volume_control.rs
+    |    ├── input.rs
+    |    ├── button.rs
+    |    ├── ...
+```
+
+
+## Capsule UI guidelines
+- Capsule rounded = 42px
+- Widget badges rounded = 24px
+- Buttons: Icons only - rounded full - Text Buttons - rounded 24px

@@ -1,10 +1,9 @@
-use gpui::{
-    EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render, Window, div,
-    prelude::*, svg,
-};
+use gpui::{EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, Window, div, prelude::*};
 use services::{PolkitAuthRequest, authenticate_user};
 use tokio::sync::oneshot;
 use ui::theme::Theme;
+
+use crate::capsule::widgets::polkit::auth_dialog::render_auth_dialog;
 
 pub enum PolkitEvent {
     Authenticated,
@@ -15,6 +14,8 @@ pub struct PolkitModule {
     pub request: Option<PolkitAuthRequest>,
     pub password: String,
     pub is_error: bool,
+    pub error_msg: Option<String>,
+    pub is_authenticating: bool,
     pub focus_handle: FocusHandle,
     pub responder: Option<oneshot::Sender<Result<(), String>>>,
 }
@@ -28,6 +29,8 @@ impl PolkitModule {
             request: None,
             password: String::new(),
             is_error: false,
+            error_msg: None,
+            is_authenticating: false,
             focus_handle,
             responder: None,
         }
@@ -42,6 +45,8 @@ impl PolkitModule {
         self.request = Some(request);
         self.password.clear();
         self.is_error = false;
+        self.error_msg = None;
+        self.is_authenticating = false;
         self.responder = Some(responder);
         cx.notify();
     }
@@ -52,32 +57,54 @@ impl PolkitModule {
         }
         self.password.clear();
         self.is_error = false;
+        self.error_msg = None;
+        self.is_authenticating = false;
         self.request = None;
         cx.emit(PolkitEvent::Cancelled);
     }
 
-    fn submit_auth(&mut self, cx: &mut Context<Self>) {
+    pub fn submit_auth(&mut self, cx: &mut Context<Self>) {
+        if self.is_authenticating {
+            return;
+        }
         let password = self.password.clone();
         if password.is_empty() {
             return;
         }
 
+        let (user_name, cookie) = if let Some(ref req) = self.request {
+            (req.user_name.clone(), req.cookie.clone())
+        } else {
+            ("root".to_string(), "".to_string())
+        };
+
+        self.is_authenticating = true;
+        self.is_error = false;
+        self.error_msg = None;
+        cx.notify();
+
         cx.spawn(async move |this, cx| {
-            let success = authenticate_user(&password).await;
+            let res = authenticate_user(&user_name, &cookie, &password).await;
 
             let _ = this.update(cx, |this: &mut Self, cx| {
-                if success {
-                    if let Some(responder) = this.responder.take() {
-                        let _ = responder.send(Ok(()));
+                this.is_authenticating = false;
+                match res {
+                    Ok(()) => {
+                        if let Some(responder) = this.responder.take() {
+                            let _ = responder.send(Ok(()));
+                        }
+                        this.password.clear();
+                        this.is_error = false;
+                        this.error_msg = None;
+                        this.request = None;
+                        cx.emit(PolkitEvent::Authenticated);
                     }
-                    this.password.clear();
-                    this.is_error = false;
-                    this.request = None;
-                    cx.emit(PolkitEvent::Authenticated);
-                } else {
-                    this.is_error = true;
-                    this.password.clear();
-                    cx.notify();
+                    Err(err_msg) => {
+                        this.is_error = true;
+                        this.error_msg = Some(err_msg);
+                        this.password.clear();
+                        cx.notify();
+                    }
                 }
             });
         })
@@ -90,24 +117,84 @@ impl PolkitModule {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.is_authenticating {
+            return;
+        }
+
         let key = event.keystroke.key.as_str();
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "v" => {
+                    if let Some(item) = cx.read_from_clipboard() {
+                        if let Some(text) = item.text() {
+                            let clean_text: String =
+                                text.chars().filter(|c| !c.is_control()).collect();
+                            if !clean_text.is_empty() {
+                                self.password.push_str(&clean_text);
+                                self.is_error = false;
+                                self.error_msg = None;
+                                cx.notify();
+                            }
+                        }
+                    }
+                    return;
+                }
+                "c" => {
+                    if !self.password.is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            self.password.clone(),
+                        ));
+                    }
+                    return;
+                }
+                "x" => {
+                    if !self.password.is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            self.password.clone(),
+                        ));
+                        self.password.clear();
+                        self.is_error = false;
+                        self.error_msg = None;
+                        cx.notify();
+                    }
+                    return;
+                }
+                "u" | "w" => {
+                    self.password.clear();
+                    self.is_error = false;
+                    self.error_msg = None;
+                    cx.notify();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match key {
             "enter" => self.submit_auth(cx),
             "backspace" => {
                 if !self.password.is_empty() {
                     self.password.pop();
                     self.is_error = false;
+                    self.error_msg = None;
                     cx.notify();
                 }
             }
             "escape" => self.cancel(cx),
             _ => {
-                if let Some(keystroke_text) = &event.keystroke.key_char {
-                    if !keystroke_text.chars().any(|c| c.is_control()) {
-                        self.password.push_str(keystroke_text);
-                        self.is_error = false;
-                        cx.notify();
-                    }
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+
+                if text.chars().count() == 1 && !ctrl {
+                    self.password.push_str(text);
+                    self.is_error = false;
+                    self.error_msg = None;
+                    cx.notify();
                 }
             }
         }
@@ -132,152 +219,18 @@ impl Render for PolkitModule {
             .map(|r| r.user_name.as_str())
             .unwrap_or("usuario");
 
-        let masked_password = "•".repeat(self.password.len());
-
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
-            .flex()
-            .flex_col()
-            .size_full()
-            .p_4()
-            .gap_3()
-            // Header
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2p5()
-                    .w_full()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .w_7()
-                            .h_7()
-                            .rounded_lg()
-                            .bg(theme.accent())
-                            .child(
-                                svg()
-                                    .path("sparkles.svg")
-                                    .w_4()
-                                    .h_4()
-                                    .text_color(theme.background()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(theme.foreground())
-                                    .child("Autenticación Requerida"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(theme.foreground_muted())
-                                    .child(format!("Usuario: {user_name}")),
-                            ),
-                    ),
-            )
-            // Message Details
-            .child(
-                div()
-                    .px_3()
-                    .py_2()
-                    .rounded_lg()
-                    .bg(theme.surface())
-                    .text_xs()
-                    .text_color(theme.foreground())
-                    .child(req_message.to_string()),
-            )
-            // Password Input Box
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .w_full()
-                    .px_3p5()
-                    .py_2()
-                    .rounded_xl()
-                    .bg(theme.surface())
-                    .border_1()
-                    .border_color(if self.is_error {
-                        theme.red_color.to_hsla()
-                    } else {
-                        theme.background_alt()
-                    })
-                    .child(div().flex_1().text_sm().child(if self.password.is_empty() {
-                        div()
-                            .text_color(if self.is_error {
-                                theme.red_color.to_hsla()
-                            } else {
-                                theme.foreground_muted()
-                            })
-                            .child(if self.is_error {
-                                "Contraseña incorrecta. Reintenta..."
-                            } else {
-                                "Escribe tu contraseña..."
-                            })
-                    } else {
-                        div()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(theme.foreground())
-                            .child(masked_password)
-                    })),
-            )
-            // Buttons Bar
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .gap_2()
-                    .pt_1()
-                    .child(
-                        div()
-                            .id("polkit-cancel-btn")
-                            .px_3()
-                            .py_1p5()
-                            .rounded_lg()
-                            .bg(theme.background_alt())
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.cancel(cx);
-                            }))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(theme.foreground_muted())
-                                    .child("Cancelar"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("polkit-submit-btn")
-                            .px_3p5()
-                            .py_1p5()
-                            .rounded_lg()
-                            .bg(theme.accent())
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.submit_auth(cx);
-                            }))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(theme.background())
-                                    .child("Autenticar"),
-                            ),
-                    ),
-            )
+            .child(render_auth_dialog(
+                user_name,
+                req_message,
+                &self.password,
+                self.is_error,
+                self.error_msg.clone(),
+                self.is_authenticating,
+                &theme,
+                cx,
+            ))
     }
 }

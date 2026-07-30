@@ -1,7 +1,7 @@
 mod capsule;
 
 use assets::Assets;
-use capsule::capsule::Capsule;
+use capsule::Capsule;
 use gpui::{
     AppContext, Bounds, Size, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
@@ -84,7 +84,7 @@ async fn main() {
             kind: WindowKind::LayerShell(LayerShellOptions {
                 namespace: "capsule-panel".to_string(),
                 layer: Layer::Top,
-                anchor: Anchor::TOP,
+                anchor: Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
                 margin: Some((px(8.0), px(0.0), px(0.0), px(0.0))),
                 exclusive_zone: Some(px(idle_h)),
                 keyboard_interactivity: KeyboardInteractivity::OnDemand,

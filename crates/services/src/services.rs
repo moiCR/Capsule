@@ -1,15 +1,22 @@
 pub mod app_state;
+pub mod calendar;
 pub mod compositor;
+pub mod dbus_util;
 pub mod ipc;
 pub mod launcher;
 pub mod logger;
 pub mod lyrics;
 pub mod mpris;
+pub mod network;
 pub mod notifications;
 pub mod polkit;
 pub mod system;
 pub mod tray;
 pub mod wallpaper;
+
+pub use calendar::CalendarService;
+
+pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccessPoint};
 
 pub use app_state::AppState;
 pub use compositor::CompositorService;

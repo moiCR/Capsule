@@ -2,69 +2,33 @@ use gpui::{Bounds, Context, Entity, Render, Size, Task, Window, div, point, prel
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
+use ui::tracker::DimensionTracker;
+
+use super::widgets::dashboard::panel_manager::PanelManager;
+use super::{CapsuleMode, MARGIN_TOP, apple_island_ease};
 
 use super::modules::create_theme::CreateThemeModule;
 use super::modules::idle::IdleModule;
-use super::modules::idle_hover::IdleHoverModule;
+use super::modules::dashboard::DashboardModule;
 use super::modules::launcher::LauncherModule;
 use super::modules::notification::NotificationModule;
 use super::modules::polkit::PolkitModule;
 use super::modules::select_theme::SelectThemeModule;
 use super::modules::volume::VolumeModule;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CapsuleMode {
-    #[default]
-    Default,
-    Dashboard,
-    Notification,
-    Launcher,
-    Volume,
-    Polkit,
-    SelectTheme,
-    CreateTheme,
-}
-
-impl CapsuleMode {
-    pub fn dimensions(&self) -> (f32, f32) {
-        match self {
-            CapsuleMode::Default => (138.0, 42.0),
-            CapsuleMode::Dashboard => (348.0, 500.0),
-            CapsuleMode::Notification => (348.0, 68.0),
-            CapsuleMode::Launcher => (348.0, 480.0),
-            CapsuleMode::Volume => (280.0, 48.0),
-            CapsuleMode::Polkit => (348.0, 240.0),
-            CapsuleMode::SelectTheme => (348.0, 500.0),
-            CapsuleMode::CreateTheme => (348.0, 500.0),
-        }
-    }
-
-    pub fn radius(&self) -> f32{
-        match self {
-            CapsuleMode::Default => 42.0,
-            CapsuleMode::Dashboard => 42.0,
-            CapsuleMode::Notification => 42.0,
-            CapsuleMode::Launcher => 42.0,
-            CapsuleMode::Volume => 42.0,
-            CapsuleMode::Polkit => 42.0,
-            CapsuleMode::SelectTheme => 42.0,
-            CapsuleMode::CreateTheme => 42.0,
-        }
-    }
-}
-
-const MARGIN_TOP: f32 = 8.0;
+use super::modules::wallpaper::{WallpaperEvent, WallpaperModule};
 
 pub struct Capsule {
     mode: CapsuleMode,
     idle_view: Entity<IdleModule>,
-    idle_hover_view: Entity<IdleHoverModule>,
+    dashboard_view: Entity<DashboardModule>,
     notification_view: Entity<NotificationModule>,
     launcher_view: Entity<LauncherModule>,
     volume_view: Entity<VolumeModule>,
     polkit_view: Entity<PolkitModule>,
     select_theme_view: Entity<SelectThemeModule>,
     create_theme_view: Entity<CreateThemeModule>,
+    wallpaper_view: Entity<WallpaperModule>,
+    panel_manager: PanelManager,
     current_width: f32,
     current_height: f32,
     current_radius: f32,
@@ -83,15 +47,9 @@ pub struct Capsule {
     inactivity_generation: u64,
     last_vol_status: Option<(u32, bool)>,
     volume_timer_gen: u64,
+    dimension_tracker: DimensionTracker,
     last_rendered_mode: Option<CapsuleMode>,
-}
-
-fn apple_island_ease(t: f32) -> f32 {
-    if t >= 1.0 {
-        return 1.0;
-    }
-    let p = 1.0 - t;
-    1.0 - p * p * p
+    is_mode_transition: bool,
 }
 
 impl Capsule {
@@ -121,22 +79,107 @@ impl Capsule {
         )
         .detach();
 
-        let idle_hover_view = cx.new(IdleHoverModule::new);
-        cx.observe(&idle_hover_view, |_, _, cx| {
+        let dashboard_view = cx.new(DashboardModule::new);
+        cx.observe(&dashboard_view, |_, _, cx| {
             cx.notify();
         })
         .detach();
 
         cx.subscribe(
-            &idle_hover_view,
-            |capsule, _, event: &super::modules::idle_hover::IdleHoverEvent, cx| match event {
-                super::modules::idle_hover::IdleHoverEvent::CloseRequested => {
+            &dashboard_view,
+            |capsule, _, event: &super::modules::dashboard::DashboardEvent, cx| match event {
+                super::modules::dashboard::DashboardEvent::CloseRequested => {
                     if capsule.mode == CapsuleMode::Dashboard {
+                        capsule.panel_manager.close_all();
+                        capsule.sync_panel_indices(cx);
                         capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                     }
                 }
-                super::modules::idle_hover::IdleHoverEvent::SelectThemeRequested => {
+                super::modules::dashboard::DashboardEvent::SelectThemeRequested => {
                     capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
+                }
+                super::modules::dashboard::DashboardEvent::TrayIconClicked(idx) => {
+                    let idx = *idx;
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let panel_h = if cx.has_global::<AppState>() {
+                        if let Some(item) = cx.global::<AppState>().sni_host.get_items().get(idx) {
+                            super::widgets::dashboard::tray::compute_panel_height(item)
+                        } else {
+                            super::widgets::dashboard::panel_manager::DEFAULT_PANEL_H
+                        }
+                    } else {
+                        super::widgets::dashboard::panel_manager::DEFAULT_PANEL_H
+                    };
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Tray(idx),
+                        panel_h,
+                        max_h,
+                    );
+                    capsule.sync_panel_indices(cx);
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::WifiChevronClicked => {
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let panel_h = if cx.has_global::<AppState>() {
+                        let status = cx.global::<AppState>().network.get_status();
+                        super::widgets::dashboard::quick_settings::compute_wifi_panel_height(&status)
+                    } else {
+                        180.0
+                    };
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Wifi,
+                        panel_h,
+                        max_h,
+                    );
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::BluetoothChevronClicked => {
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let panel_h = if cx.has_global::<AppState>() {
+                        let status = cx.global::<AppState>().network.get_status();
+                        super::widgets::dashboard::quick_settings::compute_bluetooth_panel_height(
+                            &status,
+                        )
+                    } else {
+                        180.0
+                    };
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Bluetooth,
+                        panel_h,
+                        max_h,
+                    );
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::CalendarClicked => {
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let panel_h = super::widgets::dashboard::calendar::compute_calendar_panel_height();
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Calendar,
+                        panel_h,
+                        max_h,
+                    );
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::VolumeChevronClicked => {
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let sink_count = if cx.has_global::<AppState>() {
+                        cx.global::<AppState>().system.get_status().audio_sinks.len()
+                    } else {
+                        1
+                    };
+                    let panel_h = super::widgets::dashboard::volume::compute_volume_panel_height(sink_count);
+                    capsule.panel_manager.toggle(
+                        super::widgets::dashboard::panel_manager::PanelKind::Volume,
+                        panel_h,
+                        max_h,
+                    );
+                    cx.notify();
+                }
+                super::modules::dashboard::DashboardEvent::WallpaperRequested => {
+                    capsule.wallpaper_view.update(cx, |wallpaper, cx| {
+                        wallpaper.reload_items(cx);
+                    });
+                    capsule.start_transition_internal(CapsuleMode::Wallpaper, None, cx);
                 }
             },
         )
@@ -271,17 +314,26 @@ impl Capsule {
                             }
                         }
 
-                        let m_h = match capsule.mode {
-                            CapsuleMode::Dashboard => {
-                                capsule.idle_hover_view.read(cx).measured_size().1
-                            }
-                            _ => 0.0,
+                        let (m_w, m_h) = match capsule.mode {
+                            CapsuleMode::Default => (0.0, 0.0),
+                            _ => capsule.dimension_tracker.dimensions(0.0, 0.0),
                         };
+
+                        let mut dimension_changed = false;
 
                         if m_h > 0.0 && (m_h - capsule.target_height).abs() > 0.5 {
                             capsule.target_height = m_h;
+                            dimension_changed = true;
+                        }
+
+                        if m_w > 0.0 && (m_w - capsule.target_width).abs() > 0.5 {
+                            capsule.target_width = m_w;
+                            dimension_changed = true;
+                        }
+
+                        if dimension_changed {
                             if !capsule.animating {
-                                capsule.current_height = m_h;
+                                capsule.animate_dimension_change(cx);
                             }
                             cx.notify();
                         }
@@ -302,6 +354,22 @@ impl Capsule {
         cx.observe(&volume_view, |capsule, _, cx| {
             capsule.reset_inactivity_timer();
             cx.notify();
+        })
+        .detach();
+
+        let wallpaper_view = cx.new(WallpaperModule::new);
+        cx.subscribe(&wallpaper_view, |capsule, _, event: &WallpaperEvent, cx| {
+            match event {
+                WallpaperEvent::CloseRequested => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+                WallpaperEvent::WallpaperSelected(path) => {
+                    if cx.has_global::<AppState>() {
+                        cx.global::<AppState>().wallpaper.set_wallpaper(path);
+                    }
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            }
         })
         .detach();
 
@@ -327,6 +395,10 @@ impl Capsule {
                             }
                             if capsule.last_vol_status != Some((vol, muted)) {
                                 capsule.last_vol_status = Some((vol, muted));
+
+                                capsule.volume_view.update(cx, |vol_mod, cx| {
+                                    vol_mod.update_status(vol, muted, cx);
+                                });
 
                                 if capsule.mode == CapsuleMode::Default
                                     || capsule.mode == CapsuleMode::Volume
@@ -415,13 +487,15 @@ impl Capsule {
         Self {
             mode: CapsuleMode::Default,
             idle_view,
-            idle_hover_view,
+            dashboard_view,
             notification_view,
             launcher_view,
             volume_view,
             polkit_view,
             select_theme_view,
             create_theme_view,
+            wallpaper_view,
+            panel_manager: PanelManager::new(),
             current_width: initial_w,
             current_height: initial_h,
             current_radius: r,
@@ -440,8 +514,28 @@ impl Capsule {
             inactivity_generation: 0,
             last_vol_status: None,
             volume_timer_gen: 0,
+            dimension_tracker: DimensionTracker::new(),
             last_rendered_mode: None,
+            is_mode_transition: false,
         }
+    }
+
+    /// Sync the open panel indices from PanelManager to the DashboardModule
+    /// so the tray widget knows which icons are highlighted.
+    fn sync_panel_indices(&mut self, cx: &mut Context<Self>) {
+        let open_indices: Vec<usize> = self
+            .panel_manager
+            .left
+            .iter()
+            .chain(self.panel_manager.right.iter())
+            .filter_map(|p| match p.kind {
+                super::widgets::dashboard::panel_manager::PanelKind::Tray(idx) => Some(idx),
+                _ => None,
+            })
+            .collect();
+        let _ = self.dashboard_view.update(cx, |module, _cx| {
+            module.open_panel_indices = open_indices;
+        });
     }
 
     pub fn update_target_dimensions(
@@ -459,6 +553,45 @@ impl Capsule {
             }
             cx.notify();
         }
+    }
+
+    pub fn animate_dimension_change(&mut self, cx: &mut Context<Self>) {
+        if self.animating {
+            return;
+        }
+        self.anim_start_w = self.current_width;
+        self.anim_start_h = self.current_height;
+        self.anim_start_r = self.current_radius;
+        self.anim_start_progress = self.anim_progress;
+        self.animating = true;
+        self.is_mode_transition = false;
+        self.anim_start_time = Some(Instant::now());
+
+        let compositor = cx.global::<AppState>().compositor.clone();
+        let task = cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(compositor.get_frame_duration())
+                    .await;
+                let done = this
+                    .update(cx, |capsule, cx| {
+                        let finished = capsule.tick_animation();
+                        cx.notify();
+                        finished
+                    })
+                    .unwrap_or(true);
+
+                if done {
+                    this.update(cx, |capsule, cx| {
+                        capsule.anim_task = None;
+                        cx.notify();
+                    })
+                    .ok();
+                    break;
+                }
+            }
+        });
+        self.anim_task = Some(task);
     }
 
     fn reset_inactivity_timer(&mut self) {
@@ -539,8 +672,11 @@ impl Capsule {
             let (w, h) = self.idle_view.read(cx).desired_dimensions();
             target_w = w;
             let _ = h;
-        } else if mode == CapsuleMode::Dashboard {
-            let (_, h) = self.idle_hover_view.read(cx).measured_size();
+        } else {
+            let (w, h) = self.dimension_tracker.dimensions(0.0, 0.0);
+            if w > 0.0 {
+                target_w = w;
+            }
             if h > 0.0 {
                 target_h = h;
             }
@@ -559,6 +695,7 @@ impl Capsule {
         let _ = window_opt;
 
         self.animating = true;
+        self.is_mode_transition = true;
         self.anim_start_time = Some(Instant::now());
 
         let compositor = cx.global::<AppState>().compositor.clone();
@@ -656,11 +793,12 @@ impl Capsule {
     fn tick_animation(&mut self) -> bool {
         if !self.animating || self.anim_start_time.is_none() {
             self.animating = false;
+            self.is_mode_transition = false;
             return true;
         }
 
         if let Some(start_time) = self.anim_start_time {
-            let duration = 0.24;
+            let duration = 0.28;
             let t = (start_time.elapsed().as_secs_f32() / duration).min(1.0);
             let eased = apple_island_ease(t);
 
@@ -685,6 +823,7 @@ impl Capsule {
                 self.current_radius = self.target_radius;
                 self.anim_progress = target_progress;
                 self.animating = false;
+                self.is_mode_transition = false;
 
                 return true;
             }
@@ -721,7 +860,7 @@ impl Render for Capsule {
 
         let anim_t = self
             .anim_start_time
-            .map(|start| (start.elapsed().as_secs_f32() / 0.24).min(1.0))
+            .map(|start| (start.elapsed().as_secs_f32() / 0.28).min(1.0))
             .unwrap_or(1.0);
         let eased = apple_island_ease(anim_t);
 
@@ -732,6 +871,7 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::Polkit
                 || self.mode == CapsuleMode::SelectTheme
                 || self.mode == CapsuleMode::CreateTheme
+                || self.mode == CapsuleMode::Wallpaper
             {
                 window.activate_window();
             }
@@ -740,103 +880,44 @@ impl Render for Capsule {
                     launcher.focus(window, cx);
                 });
             }
+            if self.mode == CapsuleMode::Wallpaper {
+                let _ = self.wallpaper_view.update(cx, |wallpaper, cx| {
+                    wallpaper.reload_items(cx);
+                });
+            }
         }
 
-        if self.mode == CapsuleMode::Launcher {
-            let launcher_opacity = if self.animating { eased } else { 1.0 };
+        let mode_element = match self.mode {
+            CapsuleMode::Launcher => Some(self.launcher_view.clone().into_any_element()),
+            CapsuleMode::Polkit => Some(self.polkit_view.clone().into_any_element()),
+            CapsuleMode::SelectTheme => Some(self.select_theme_view.clone().into_any_element()),
+            CapsuleMode::CreateTheme => Some(self.create_theme_view.clone().into_any_element()),
+            CapsuleMode::Wallpaper => Some(self.wallpaper_view.clone().into_any_element()),
+            CapsuleMode::Volume => Some(self.volume_view.clone().into_any_element()),
+            CapsuleMode::Notification => Some(self.notification_view.clone().into_any_element()),
+            CapsuleMode::Dashboard => Some(self.dashboard_view.clone().into_any_element()),
+            CapsuleMode::Default => None,
+        };
+
+        if let Some(el) = mode_element {
+            let opacity = if self.animating && self.is_mode_transition {
+                eased
+            } else {
+                1.0
+            };
+            let tracked_content = self.dimension_tracker.track(el);
 
             content_container = content_container.child(
                 div()
                     .absolute()
                     .top_0()
                     .left_0()
-                    .size_full()
+                    .w_full()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .overflow_hidden()
-                    .opacity(launcher_opacity)
-                    .child(self.launcher_view.clone().into_any_element()),
-            );
-        } else if self.mode == CapsuleMode::Polkit {
-            let polkit_opacity = if self.animating { eased } else { 1.0 };
-
-            content_container = content_container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .opacity(polkit_opacity)
-                    .child(self.polkit_view.clone().into_any_element()),
-            );
-        } else if self.mode == CapsuleMode::SelectTheme {
-            let select_opacity = if self.animating { eased } else { 1.0 };
-
-            content_container = content_container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .opacity(select_opacity)
-                    .child(self.select_theme_view.clone().into_any_element()),
-            );
-        } else if self.mode == CapsuleMode::CreateTheme {
-            let create_opacity = if self.animating { eased } else { 1.0 };
-
-            content_container = content_container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .opacity(create_opacity)
-                    .child(self.create_theme_view.clone().into_any_element()),
-            );
-        } else if self.mode == CapsuleMode::Volume {
-            let volume_opacity = if self.animating { eased } else { 1.0 };
-
-            content_container = content_container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .opacity(volume_opacity)
-                    .child(self.volume_view.clone().into_any_element()),
-            );
-        } else if self.mode == CapsuleMode::Notification {
-            let notif_opacity = if self.animating { eased } else { 1.0 };
-
-            content_container = content_container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .opacity(notif_opacity)
-                    .child(self.notification_view.clone().into_any_element()),
+                    .opacity(opacity)
+                    .child(tracked_content),
             );
         } else {
             let default_opacity = (1.0 - self.anim_progress).clamp(0.0, 1.0);
@@ -859,18 +940,21 @@ impl Render for Capsule {
             }
 
             if hover_opacity > 0.001 {
+                let tracked_content = self
+                    .dimension_tracker
+                    .track(self.dashboard_view.clone().into_any_element());
+
                 content_container = content_container.child(
                     div()
                         .absolute()
                         .top_0()
                         .left_0()
-                        .size_full()
+                        .w_full()
                         .flex()
                         .items_center()
                         .justify_center()
-                        .overflow_hidden()
                         .opacity(hover_opacity)
-                        .child(self.idle_hover_view.clone().into_any_element()),
+                        .child(tracked_content),
                 );
             }
         }
@@ -883,7 +967,7 @@ impl Render for Capsule {
         };
         let border_color = theme.surface().opacity(border_opacity);
 
-        let shadow_class = if is_dashboard {
+        let _shadow_class = if is_dashboard {
             "shadow-2xl shadow-black/60"
         } else {
             "shadow-xl shadow-black/40"
@@ -910,26 +994,228 @@ impl Render for Capsule {
                         this.start_transition_internal(CapsuleMode::Dashboard, None, cx);
                     }));
         }
-        let mut flex_container = div()
-            .flex()
-            .flex_row()
-            .items_start()
-            .justify_center()
-            .gap_3();
 
-        if self.mode == CapsuleMode::Dashboard && cx.has_global::<AppState>() {
-            let sni = cx.global::<AppState>().sni_host.clone();
-            if let Some(idx) = sni.get_selected_idx() {
-                if let Some(item) = sni.get_items().get(idx) {
-                    let side_panel = self.idle_hover_view.update(cx, |_, cx| {
-                        super::widgets::tray::render_side_tray_panel(item, idx, &active_theme, cx)
-                    });
-                    flex_container = flex_container.child(side_panel);
+        // Wrap the pill in a relative container so satellite panels can be
+        // absolutely positioned outside it without affecting flex layout.
+        let mut pill_wrapper = div()
+            .relative()
+            .w(px(self.current_width))
+            .h(px(self.current_height))
+            .child(pill_container.child(content_container));
+
+        // Satellite mini-panels: compact chips that orbit the Dashboard in dynamic lanes.
+        // Animated: they emerge from the pill center and slide into position.
+        let has_panels =
+            !self.panel_manager.left.is_empty() || !self.panel_manager.right.is_empty();
+        if self.mode == CapsuleMode::Dashboard && has_panels && cx.has_global::<AppState>() {
+            use super::widgets::dashboard::panel_manager as PM;
+
+            let dash_w = self.current_width;
+            let dash_h = self.current_height;
+            let sni_items = cx.global::<AppState>().sni_host.get_items();
+            self.panel_manager.prune_invalid(sni_items.len());
+            self.panel_manager.update_animations();
+
+            if self.panel_manager.any_animating() {
+                let frame_ms = cx.global::<AppState>().compositor.get_frame_duration_ms();
+                let this = cx.entity().downgrade();
+                cx.spawn(async move |_this, cx| {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(frame_ms))
+                        .await;
+                    let _ = this.update(cx, |_, cx| cx.notify());
+                })
+                .detach();
+            }
+
+            for p in self.panel_manager.left.iter_mut() {
+                let measured_h = p.tracker.height(0.0);
+                if measured_h > 10.0 && (measured_h - p.height).abs() > 2.0 {
+                    p.height = measured_h;
+                }
+            }
+            for p in self.panel_manager.right.iter_mut() {
+                let measured_h = p.tracker.height(0.0);
+                if measured_h > 10.0 && (measured_h - p.height).abs() > 2.0 {
+                    p.height = measured_h;
+                }
+            }
+
+            // Left lane
+            let left_lane_x = -(PM::PANEL_W + PM::LANE_GAP);
+            let left_snapshot: Vec<_> = self
+                .panel_manager
+                .left
+                .iter()
+                .map(|p| (p.kind.clone(), p.anim_t(), p.height, p.is_closing(), p.tracker.clone()))
+                .collect();
+
+            let mut y_stack = 0.0;
+            for (kind, anim_t, panel_h, is_closing, tracker) in left_snapshot {
+                let current_y = y_stack;
+                if !is_closing {
+                    y_stack += panel_h + PM::PANEL_GAP;
+                }
+
+                let mini_opt = match kind {
+                    PM::PanelKind::Tray(sni_idx) => {
+                        if let Some(item) = sni_items.get(sni_idx) {
+                            Some(self.dashboard_view.update(cx, |_, cx| {
+                                super::widgets::dashboard::tray::render_mini_panel(
+                                    item,
+                                    sni_idx,
+                                    anim_t,
+                                    panel_h,
+                                    &active_theme,
+                                    cx,
+                                )
+                            }))
+                        } else {
+                            None
+                        }
+                    }
+                    PM::PanelKind::Wifi => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::quick_settings::render_wifi_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Bluetooth => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::quick_settings::render_bluetooth_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Calendar => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::calendar::render_calendar_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Volume => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::volume::render_volume_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                };
+
+                if let Some(mini) = mini_opt {
+                    let (off_x, off_y) = PM::PanelManager::animated_position(
+                        dash_w,
+                        dash_h,
+                        left_lane_x,
+                        current_y,
+                        anim_t,
+                        is_closing,
+                    );
+
+                    let tracked_mini = tracker.track(mini);
+                    pill_wrapper = pill_wrapper
+                        .child(div().absolute().left(px(off_x)).top(px(off_y)).child(tracked_mini));
+                }
+            }
+
+            // Right lane
+            let right_lane_x = dash_w + PM::LANE_GAP;
+            let right_snapshot: Vec<_> = self
+                .panel_manager
+                .right
+                .iter()
+                .map(|p| (p.kind.clone(), p.anim_t(), p.height, p.is_closing(), p.tracker.clone()))
+                .collect();
+
+            let mut y_stack = 0.0;
+            for (kind, anim_t, panel_h, is_closing, tracker) in right_snapshot {
+                let current_y = y_stack;
+                if !is_closing {
+                    y_stack += panel_h + PM::PANEL_GAP;
+                }
+
+                let mini_opt = match kind {
+                    PM::PanelKind::Tray(sni_idx) => {
+                        if let Some(item) = sni_items.get(sni_idx) {
+                            Some(self.dashboard_view.update(cx, |_, cx| {
+                                super::widgets::dashboard::tray::render_mini_panel(
+                                    item,
+                                    sni_idx,
+                                    anim_t,
+                                    panel_h,
+                                    &active_theme,
+                                    cx,
+                                )
+                            }))
+                        } else {
+                            None
+                        }
+                    }
+                    PM::PanelKind::Wifi => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::quick_settings::render_wifi_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Bluetooth => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::quick_settings::render_bluetooth_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Calendar => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::calendar::render_calendar_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                    PM::PanelKind::Volume => Some(self.dashboard_view.update(cx, |_, cx| {
+                        super::widgets::dashboard::volume::render_volume_mini_panel(
+                            anim_t,
+                            panel_h,
+                            &active_theme,
+                            cx,
+                        )
+                    })),
+                };
+
+                if let Some(mini) = mini_opt {
+                    let (off_x, off_y) = PM::PanelManager::animated_position(
+                        dash_w,
+                        dash_h,
+                        right_lane_x,
+                        current_y,
+                        anim_t,
+                        is_closing,
+                    );
+
+                    let tracked_mini = tracker.track(mini);
+                    pill_wrapper = pill_wrapper
+                        .child(div().absolute().left(px(off_x)).top(px(off_y)).child(tracked_mini));
                 }
             }
         }
 
-        flex_container = flex_container.child(pill_container.child(content_container));
+        // flex_container always has ONE child (pill_wrapper), so justify_center
+        // always positions the Dashboard at the center — never moves it.
+        let flex_container = div()
+            .flex()
+            .flex_row()
+            .items_start()
+            .justify_center()
+            .child(pill_wrapper);
 
         div()
             .size_full()

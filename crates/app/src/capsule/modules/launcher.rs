@@ -1,9 +1,13 @@
 use gpui::{
-    EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
-    div, prelude::*, px, svg,
+    EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window, div,
+    prelude::*, px,
 };
 use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;
+
+use crate::capsule::widgets::launcher::{
+    app_item::render_app_item, search_input::render_search_input,
+};
 
 pub enum LauncherEvent {
     Close,
@@ -13,10 +17,10 @@ pub struct LauncherModule {
     service: LauncherService,
     query: String,
     apps: Vec<Application>,
-    selected_index: usize,
+    pub selected_index: usize,
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
-    mouse_moved: bool,
+    pub mouse_moved: bool,
 }
 
 impl EventEmitter<LauncherEvent> for LauncherModule {}
@@ -45,19 +49,6 @@ impl LauncherModule {
         self.mouse_moved = false;
         self.apps = self.service.search("");
         self.scroll_handle.scroll_to_item(0);
-
-        let service_clone = self.service.clone();
-        cx.spawn(async move |this, cx| {
-            let _ = service_clone.refresh().await;
-            let _ = this.update(cx, |this: &mut Self, cx| {
-                if this.query.is_empty() {
-                    this.apps = this.service.search("");
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-
         cx.notify();
     }
 
@@ -107,37 +98,95 @@ impl LauncherModule {
         }
     }
 
-    pub fn handle_key_down(
+    fn handle_key_down(
         &mut self,
         event: &KeyDownEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let key = event.keystroke.key.as_str();
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "v" => {
+                    if let Some(item) = cx.read_from_clipboard() {
+                        if let Some(text) = item.text() {
+                            let clean_text: String =
+                                text.chars().filter(|c| !c.is_control()).collect();
+                            if !clean_text.is_empty() {
+                                let mut new_q = self.query.clone();
+                                new_q.push_str(&clean_text);
+                                self.update_search(new_q, cx);
+                            }
+                        }
+                    }
+                    return;
+                }
+                "c" => {
+                    if !self.query.is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.query.clone()));
+                    }
+                    return;
+                }
+                "x" => {
+                    if !self.query.is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.query.clone()));
+                        self.update_search(String::new(), cx);
+                    }
+                    return;
+                }
+                "u" => {
+                    self.update_search(String::new(), cx);
+                    return;
+                }
+                "w" => {
+                    let trimmed = self.query.trim_end();
+                    let new_q = if let Some(idx) = trimmed.rfind(' ') {
+                        trimmed[..idx].to_string()
+                    } else {
+                        String::new()
+                    };
+                    self.update_search(new_q, cx);
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match key {
-            "down" | "arrowdown" => self.select_next(cx),
-            "up" | "arrowup" => self.select_prev(cx),
             "enter" => {
                 self.launch_selected(cx);
-            }
-            "backspace" => {
-                if !self.query.is_empty() {
-                    let mut q = self.query.clone();
-                    q.pop();
-                    self.update_search(q, cx);
-                }
             }
             "escape" => {
                 self.reset_search(cx);
                 cx.emit(LauncherEvent::Close);
             }
+            "down" => {
+                self.mouse_moved = false;
+                self.select_next(cx);
+            }
+            "up" => {
+                self.mouse_moved = false;
+                self.select_prev(cx);
+            }
+            "backspace" => {
+                if !self.query.is_empty() {
+                    let mut new_q = self.query.clone();
+                    new_q.pop();
+                    self.update_search(new_q, cx);
+                }
+            }
             _ => {
-                if let Some(keystroke_text) = &event.keystroke.key_char {
-                    if !keystroke_text.chars().any(|c| c.is_control()) {
-                        let mut q = self.query.clone();
-                        q.push_str(keystroke_text);
-                        self.update_search(q, cx);
-                    }
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+                if text.chars().count() == 1 && !ctrl {
+                    let mut new_q = self.query.clone();
+                    new_q.push_str(text);
+                    self.update_search(new_q, cx);
                 }
             }
         }
@@ -150,11 +199,19 @@ impl Render for LauncherModule {
 
         window.focus(&self.focus_handle, cx);
 
-        let placeholder = if self.query.is_empty() {
-            "Buscar aplicación..."
-        } else {
-            ""
-        };
+        let mut app_list = div()
+            .id("launcher-app-list")
+            .track_scroll(&self.scroll_handle)
+            .flex()
+            .flex_col()
+            .flex_1()
+            .overflow_scroll()
+            .gap_1();
+
+        for (idx, app) in self.apps.iter().enumerate() {
+            let is_selected = idx == self.selected_index;
+            app_list = app_list.child(render_app_item(idx, app, is_selected, &theme, cx));
+        }
 
         div()
             .track_focus(&self.focus_handle)
@@ -167,156 +224,18 @@ impl Render for LauncherModule {
             }))
             .flex()
             .flex_col()
-            .size_full()
+            .w(px(348.0))
+            .max_h(px(500.0))
             .p_3p5()
             .gap_2p5()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2p5()
-                    .w_full()
-                    .px_3p5()
-                    .py_2p5()
-                    .bg(theme.surface())
-                    .rounded(px(42.0))
-                    .child(
-                        svg()
-                            .path("search.svg")
-                            .w_4()
-                            .h_4()
-                            .text_color(theme.foreground_muted()),
-                    )
-                    .child(div().flex_1().text_sm().child(if self.query.is_empty() {
-                        div()
-                            .text_color(theme.foreground_muted())
-                            .child(placeholder)
-                    } else {
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(theme.foreground())
-                            .child(self.query.clone())
-                    }))
-                    .child(if !self.query.is_empty() {
-                        div()
-                            .id("clear-search-btn")
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, _window, cx| {
-                                this.reset_search(cx);
-                            }))
-                            .child(
-                                svg()
-                                    .path("close.svg")
-                                    .w_3p5()
-                                    .h_3p5()
-                                    .text_color(theme.foreground_muted()),
-                            )
-                            .into_any_element()
-                    } else {
-                        div()
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.foreground_muted())
-                            .child(format!("{}", self.apps.len()))
-                            .into_any_element()
-                    }),
-            )
-            // Divider
+            .child(render_search_input(
+                &self.query,
+                self.apps.len(),
+                &theme,
+                cx,
+            ))
             .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            // App List
-            .child(
-                div()
-                    .id("launcher-app-list")
-                    .track_scroll(&self.scroll_handle)
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .overflow_scroll()
-                    .gap_1()
-                    .children(self.apps.iter().enumerate().map(|(idx, app)| {
-                        let is_selected = idx == self.selected_index;
-                        let bg_color = if is_selected {
-                            theme.surface()
-                        } else {
-                            gpui::hsla(0.0, 0.0, 0.0, 0.0)
-                        };
-
-                        let text_color = theme.foreground();
-                        let muted_color = theme.foreground_muted();
-                        let app_clone = app.clone();
-
-                        div()
-                            .id(idx)
-                            .flex()
-                            .items_center()
-                            .gap_3()
-                            .px_3()
-                            .py_2()
-                            .rounded_lg()
-                            .bg(bg_color)
-                            .cursor_pointer()
-                            .on_hover(cx.listener(move |this, &hovered, _window, cx| {
-                                if hovered && this.mouse_moved && this.selected_index != idx {
-                                    this.selected_index = idx;
-                                    cx.notify();
-                                }
-                            }))
-                            .on_click(cx.listener(move |this, _, _window, cx| {
-                                let _ = app_clone.launch();
-                                this.reset_search(cx);
-                                cx.emit(LauncherEvent::Close);
-                            }))
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .w_8()
-                                    .h_8()
-                                    .rounded_md()
-                                    .bg(theme.background_alt())
-                                    .overflow_hidden()
-                                    .child(if let Some(icon_path) = &app.icon_path {
-                                        gpui::img(icon_path.clone()).w_5().h_5().into_any_element()
-                                    } else {
-                                        svg()
-                                            .path("sparkles.svg")
-                                            .w_4()
-                                            .h_4()
-                                            .text_color(theme.accent())
-                                            .into_any_element()
-                                    }),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .text_color(text_color)
-                                            .child(app.name.clone()),
-                                    )
-                                    .child(if let Some(desc) = &app.generic_name {
-                                        div().text_xs().text_color(muted_color).child(desc.clone())
-                                    } else if let Some(comment) = &app.comment {
-                                        div()
-                                            .text_xs()
-                                            .text_color(muted_color)
-                                            .child(comment.clone())
-                                    } else {
-                                        div()
-                                            .text_xs()
-                                            .text_color(muted_color)
-                                            .child(app.exec.clone())
-                                    }),
-                            )
-                    })),
-            )
-            // Footer Shortcuts Hint
+            .child(app_list)
             .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
             .child(
                 div()

@@ -67,7 +67,5 @@ set -U fish_color_accent {accent}
         let _ = Command::new("fish").args(["-c", &fish_cmd]).status();
     }
 
-    fn reload_apps(&self) {
-        
-    }
+    fn reload_apps(&self) {}
 }

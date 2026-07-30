@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WallpaperEngine {
@@ -66,6 +65,23 @@ impl WallpaperService {
         service
     }
 
+    pub fn get_current_wallpaper(&self) -> Option<PathBuf> {
+        if let Ok(guard) = self.current.lock() {
+            if let Some(ref path) = *guard {
+                return Some(path.clone());
+            }
+        }
+        if self.config_file.exists() {
+            if let Ok(content) = fs::read_to_string(&self.config_file) {
+                let path = PathBuf::from(content.trim());
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        None
+    }
+
     /// Checks if the daemon is active.
     fn is_daemon_running(&self) -> bool {
         Command::new(self.engine.cli_cmd())
@@ -90,6 +106,13 @@ impl WallpaperService {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn();
+
+        for _ in 0..10 {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            if self.is_daemon_running() {
+                break;
+            }
+        }
     }
 
     /// Restores previously saved wallpaper from disk.
@@ -144,72 +167,74 @@ impl WallpaperService {
         self.set_wallpaper_internal(path.as_ref(), true)
     }
 
-fn set_wallpaper_internal(&self, path: &Path, save_to_disk: bool) -> bool {
-    if !path.exists() {
-        eprintln!("[WallpaperService] File does not exist: {:?}", path);
-        return false;
-    }
+    fn set_wallpaper_internal(&self, path: &Path, save_to_disk: bool) -> bool {
+        if !path.exists() {
+            eprintln!("[WallpaperService] File does not exist: {:?}", path);
+            return false;
+        }
 
-    let path_buf = path.to_path_buf();
-    let path_str = path_buf.to_string_lossy().to_string();
-    let engine = self.engine;
-    let compositor = self.compositor.clone();
+        self.ensure_daemon_in_background();
 
-    if let Ok(mut current_guard) = self.current.lock() {
-        *current_guard = Some(path_buf);
-    }
+        let path_buf = path.to_path_buf();
+        let path_str = path_buf.to_string_lossy().to_string();
+        let engine = self.engine;
+        let compositor = self.compositor.clone();
 
-    if save_to_disk {
-        let _ = fs::write(&self.config_file, &path_str);
-    }
+        if let Ok(mut current_guard) = self.current.lock() {
+            *current_guard = Some(path_buf);
+        }
 
-    thread::spawn(move || {
-        let refresh_rate = compositor.get_refresh_rate();
-        let current_fps = if refresh_rate.is_finite() && refresh_rate > 0.0 {
-            (refresh_rate.round() as u32).max(30)
-        } else {
-            60
-        };
+        if save_to_disk {
+            let _ = fs::write(&self.config_file, &path_str);
+        }
 
-        let output = Command::new(engine.cli_cmd())
-            .args([
-                "img",
-                &path_str,
-                "--transition-type",
-                "outer",
-                "--transition-step",
-                "90",
-                "--transition-fps",
-                &current_fps.to_string(),
-                "--transition-duration",
-                "0.8",
-            ])
-            .output();
+        thread::spawn(move || {
+            let refresh_rate = compositor.get_refresh_rate();
+            let current_fps = if refresh_rate.is_finite() && refresh_rate > 0.0 {
+                (refresh_rate.round() as u32).max(30)
+            } else {
+                60
+            };
 
-        match output {
-            Ok(out) => {
-                if !out.status.success() {
-                    let err = String::from_utf8_lossy(&out.stderr);
-                    eprintln!("[WallpaperService] {} img error: {}", engine.cli_cmd(), err);
-                } else {
-                    println!(
-                        "[WallpaperService] Wallpaper successfully changed to: {}",
-                        path_str
+            let output = Command::new(engine.cli_cmd())
+                .args([
+                    "img",
+                    &path_str,
+                    "--transition-type",
+                    "outer",
+                    "--transition-step",
+                    "90",
+                    "--transition-fps",
+                    &current_fps.to_string(),
+                    "--transition-duration",
+                    "0.8",
+                ])
+                .output();
+
+            match output {
+                Ok(out) => {
+                    if !out.status.success() {
+                        let err = String::from_utf8_lossy(&out.stderr);
+                        eprintln!("[WallpaperService] {} img error: {}", engine.cli_cmd(), err);
+                    } else {
+                        println!(
+                            "[WallpaperService] Wallpaper successfully changed to: {}",
+                            path_str
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[WallpaperService] Failed to execute {}: {}",
+                        engine.cli_cmd(),
+                        e
                     );
                 }
             }
-            Err(e) => {
-                eprintln!(
-                    "[WallpaperService] Failed to execute {}: {}",
-                    engine.cli_cmd(),
-                    e
-                );
-            }
-        }
-    });
+        });
 
-    true
-}
+        true
+    }
 
     pub fn get_current(&self) -> Option<PathBuf> {
         self.current.lock().ok().and_then(|guard| guard.clone())

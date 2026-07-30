@@ -2,11 +2,11 @@ use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::NotificationStore;
 use ui::theme::Theme;
 
-use crate::capsule::modules::idle_hover::IdleHoverModule;
+use crate::capsule::modules::dashboard::DashboardModule;
 
 pub fn render_notifications_widget(
     theme: &Theme,
-    cx: &mut Context<IdleHoverModule>,
+    cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
     let notifications = NotificationStore::global().get_all_notifications();
     let is_empty = notifications.is_empty();
@@ -22,7 +22,7 @@ pub fn render_notifications_widget(
         .bg(theme.background_alt())
         .border_1()
         .border_color(theme.surface())
-        .rounded(px(16.0))
+        .rounded(px(42.0))
         .p_3()
         .overflow_hidden();
 
@@ -72,7 +72,7 @@ pub fn render_notifications_widget(
                     .bg(theme.surface().opacity(0.4))
                     .border_1()
                     .border_color(theme.surface())
-                    .rounded(px(12.0))
+                    .rounded(px(42.0))
                     .p_2p5()
                     .child(
                         div()

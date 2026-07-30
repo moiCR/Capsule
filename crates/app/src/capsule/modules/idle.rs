@@ -7,7 +7,7 @@ use services::{AppState, LyricsService};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
-use super::super::widgets::vizualizer::Visualizer;
+use crate::capsule::widgets::idle::visualizer::Visualizer;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IdleEvent {
@@ -148,7 +148,7 @@ impl IdleModule {
                     }
 
                     let toast = if track.artist.is_empty() || track.artist == "No media playing" {
-                        format!("{}", track.title)
+                        track.title.clone()
                     } else {
                         format!("{} • {}", track.title, track.artist)
                     };
@@ -295,7 +295,7 @@ impl IdleModule {
 
     #[allow(dead_code)]
     pub fn set_active(&mut self, active: bool, cx: &mut Context<Self>) {
-        let _ = self.visualizer.update(cx, |viz, cx| {
+        self.visualizer.update(cx, |viz, cx| {
             viz.set_active(active, cx);
         });
     }

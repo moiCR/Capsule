@@ -1,4 +1,5 @@
 pub mod hyprland;
+pub mod kinetic;
 pub mod niri;
 
 use arc_swap::ArcSwap;

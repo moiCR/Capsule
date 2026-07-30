@@ -84,8 +84,7 @@ impl AppTheme for YaziApp {
             let _ = fs::write(&theme_path, &yazi_theme);
         }
 
-        &self.reload_apps();
-        
+        self.reload_apps();
     }
 
     fn reload_apps(&self) {
@@ -96,5 +95,4 @@ impl AppTheme for YaziApp {
             }
         }
     }
-
 }

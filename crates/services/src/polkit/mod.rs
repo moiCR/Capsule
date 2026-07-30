@@ -1,11 +1,20 @@
 use anyhow::{Context, Result};
 use std::collections::{HashMap, VecDeque};
+use std::os::unix::fs::PermissionsExt;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{connection, interface};
+
+fn is_setuid(path: &std::path::Path) -> bool {
+    if let Ok(metadata) = std::fs::metadata(path) {
+        let mode = metadata.permissions().mode();
+        return (mode & 0o4000) != 0;
+    }
+    false
+}
 
 #[derive(Debug, Clone)]
 pub struct PolkitAuthRequest {
@@ -25,6 +34,7 @@ pub type PolkitPendingAuth = (
 );
 
 static POLKIT_QUEUE: OnceLock<Arc<Mutex<VecDeque<PolkitPendingAuth>>>> = OnceLock::new();
+static POLKIT_AGENT_CONN: OnceLock<zbus::Connection> = OnceLock::new();
 
 fn polkit_queue() -> &'static Arc<Mutex<VecDeque<PolkitPendingAuth>>> {
     POLKIT_QUEUE.get_or_init(|| Arc::new(Mutex::new(VecDeque::new())))
@@ -60,8 +70,8 @@ impl PolkitService {
         pop_polkit_request()
     }
 
-    pub async fn authenticate(&self, password: &str) -> bool {
-        authenticate_user(password).await
+    pub async fn authenticate(&self, user_name: &str, cookie: &str, password: &str) -> bool {
+        authenticate_user(user_name, cookie, password).await.is_ok()
     }
 }
 
@@ -127,33 +137,53 @@ impl PolkitAgentServer {
                     "User authentication verified, sending AuthenticationAgentResponse2 to Authority..."
                 );
 
-                if let Ok(builder) = connection::Builder::system() {
-                    if let Ok(system_conn) = builder.build().await {
-                        let response_res = system_conn
+                let agent_conn_opt = POLKIT_AGENT_CONN.get().cloned();
+                if let Some(system_conn) = agent_conn_opt {
+                    let response_res = system_conn
+                        .call_method(
+                            Some("org.freedesktop.PolicyKit1"),
+                            "/org/freedesktop/PolicyKit1/Authority",
+                            Some("org.freedesktop.PolicyKit1.Authority"),
+                            "AuthenticationAgentResponse2",
+                            &(
+                                current_uid,
+                                cookie.as_str(),
+                                (identity_kind.as_str(), &identity_details),
+                            ),
+                        )
+                        .await;
+
+                    if let Err(err) = response_res {
+                        crate::log_warn!(
+                            "POLKIT",
+                            "AuthenticationAgentResponse2 failed ({err:?}), falling back to AuthenticationAgentResponse..."
+                        );
+                        let fallback_res = system_conn
                             .call_method(
                                 Some("org.freedesktop.PolicyKit1"),
                                 "/org/freedesktop/PolicyKit1/Authority",
                                 Some("org.freedesktop.PolicyKit1.Authority"),
-                                "AuthenticationAgentResponse2",
-                                &(
-                                    current_uid,
-                                    cookie.as_str(),
-                                    (identity_kind.as_str(), identity_details),
-                                ),
+                                "AuthenticationAgentResponse",
+                                &(cookie.as_str(), (identity_kind.as_str(), &identity_details)),
                             )
                             .await;
 
-                        if let Err(err) = response_res {
+                        if let Err(fb_err) = fallback_res {
                             crate::log_warn!(
                                 "POLKIT",
-                                "AuthenticationAgentResponse2 failed: {err:?}"
+                                "AuthenticationAgentResponse fallback also failed: {fb_err:?}"
                             );
                         } else {
                             crate::log_info!(
                                 "POLKIT",
-                                "Polkit Authority accepted AuthenticationAgentResponse2!"
+                                "Polkit Authority accepted AuthenticationAgentResponse fallback!"
                             );
                         }
+                    } else {
+                        crate::log_info!(
+                            "POLKIT",
+                            "Polkit Authority accepted AuthenticationAgentResponse2!"
+                        );
                     }
                 }
 
@@ -186,6 +216,8 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         .serve_at("/org/freedesktop/PolicyKit1/AuthenticationAgent", server)?
         .build()
         .await?;
+
+    let _ = POLKIT_AGENT_CONN.set(system_conn.clone());
 
     let locale = std::env::var("LANG").unwrap_or_else(|_| "es_ES.UTF-8".to_string());
     let object_path = "/org/freedesktop/PolicyKit1/AuthenticationAgent";
@@ -247,15 +279,119 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
     Ok(())
 }
 
-pub async fn authenticate_user(password: &str) -> bool {
+pub async fn authenticate_user(
+    user_name: &str,
+    cookie: &str,
+    password: &str,
+) -> Result<(), String> {
     if password.is_empty() {
-        return false;
+        return Err("La contraseña no puede estar vacía.".to_string());
     }
 
-    // Invalidate sudo timestamp first
+    let helper_paths = [
+        "/usr/lib/polkit-1/polkit-agent-helper-1",
+        "/usr/libexec/polkit-agent-helper-1",
+        "/usr/lib/policykit-1/polkit-agent-helper-1",
+        "/usr/libexec/polkit-1/polkit-agent-helper-1",
+    ];
+
+    let mut helper_bin = None;
+    for path in &helper_paths {
+        if std::path::Path::new(path).exists() {
+            helper_bin = Some(*path);
+            break;
+        }
+    }
+
+    if !cookie.is_empty() {
+        if let Some(helper) = helper_bin {
+            let helper_path = std::path::Path::new(helper);
+            if !is_setuid(helper_path) {
+                crate::log_info!(
+                    "POLKIT",
+                    "polkit-agent-helper-1 ({}) lacks setuid bit. Repairing permission via sudo chmod u+s...",
+                    helper
+                );
+
+                if let Ok(mut sudo_chmod) = Command::new("sudo")
+                    .arg("-S")
+                    .arg("chmod")
+                    .arg("u+s")
+                    .arg(helper)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                {
+                    if let Some(mut stdin) = sudo_chmod.stdin.take() {
+                        let _ = stdin.write_all(password.as_bytes()).await;
+                        let _ = stdin.write_all(b"\n").await;
+                        let _ = stdin.flush().await;
+                        drop(stdin);
+                    }
+                    let _ = sudo_chmod.wait_with_output().await;
+                }
+            }
+
+            crate::log_info!(
+                "POLKIT",
+                "Invoking {} for user '{}' with active cookie...",
+                helper,
+                user_name
+            );
+
+            let child = Command::new(helper)
+                .arg(user_name)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn();
+
+            if let Ok(mut c) = child {
+                if let Some(mut stdin) = c.stdin.take() {
+                    let _ = stdin.write_all(cookie.as_bytes()).await;
+                    let _ = stdin.write_all(b"\n").await;
+                    let _ = stdin.write_all(password.as_bytes()).await;
+                    let _ = stdin.write_all(b"\n").await;
+                    let _ = stdin.flush().await;
+                    drop(stdin);
+                }
+
+                if let Ok(output) = c.wait_with_output().await {
+                    let ok = output.status.success();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    crate::log_info!(
+                        "POLKIT",
+                        "polkit-agent-helper-1 result: success={ok}, code={:?}, stderr='{}'",
+                        output.status.code(),
+                        stderr.trim()
+                    );
+
+                    if ok {
+                        return Ok(());
+                    }
+
+                    let stderr_lower = stderr.to_lowercase();
+                    if stderr_lower.contains("delay")
+                        || stderr_lower.contains("lockout")
+                        || stderr_lower.contains("try again")
+                        || stderr_lower.contains("pruebe otra vez")
+                    {
+                        return Err(
+                            "Contraseña incorrecta o límite de reintentos alcanzado. Por favor espera unos segundos..."
+                                .to_string(),
+                        );
+                    }
+
+                    return Err("Contraseña incorrecta. Inténtalo de nuevo.".to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback: Sudo PAM check
     let _ = Command::new("sudo").arg("-k").output().await;
 
-    // Spawn sudo -S -v to validate user password against PAM
     let mut child = match Command::new("sudo")
         .arg("-S")
         .arg("-v")
@@ -265,7 +401,10 @@ pub async fn authenticate_user(password: &str) -> bool {
         .spawn()
     {
         Ok(c) => c,
-        Err(_) => return false,
+        Err(e) => {
+            crate::log_warn!("POLKIT", "Failed to spawn sudo -S -v: {e}");
+            return Err("No se pudo iniciar la verificación PAM.".to_string());
+        }
     };
 
     if let Some(mut stdin) = child.stdin.take() {
@@ -277,9 +416,26 @@ pub async fn authenticate_user(password: &str) -> bool {
 
     if let Ok(output) = child.wait_with_output().await {
         let ok = output.status.success();
-        crate::log_info!("POLKIT", "Password check result: success={ok}");
-        return ok;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if ok {
+            return Ok(());
+        }
+
+        let stderr_lower = stderr.to_lowercase();
+        if stderr_lower.contains("delay")
+            || stderr_lower.contains("lockout")
+            || stderr_lower.contains("try again")
+            || stderr_lower.contains("pruebe otra vez")
+        {
+            return Err(
+                "Contraseña incorrecta o límite de reintentos alcanzado. Por favor espera unos segundos..."
+                    .to_string(),
+            );
+        }
+
+        return Err("Contraseña incorrecta. Inténtalo de nuevo.".to_string());
     }
 
-    false
+    Err("Error inesperado en la verificación de credenciales.".to_string())
 }

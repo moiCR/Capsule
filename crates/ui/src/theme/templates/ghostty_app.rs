@@ -65,7 +65,7 @@ impl AppTheme for GhosttyApp {
             }
         }
 
-        &self.reload_apps();
+        self.reload_apps();
     }
 
     fn reload_apps(&self) {

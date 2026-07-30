@@ -1,46 +1,17 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{Context, FontWeight, IntoElement, black, div, prelude::*, px, svg};
 use services::{MediaTrack, MprisService};
 use ui::theme::Theme;
 
-use crate::capsule::modules::idle_hover::IdleHoverModule;
+use crate::capsule::modules::dashboard::DashboardModule;
 
 pub fn render_media_player_widget(
     active_track: &MediaTrack,
     total_players: usize,
     selected_player_idx: usize,
     theme: &Theme,
-    cx: &mut Context<IdleHoverModule>,
+    cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let art_element = if let Some(art_path) = &active_track.local_art_path {
-        div()
-            .w(px(64.0))
-            .h(px(64.0))
-            .rounded(px(12.0))
-            .overflow_hidden()
-            .flex_none()
-            .child(
-                gpui::img(std::path::PathBuf::from(art_path))
-                    .w(px(64.0))
-                    .h(px(64.0))
-                    .object_fit(gpui::ObjectFit::Cover),
-            )
-    } else {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .w(px(64.0))
-            .h(px(64.0))
-            .bg(theme.surface())
-            .rounded(px(12.0))
-            .flex_none()
-            .child(
-                svg()
-                    .path("music.svg")
-                    .size(px(24.0))
-                    .text_color(theme.foreground_muted()),
-            )
-    };
+    let card_radius = px(42.0);
 
     let player_header = div()
         .flex()
@@ -54,7 +25,7 @@ pub fn render_media_player_widget(
                 .items_center()
                 .px_2()
                 .py_0p5()
-                .bg(theme.surface())
+                .bg(theme.surface().opacity(0.8))
                 .rounded_full()
                 .child(
                     div()
@@ -100,18 +71,22 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-prev")
                 .cursor_pointer()
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    if let Some(active) = this.get_selected_player() {
-                        let bus_name = active.bus_name.clone();
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, _window, cx| {
+                        services::log_info!("MPRIS", "Button prev clicked");
+                        let bus_name = this
+                            .get_selected_player()
+                            .map(|p| p.bus_name.clone())
+                            .unwrap_or_else(|| "org.mpris.MediaPlayer2.spotify".to_string());
                         this.touch_user_action();
                         cx.notify();
 
-                        cx.spawn(async move |_this, _cx| {
+                        tokio::spawn(async move {
                             MprisService::previous_bus(&bus_name).await;
-                        })
-                        .detach();
-                    }
-                }))
+                        });
+                    }),
+                )
                 .child(
                     svg()
                         .path("skip-back.svg")
@@ -123,19 +98,24 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-play-pause")
                 .cursor_pointer()
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    if let Some(active) = this.get_selected_player_mut() {
-                        let bus_name = active.bus_name.clone();
-                        active.is_playing = !active.is_playing;
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, _window, cx| {
+                        services::log_info!("MPRIS", "Button play-pause clicked");
+                        let bus_name = if let Some(active) = this.get_selected_player_mut() {
+                            active.is_playing = !active.is_playing;
+                            active.bus_name.clone()
+                        } else {
+                            "org.mpris.MediaPlayer2.spotify".to_string()
+                        };
                         this.touch_user_action();
                         cx.notify();
 
-                        cx.spawn(async move |_this, _cx| {
+                        tokio::spawn(async move {
                             MprisService::play_pause_bus(&bus_name).await;
-                        })
-                        .detach();
-                    }
-                }))
+                        });
+                    }),
+                )
                 .child(
                     div()
                         .flex()
@@ -143,7 +123,7 @@ pub fn render_media_player_widget(
                         .justify_center()
                         .w(px(28.0))
                         .h(px(28.0))
-                        .bg(theme.accent().opacity(0.2))
+                        .bg(theme.accent().opacity(0.3))
                         .rounded_full()
                         .child(
                             svg()
@@ -161,18 +141,22 @@ pub fn render_media_player_widget(
             div()
                 .id("mpris-next")
                 .cursor_pointer()
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    if let Some(active) = this.get_selected_player() {
-                        let bus_name = active.bus_name.clone();
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, _window, cx| {
+                        services::log_info!("MPRIS", "Button next clicked");
+                        let bus_name = this
+                            .get_selected_player()
+                            .map(|p| p.bus_name.clone())
+                            .unwrap_or_else(|| "org.mpris.MediaPlayer2.spotify".to_string());
                         this.touch_user_action();
                         cx.notify();
 
-                        cx.spawn(async move |_this, _cx| {
+                        tokio::spawn(async move {
                             MprisService::next_bus(&bus_name).await;
-                        })
-                        .detach();
-                    }
-                }))
+                        });
+                    }),
+                )
                 .child(
                     svg()
                         .path("skip-forward.svg")
@@ -183,36 +167,52 @@ pub fn render_media_player_widget(
 
     div()
         .id("media-player-card")
-        .flex()
-        .flex_col()
+        .relative()
         .w_full()
-        .bg(theme.background_alt())
+        .rounded(card_radius)
         .border_1()
         .border_color(theme.surface())
-        .rounded(px(18.0))
-        .p_3()
-        .gap_2()
-        .child(player_header)
+        .when_some(active_track.local_art_path.clone(), |this, art_path| {
+            this.child(
+                gpui::img(std::path::PathBuf::from(art_path))
+                    .absolute()
+                    .inset_0()
+                    .w_full()
+                    .h_full()
+                    .rounded(card_radius)
+                    .object_fit(gpui::ObjectFit::Cover),
+            )
+        })
+        .child(div().absolute().inset_0().rounded(card_radius).bg(
+            if active_track.local_art_path.is_some() {
+                black().opacity(0.65)
+            } else {
+                theme.background_alt()
+            },
+        ))
         .child(
             div()
+                .relative()
                 .flex()
-                .flex_row()
-                .items_center()
+                .flex_col()
                 .w_full()
-                .gap_3()
-                .child(art_element)
+                .p_3()
+                .gap_2()
+                .child(player_header)
                 .child(
                     div()
                         .flex()
                         .flex_col()
+                        .items_center()
                         .justify_center()
                         .w_full()
                         .overflow_hidden()
-                        .gap_0p5()
+                        .gap_1()
+                        .pt_1()
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .text_size(px(13.0))
+                                .text_size(px(14.0))
                                 .text_color(theme.foreground())
                                 .truncate()
                                 .child(if active_track.has_media {
@@ -223,7 +223,7 @@ pub fn render_media_player_widget(
                         )
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(12.0))
                                 .text_color(theme.foreground_muted())
                                 .truncate()
                                 .child(if active_track.has_media {

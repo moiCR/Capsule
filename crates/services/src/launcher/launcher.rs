@@ -3,7 +3,9 @@ use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static ICON_MAP_CACHE: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
 
 #[derive(Clone, Default)]
 pub struct LauncherService {
@@ -22,7 +24,7 @@ impl LauncherService {
                 if let Err(err) = service_clone.refresh().await {
                     crate::log_warn!("LAUNCHER", "LauncherService refresh warning: {err}");
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(120)).await;
             }
         });
 
@@ -108,7 +110,7 @@ impl LauncherService {
 
         let mut discovered: HashMap<String, Application> = HashMap::new();
 
-        let icon_map = Self::build_icon_map().await;
+        let icon_map = Self::get_cached_icon_map().await;
 
         for dir in app_dirs {
             if !dir.exists() {
@@ -149,6 +151,14 @@ impl LauncherService {
             .filter(|arg| !arg.starts_with('%'))
             .collect::<Vec<_>>()
             .join(" ")
+    }
+    async fn get_cached_icon_map() -> &'static HashMap<String, PathBuf> {
+        if let Some(map) = ICON_MAP_CACHE.get() {
+            return map;
+        }
+        let map = Self::build_icon_map().await;
+        let _ = ICON_MAP_CACHE.set(map);
+        ICON_MAP_CACHE.get().unwrap()
     }
 
     async fn build_icon_map() -> HashMap<String, PathBuf> {

@@ -25,11 +25,13 @@ impl HeightTracker {
         }
     }
 
-    pub fn track(&self, element: Div) -> Div {
+    pub fn track(&self, element: impl IntoElement) -> Div {
         let top = self.top.clone();
         let bottom = self.bottom.clone();
 
         div()
+            .flex()
+            .flex_col()
             .w_full()
             .child(
                 canvas(

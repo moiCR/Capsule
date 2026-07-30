@@ -79,7 +79,7 @@ fn make_color_list(
 
 impl AppTheme for QtApps {
     fn apply_current_theme(&self, theme: &Theme) {
-        let is_dark = matches!(theme.mode, ThemeMode::Dark);
+        let _is_dark = matches!(theme.mode, ThemeMode::Dark);
 
         let bg = &theme.background_color.hex;
         let bg_alt = &theme.background_color_alt.hex;
@@ -119,7 +119,7 @@ impl AppTheme for QtApps {
 
             // 2. Write KDE kdeglobals using proper R,G,B comma-separated values
             let kdeglobals_path = config_dir.join("kdeglobals");
-            let scheme_name = if is_dark { "BreezeDark" } else { "BreezeLight" };
+            let scheme_name = "Capsule";
 
             let kde_content = format!(
                 r#"[General]
@@ -204,7 +204,7 @@ inactiveForeground={fg_muted_rgb}
             let _ = fs::write(color_schemes_dir.join("Capsule.colors"), capsule_colors);
         }
 
-        &self.reload_apps();
+        self.reload_apps();
     }
 
     fn reload_apps(&self) {
@@ -320,6 +320,4 @@ fn update_qtct_conf(conf_path: &Path, color_scheme_path: &str) {
         let _ = fs::create_dir_all(parent);
     }
     let _ = fs::write(conf_path, new_lines.join("\n") + "\n");
-
-    
 }

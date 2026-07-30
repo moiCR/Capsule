@@ -1,5 +1,6 @@
 use crate::{
-    CompositorService, LauncherService, LyricsService, MprisService, PolkitService, SniHostService, SystemService, wallpaper::WallpaperService,
+    CalendarService, CompositorService, LauncherService, LyricsService, MprisService, NetworkService, PolkitService,
+    SniHostService, SystemService, wallpaper::WallpaperService,
 };
 
 /// Global application state holding all singleton services.
@@ -15,6 +16,8 @@ pub struct AppState {
     pub polkit: PolkitService,
     pub sni_host: SniHostService,
     pub wallpaper: WallpaperService,
+    pub network: NetworkService,
+    pub calendar: CalendarService,
 }
 
 impl gpui::Global for AppState {}
@@ -26,6 +29,8 @@ impl AppState {
 
         let compositor = CompositorService::new();
         let wallpaper = WallpaperService::new(compositor.clone());
+        let network = NetworkService::new();
+        let calendar = CalendarService::new();
 
         Self {
             launcher: LauncherService::new(),
@@ -36,6 +41,8 @@ impl AppState {
             polkit: PolkitService::new(),
             sni_host,
             wallpaper,
+            network,
+            calendar,
         }
     }
 }

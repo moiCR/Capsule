@@ -23,6 +23,7 @@ pub struct SniHostService {
     items: Arc<Mutex<Vec<SniItem>>>,
     raw_services: Arc<Mutex<Vec<String>>>,
     selected_tray_idx: Arc<Mutex<Option<usize>>>,
+    notify: Arc<tokio::sync::Notify>,
 }
 
 impl SniHostService {
@@ -32,6 +33,7 @@ impl SniHostService {
             items: Arc::new(Mutex::new(Vec::new())),
             raw_services: Arc::new(Mutex::new(Vec::new())),
             selected_tray_idx: Arc::new(Mutex::new(None)),
+            notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -61,7 +63,7 @@ impl SniHostService {
             let bus = item.bus_name.clone();
             let path = item.object_path.clone();
             tokio::spawn(async move {
-                let Ok(conn) = zbus::Connection::session().await else {
+                let Some(conn) = crate::dbus_util::get_shared_session_conn().await else {
                     return;
                 };
                 let res1 = conn
@@ -90,7 +92,7 @@ impl SniHostService {
 
     pub fn trigger_menu(&self, bus_name: String, menu_path: String, item_id: i32) {
         tokio::spawn(async move {
-            let Ok(conn) = zbus::Connection::session().await else {
+            let Some(conn) = crate::dbus_util::get_shared_session_conn().await else {
                 return;
             };
             let _ = trigger_dbus_menu_item(&conn, &bus_name, &menu_path, item_id).await;
@@ -111,6 +113,7 @@ impl SniHostService {
 
 struct StatusNotifierWatcherServer {
     raw_services: Arc<Mutex<Vec<String>>>,
+    notify: Arc<tokio::sync::Notify>,
 }
 
 #[interface(name = "org.kde.StatusNotifierWatcher")]
@@ -127,17 +130,18 @@ impl StatusNotifierWatcherServer {
 
         let item_path = if service.starts_with('/') {
             format!("{}{}", sender, service)
-        } else if !service.contains('/') && !service.starts_with(':') && !service.contains('.') {
-            format!("{}/StatusNotifierItem", sender)
-        } else if service.starts_with(':') && !service.contains('/') {
-            format!("{}/StatusNotifierItem", service)
-        } else {
+        } else if service.contains('/') {
             service
+        } else if service.starts_with(':') || service.contains("StatusNotifierItem") || service.is_empty() {
+            format!("{}/StatusNotifierItem", sender)
+        } else {
+            format!("{}/StatusNotifierItem", service)
         };
 
         if let Ok(mut items) = self.raw_services.lock() {
             if !items.contains(&item_path) {
                 items.push(item_path);
+                self.notify.notify_one();
             }
         }
     }
@@ -166,6 +170,7 @@ impl StatusNotifierWatcherServer {
 async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
     let server = StatusNotifierWatcherServer {
         raw_services: host.raw_services.clone(),
+        notify: host.notify.clone(),
     };
 
     let connection_res = zbus::connection::Builder::session()?
@@ -179,16 +184,53 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
         Err(_) => zbus::Connection::session().await?,
     };
 
+    let mut item_cache: std::collections::HashMap<String, (std::time::Instant, SniItem)> =
+        std::collections::HashMap::new();
+
     loop {
         let services = fetch_registered_services(&conn, &host).await;
         let mut detailed_items = Vec::new();
+        let now = std::time::Instant::now();
+
+        item_cache.retain(|svc, _| services.contains(svc));
 
         for svc in &services {
-            let (bus_name, obj_path) = if let Some((b, p)) = svc.split_once('/') {
-                (b.to_string(), format!("/{p}"))
+            let (bus_name, obj_path) = if let Some(slash_pos) = svc.find('/') {
+                (svc[..slash_pos].to_string(), svc[slash_pos..].to_string())
             } else {
                 (svc.clone(), "/StatusNotifierItem".to_string())
             };
+
+            let is_alive = tokio::time::timeout(
+                std::time::Duration::from_millis(300),
+                conn.call_method(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    Some("org.freedesktop.DBus"),
+                    "NameHasOwner",
+                    &(bus_name.as_str(),),
+                ),
+            )
+            .await
+            .ok()
+            .and_then(|r| r.ok())
+            .and_then(|m| m.body().deserialize::<bool>().ok())
+            .unwrap_or(false);
+
+            if !is_alive {
+                if let Ok(mut raw) = host.raw_services.lock() {
+                    raw.retain(|s| s != svc);
+                }
+                item_cache.remove(svc);
+                continue;
+            }
+
+            if let Some((last_fetch, cached_item)) = item_cache.get(svc) {
+                if now.duration_since(*last_fetch) < std::time::Duration::from_secs(30) {
+                    detailed_items.push(cached_item.clone());
+                    continue;
+                }
+            }
 
             let id = get_string_prop(&conn, &bus_name, &obj_path, "Id")
                 .await
@@ -202,12 +244,10 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
             let icon_theme_path =
                 get_string_prop(&conn, &bus_name, &obj_path, "IconThemePath").await;
             let menu_path = get_object_path_prop(&conn, &bus_name, &obj_path, "Menu").await;
-
             let tooltip = get_tooltip_title(&conn, &bus_name, &obj_path)
                 .await
                 .unwrap_or_default();
 
-            // Try resolving icon file path or saving IconPixmap
             let mut icon_file_path =
                 resolve_icon_file(&icon_name, icon_theme_path.as_deref(), &id, &title);
             if icon_file_path.is_none() {
@@ -216,12 +256,17 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
                 }
             }
 
-            // Fetch DBusMenu items if menu_path is present
-            let menu_items = if let Some(ref mp) = menu_path {
-                fetch_dbus_menu(&conn, &bus_name, mp).await
-            } else {
-                vec![]
-            };
+            let mut menu_items = Vec::new();
+            if let Some(ref mp) = menu_path {
+                if let Ok(fetched) = tokio::time::timeout(
+                    std::time::Duration::from_millis(1000),
+                    fetch_dbus_menu(&conn, &bus_name, mp),
+                )
+                .await
+                {
+                    menu_items = fetched;
+                }
+            }
 
             let display = if !title.is_empty() {
                 title.clone()
@@ -231,7 +276,7 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
                 bus_name.clone()
             };
 
-            detailed_items.push(SniItem {
+            let item = SniItem {
                 service: svc.clone(),
                 bus_name,
                 object_path: obj_path,
@@ -242,11 +287,18 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
                 menu_path,
                 tooltip,
                 menu_items,
-            });
+            };
+
+            item_cache.insert(svc.clone(), (now, item.clone()));
+            detailed_items.push(item);
         }
 
-        host.set_items(detailed_items);
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if host.get_items() != detailed_items {
+            host.set_items(detailed_items);
+        }
+
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), host.notify.notified()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 }
 
@@ -318,15 +370,16 @@ async fn save_pixmap_to_file(
     obj_path: &str,
     item_id: &str,
 ) -> Option<String> {
-    let msg = conn
+    let msg = tokio::time::timeout(std::time::Duration::from_millis(500), conn
         .call_method(
             Some(bus_name),
             obj_path,
             Some("org.freedesktop.DBus.Properties"),
             "Get",
             &("org.kde.StatusNotifierItem", "IconPixmap"),
-        )
+        ))
         .await
+        .ok()?
         .ok()?;
 
     let body = msg.body();
@@ -383,48 +436,33 @@ async fn save_pixmap_to_file(
         rgba.push(a);
     }
 
-    let file_path = format!("/tmp/capsule_tray_icons/{item_id}.png");
-    let img_buf: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
-        image::ImageBuffer::from_raw(width, height, rgba)?;
-    img_buf.save(&file_path).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&rgba, &mut hasher);
+    let hash = std::hash::Hasher::finish(&hasher);
+
+    let file_path = format!("/tmp/capsule_tray_icons/{item_id}_{hash}.png");
+    if !std::path::Path::new(&file_path).exists() {
+        let img_buf: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+            image::ImageBuffer::from_raw(width, height, rgba)?;
+        img_buf.save(&file_path).ok()?;
+    }
 
     Some(file_path)
 }
 
-async fn fetch_registered_services(conn: &zbus::Connection, host: &SniHostService) -> Vec<String> {
-    let mut list = host
-        .raw_services
+async fn fetch_registered_services(_conn: &zbus::Connection, host: &SniHostService) -> Vec<String> {
+    host.raw_services
         .lock()
         .map(|g| g.clone())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
-    if let Ok(msg) = conn
-        .call_method(
-            Some("org.kde.StatusNotifierWatcher"),
-            "/StatusNotifierWatcher",
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &(
-                "org.kde.StatusNotifierWatcher",
-                "RegisteredStatusNotifierItems",
-            ),
-        )
-        .await
-    {
-        let body = msg.body();
-        if let Ok(zbus::zvariant::Value::Array(arr)) = body.deserialize::<zbus::zvariant::Value>() {
-            for v in arr.iter() {
-                if let zbus::zvariant::Value::Str(s) = v {
-                    let s_str = s.to_string();
-                    if !list.contains(&s_str) {
-                        list.push(s_str);
-                    }
-                }
-            }
-        }
+fn unwrap_val<'a, 'b>(val: &'a zbus::zvariant::Value<'b>) -> &'a zbus::zvariant::Value<'b> {
+    let mut curr = val;
+    while let zbus::zvariant::Value::Value(inner) = curr {
+        curr = inner;
     }
-
-    list
+    curr
 }
 
 async fn get_string_prop(
@@ -433,22 +471,30 @@ async fn get_string_prop(
     obj_path: &str,
     prop: &str,
 ) -> Option<String> {
-    let msg = conn
-        .call_method(
-            Some(bus_name),
-            obj_path,
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &("org.kde.StatusNotifierItem", prop),
-        )
-        .await
-        .ok()?;
-
-    let body = msg.body();
-    match body.deserialize::<zbus::zvariant::Value>().ok()? {
-        zbus::zvariant::Value::Str(s) => Some(s.to_string()),
-        _ => None,
+    let interfaces = [
+        "org.kde.StatusNotifierItem",
+        "org.freedesktop.StatusNotifierItem",
+    ];
+    for iface in interfaces {
+        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
+            .call_method(
+                Some(bus_name),
+                obj_path,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &(iface, prop),
+            ))
+            .await
+        {
+            if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
+                match unwrap_val(&val) {
+                    zbus::zvariant::Value::Str(s) => return Some(s.to_string()),
+                    _ => {}
+                }
+            }
+        }
     }
+    None
 }
 
 async fn get_object_path_prop(
@@ -457,23 +503,31 @@ async fn get_object_path_prop(
     obj_path: &str,
     prop: &str,
 ) -> Option<String> {
-    let msg = conn
-        .call_method(
-            Some(bus_name),
-            obj_path,
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &("org.kde.StatusNotifierItem", prop),
-        )
-        .await
-        .ok()?;
-
-    let body = msg.body();
-    match body.deserialize::<zbus::zvariant::Value>().ok()? {
-        zbus::zvariant::Value::ObjectPath(p) => Some(p.to_string()),
-        zbus::zvariant::Value::Str(s) => Some(s.to_string()),
-        _ => None,
+    let interfaces = [
+        "org.kde.StatusNotifierItem",
+        "org.freedesktop.StatusNotifierItem",
+    ];
+    for iface in interfaces {
+        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
+            .call_method(
+                Some(bus_name),
+                obj_path,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &(iface, prop),
+            ))
+            .await
+        {
+            if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
+                match unwrap_val(&val) {
+                    zbus::zvariant::Value::ObjectPath(p) => return Some(p.to_string()),
+                    zbus::zvariant::Value::Str(s) => return Some(s.to_string()),
+                    _ => {}
+                }
+            }
+        }
     }
+    None
 }
 
 async fn get_tooltip_title(
@@ -481,28 +535,32 @@ async fn get_tooltip_title(
     bus_name: &str,
     obj_path: &str,
 ) -> Option<String> {
-    let msg = conn
-        .call_method(
-            Some(bus_name),
-            obj_path,
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &("org.kde.StatusNotifierItem", "ToolTip"),
-        )
-        .await
-        .ok()?;
-
-    let body = msg.body();
-    let val = body.deserialize::<zbus::zvariant::Value>().ok()?;
-
-    if let zbus::zvariant::Value::Structure(s) = val {
-        let fields = s.fields();
-        if fields.len() >= 3 {
-            if let zbus::zvariant::Value::Str(title) = &fields[2] {
-                return Some(title.to_string());
+    let interfaces = [
+        "org.kde.StatusNotifierItem",
+        "org.freedesktop.StatusNotifierItem",
+    ];
+    for iface in interfaces {
+        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
+            .call_method(
+                Some(bus_name),
+                obj_path,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &(iface, "ToolTip"),
+            ))
+            .await
+        {
+            if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
+                if let zbus::zvariant::Value::Structure(s) = unwrap_val(&val) {
+                    let fields = s.fields();
+                    if fields.len() >= 3 {
+                        if let zbus::zvariant::Value::Str(title) = unwrap_val(&fields[2]) {
+                            return Some(title.to_string());
+                        }
+                    }
+                }
             }
         }
     }
-
     None
 }

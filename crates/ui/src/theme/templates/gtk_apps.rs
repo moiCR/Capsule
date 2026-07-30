@@ -13,7 +13,7 @@ impl AppTheme for GtkApps {
         } else {
             "prefer-light"
         };
-        let gtk_theme_name = if is_dark { "Adwaita-dark" } else { "Adwaita" };
+        let gtk_theme_name = if is_dark { "adw-gtk3-dark" } else { "adw-gtk3" };
         let prefer_dark_val = if is_dark { "1" } else { "0" };
 
         let bg = &theme.background_color.hex;
@@ -92,7 +92,6 @@ impl AppTheme for GtkApps {
 "#
             );
 
-            // 3. Write GTK 3.0 & GTK 4.0 configurations
             let dir_gtk3 = config_dir.join("gtk-3.0");
             let _ = fs::create_dir_all(&dir_gtk3);
             let _ = fs::write(dir_gtk3.join("settings.ini"), &ini_gtk3);
@@ -103,30 +102,35 @@ impl AppTheme for GtkApps {
             let _ = fs::write(dir_gtk4.join("settings.ini"), &ini_gtk4);
             let _ = fs::write(dir_gtk4.join("gtk.css"), &gtk_css);
 
-            // 4. Update nwg-look configuration file if present
-            let nwg_gsettings_file = config_dir.join("nwg-look").join("gsettings");
+            let nwg_gsettings_file = dirs::data_local_dir()
+                .unwrap()
+                .join("nwg-look")
+                .join("gsettings");
+
             if nwg_gsettings_file.exists() {
                 if let Ok(content) = fs::read_to_string(&nwg_gsettings_file) {
                     let mut updated_lines = Vec::new();
+
                     for line in content.lines() {
-                        if line.starts_with("gtk-theme:") {
-                            updated_lines.push(format!("gtk-theme: {gtk_theme_name}"));
-                        } else if line.starts_with("color-scheme:") {
-                            updated_lines.push(format!("color-scheme: {color_scheme}"));
+                        if line.starts_with("gtk-theme=") {
+                            updated_lines.push(format!("gtk-theme={gtk_theme_name}"));
+                        } else if line.starts_with("color-scheme=") {
+                            let nwg_scheme = if is_dark { "dark" } else { "light" };
+
+                            updated_lines.push(format!("color-scheme={nwg_scheme}"));
                         } else {
                             updated_lines.push(line.to_string());
                         }
                     }
+
                     let _ = fs::write(&nwg_gsettings_file, updated_lines.join("\n"));
                 }
             }
         }
-        &self.reload_apps();
+        self.reload_apps();
     }
 
     fn reload_apps(&self) {
-        let _ = Command::new("nwg-look").arg("-a").status();
-
         let _ = Command::new("systemctl")
             .args(["--user", "restart", "xdg-desktop-portal"])
             .status();
@@ -147,12 +151,12 @@ impl AppTheme for GtkApps {
             .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_else(|_| "'Adwaita-dark'".to_string());
+            .unwrap_or_else(|_| "'adw-gtk3-dark'".to_string());
 
         let fallback_theme = if current_theme.contains("dark") {
-            "Adwaita"
+            "adw-gtk3"
         } else {
-            "Adwaita-dark"
+            "adw-gtk3-dark"
         };
 
         let target_theme = current_theme.trim_matches('\'');
@@ -174,5 +178,7 @@ impl AppTheme for GtkApps {
                 target_theme,
             ])
             .status();
+
+        let _ = Command::new("nwg-look").arg("-a").status();
     }
 }

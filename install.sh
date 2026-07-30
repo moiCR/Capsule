@@ -63,6 +63,7 @@ ARCH_LINUX_DEPENDENCIES=(
     "awww"
     "xdg-desktop-portal"
     "xdg-desktop-portal-gtk"
+    "adw-gtk-theme"
 )
 
 TO_INSTALL=()
@@ -103,4 +104,3 @@ else
     echo -e "----------------------------------------"
     info "All dependencies are already installed!"
 fi
-

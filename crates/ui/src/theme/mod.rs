@@ -3,7 +3,7 @@ pub mod theme_manager;
 
 use gpui::{Hsla, Rgba};
 use serde::{Deserialize, Serialize};
-pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, QtApps, YaziApp, KittyApp};
+pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Theme {
@@ -39,8 +39,6 @@ impl Default for Theme {
         }
     }
 }
-
-
 
 impl Theme {
     pub fn background(&self) -> Hsla {

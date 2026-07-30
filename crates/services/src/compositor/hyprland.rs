@@ -27,11 +27,6 @@ impl Compositor for Hyprland {
                             return focused.refresh_rate;
                         }
                     }
-                    if let Some(first) = monitors.first() {
-                        if first.refresh_rate > 0.0 {
-                            return first.refresh_rate;
-                        }
-                    }
                 }
             }
         }

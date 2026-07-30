@@ -5,6 +5,8 @@ use gpui::{
 use ui::theme::theme_manager::ThemeManager;
 use ui::theme::{Color, Theme, ThemeMode, parse_hex_to_hsla};
 
+use crate::capsule::widgets::create_theme::theme_field::render_theme_field;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CreateThemeEvent {
     ThemeCreated,
@@ -24,7 +26,7 @@ pub struct CreateThemeModule {
     accent_color: String,
     red_color: String,
     green_color: String,
-    active_field: usize,
+    pub active_field: usize,
     is_error: bool,
     error_msg: String,
 }
@@ -132,6 +134,55 @@ impl CreateThemeModule {
         cx: &mut Context<Self>,
     ) {
         let key = event.keystroke.key.as_str();
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "v" => {
+                    if let Some(item) = cx.read_from_clipboard() {
+                        if let Some(text) = item.text() {
+                            let clean_text: String =
+                                text.chars().filter(|c| !c.is_control()).collect();
+                            if let Some(target) = self.active_field_mut() {
+                                target.push_str(&clean_text);
+                                self.is_error = false;
+                                cx.notify();
+                            }
+                        }
+                    }
+                    return;
+                }
+                "c" => {
+                    if let Some(target) = self.active_field_mut() {
+                        if !target.is_empty() {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(target.clone()));
+                        }
+                    }
+                    return;
+                }
+                "x" => {
+                    if let Some(target) = self.active_field_mut() {
+                        if !target.is_empty() {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(target.clone()));
+                            target.clear();
+                            self.is_error = false;
+                            cx.notify();
+                        }
+                    }
+                    return;
+                }
+                "u" | "w" => {
+                    if let Some(target) = self.active_field_mut() {
+                        target.clear();
+                        self.is_error = false;
+                        cx.notify();
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match key {
             "tab" => {
                 if event.keystroke.modifiers.shift {
@@ -161,13 +212,17 @@ impl CreateThemeModule {
                 }
             }
             _ => {
-                if let Some(keystroke_text) = &event.keystroke.key_char {
-                    if !keystroke_text.chars().any(|c| c.is_control()) {
-                        if let Some(target) = self.active_field_mut() {
-                            target.push_str(keystroke_text);
-                            self.is_error = false;
-                            cx.notify();
-                        }
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+
+                if text.chars().count() == 1 && !ctrl {
+                    if let Some(target) = self.active_field_mut() {
+                        target.push_str(text);
+                        self.is_error = false;
+                        cx.notify();
                     }
                 }
             }
@@ -399,77 +454,8 @@ impl Render for CreateThemeModule {
 
         for (label, val, idx) in fields_config {
             let is_focused = self.active_field == idx;
-
-            let field_bg = if is_focused {
-                theme.surface()
-            } else {
-                theme.background_alt()
-            };
-
-            let border_c = if is_focused {
-                theme.accent()
-            } else {
-                theme.surface().opacity(0.5)
-            };
-
             let swatch_c = parse_hex_to_hsla(val);
-
-            let field_el = div()
-                .id(format!("field-idx-{idx}"))
-                .flex()
-                .items_center()
-                .justify_between()
-                .px_2p5()
-                .py_1p5()
-                .rounded_xl()
-                .bg(field_bg)
-                .border_1()
-                .border_color(border_c)
-                .cursor_text()
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.active_field = idx;
-                    cx.notify();
-                }))
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_0p5()
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(if is_focused {
-                                    theme.accent()
-                                } else {
-                                    theme.foreground_muted()
-                                })
-                                .child(label),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(theme.foreground())
-                                .child(if val.is_empty() {
-                                    "|".to_string()
-                                } else if is_focused {
-                                    format!("{val}|")
-                                } else {
-                                    val.to_string()
-                                }),
-                        ),
-                )
-                .child(if idx > 0 {
-                    div()
-                        .size_3p5()
-                        .rounded_full()
-                        .bg(swatch_c)
-                        .border_1()
-                        .border_color(theme.surface())
-                } else {
-                    div()
-                });
-
+            let field_el = render_theme_field(label, val, idx, is_focused, swatch_c, &theme, cx);
             fields_grid = fields_grid.child(field_el);
         }
 
@@ -573,19 +559,16 @@ impl Render for CreateThemeModule {
             .child(mode_selector)
             .child(visualizer_card)
             .child(fields_grid);
-
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
             .w(px(348.0))
-            .h(px(500.0))
+            .max_h(px(520.0))
             .p_4()
             .gap_3p5()
-            .rounded(px(28.0))
             .overflow_hidden()
-            .bg(theme.background())
             .child(header)
             .child(divider)
             .child(scrollable_content)

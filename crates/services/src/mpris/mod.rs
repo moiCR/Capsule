@@ -8,11 +8,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use zbus::Connection;
-use zbus::fdo::DBusProxy;
 use zbus::zvariant::Value;
 
 async fn get_session_conn() -> Option<Connection> {
-    Connection::session().await.ok()
+    crate::dbus_util::get_shared_session_conn().await
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -63,49 +62,112 @@ impl MprisService {
     }
 
     pub async fn play_pause_bus(bus_name: &str) -> bool {
-        if let Some(conn) = get_session_conn().await {
-            if let Ok(builder) = MediaPlayer2PlayerProxy::builder(&conn).destination(bus_name) {
-                if let Ok(proxy) = builder.build().await {
-                    return tokio::time::timeout(Duration::from_millis(300), proxy.play_pause())
-                        .await
-                        .ok()
-                        .and_then(|r| r.ok())
-                        .is_some();
-                }
-            }
-        }
-        false
+        call_mpris_method(bus_name, "PlayPause").await
     }
 
     pub async fn next_bus(bus_name: &str) -> bool {
-        if let Some(conn) = get_session_conn().await {
-            if let Ok(builder) = MediaPlayer2PlayerProxy::builder(&conn).destination(bus_name) {
-                if let Ok(proxy) = builder.build().await {
-                    return tokio::time::timeout(Duration::from_millis(300), proxy.next())
-                        .await
-                        .ok()
-                        .and_then(|r| r.ok())
-                        .is_some();
-                }
-            }
-        }
-        false
+        call_mpris_method(bus_name, "Next").await
     }
 
     pub async fn previous_bus(bus_name: &str) -> bool {
-        if let Some(conn) = get_session_conn().await {
-            if let Ok(builder) = MediaPlayer2PlayerProxy::builder(&conn).destination(bus_name) {
-                if let Ok(proxy) = builder.build().await {
-                    return tokio::time::timeout(Duration::from_millis(300), proxy.previous())
-                        .await
-                        .ok()
-                        .and_then(|r| r.ok())
-                        .is_some();
-                }
+        call_mpris_method(bus_name, "Previous").await
+    }
+}
+
+async fn run_playerctl_fallback(requested_bus: &str, method: &str) -> bool {
+    let clean_player = if requested_bus.to_lowercase().contains("spotify") {
+        "spotify"
+    } else {
+        "player"
+    };
+    let action = match method {
+        "PlayPause" => "play-pause",
+        "Next" => "next",
+        "Previous" => "previous",
+        _ => "play-pause",
+    };
+
+    crate::log_info!(
+        "MPRIS",
+        "Executing playerctl fallback: playerctl -p {} {}",
+        clean_player,
+        action
+    );
+
+    let cmd_fut = tokio::process::Command::new("playerctl")
+        .args(["-p", clean_player, action])
+        .status();
+
+    match tokio::time::timeout(Duration::from_millis(300), cmd_fut).await {
+        Ok(Ok(st)) => {
+            crate::log_info!("MPRIS", "playerctl completed with status: {:?}", st);
+            st.success()
+        }
+        Ok(Err(e)) => {
+            crate::log_warn!("MPRIS", "playerctl execution error: {e}");
+            false
+        }
+        Err(_) => {
+            crate::log_warn!("MPRIS", "playerctl execution timed out after 300ms!");
+            false
+        }
+    }
+}
+
+async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
+    crate::log_info!(
+        "MPRIS",
+        "call_mpris_method requested: bus='{}', method='{}'",
+        requested_bus,
+        method
+    );
+
+    // 1. Try D-Bus first (returns immediately on success)
+    if let Some(conn) = get_session_conn().await {
+        let target = if requested_bus.trim().is_empty() {
+            "org.mpris.MediaPlayer2.spotify"
+        } else {
+            requested_bus
+        };
+
+        let direct_fut = conn.call_method(
+            Some(target),
+            "/org/mpris/MediaPlayer2",
+            Some("org.mpris.MediaPlayer2.Player"),
+            method,
+            &(),
+        );
+
+        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(150), direct_fut).await {
+            crate::log_info!(
+                "MPRIS",
+                "Direct D-Bus call '{}' on '{}' succeeded in <150ms",
+                method,
+                target
+            );
+            return true;
+        }
+
+        if target != "org.mpris.MediaPlayer2.spotify" {
+            let spot_fut = conn.call_method(
+                Some("org.mpris.MediaPlayer2.spotify"),
+                "/org/mpris/MediaPlayer2",
+                Some("org.mpris.MediaPlayer2.Player"),
+                method,
+                &(),
+            );
+            if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(150), spot_fut).await {
+                crate::log_info!(
+                    "MPRIS",
+                    "Fallback D-Bus call on 'org.mpris.MediaPlayer2.spotify' succeeded"
+                );
+                return true;
             }
         }
-        false
     }
+
+    // 2. Only if D-Bus failed/timed out, execute playerctl fallback once
+    run_playerctl_fallback(requested_bus, method).await
 }
 
 impl Default for MprisService {
@@ -116,34 +178,11 @@ impl Default for MprisService {
 
 async fn run_mpris_listener(players: Arc<ArcSwap<Vec<MediaTrack>>>) {
     loop {
-        let initial_players = poll_all_players_dbus().await;
-        players.store(Arc::new(initial_players));
-
-        let conn = match get_session_conn().await {
-            Some(c) => c,
-            None => {
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                continue;
-            }
-        };
-
-        if let Ok(dbus) = DBusProxy::new(&conn).await {
-            if let Ok(mut name_changed) = dbus.receive_name_owner_changed().await {
-                let _ = tokio::time::timeout(Duration::from_secs(1), async {
-                    use zbus::export::ordered_stream::OrderedStreamExt;
-                    while let Some(signal) = name_changed.next().await {
-                        if let Ok(args) = signal.args() {
-                            if args.name.as_str().starts_with("org.mpris.MediaPlayer2.") {
-                                break;
-                            }
-                        }
-                    }
-                })
-                .await;
-            }
+        let current_players = poll_all_players_dbus().await;
+        if !current_players.is_empty() || players.load().is_empty() {
+            players.store(Arc::new(current_players));
         }
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
 
@@ -151,42 +190,42 @@ async fn poll_single_player(connection: &Connection, mpris_name: String) -> Opti
     let builder = MediaPlayer2PlayerProxy::builder(connection)
         .destination(mpris_name.as_str())
         .ok()?;
-    let proxy = tokio::time::timeout(Duration::from_millis(150), builder.build())
+    let proxy = tokio::time::timeout(Duration::from_millis(800), builder.build())
         .await
         .ok()?
         .ok()?;
 
-    let status = tokio::time::timeout(Duration::from_millis(100), proxy.playback_status())
+    let status = tokio::time::timeout(Duration::from_millis(500), proxy.playback_status())
         .await
-        .ok()?
         .ok()
+        .and_then(|r| r.ok())
         .unwrap_or_default();
 
     let is_playing = status == "Playing";
 
-    let metadata = tokio::time::timeout(Duration::from_millis(100), proxy.metadata())
+    let metadata = tokio::time::timeout(Duration::from_millis(500), proxy.metadata())
         .await
-        .ok()?
         .ok()
+        .and_then(|r| r.ok())
         .unwrap_or_default();
 
     let (title, artist, album, art_url, length_micros) = parse_metadata(&metadata);
 
-    let position_micros = tokio::time::timeout(Duration::from_millis(50), proxy.position())
+    let position_micros = tokio::time::timeout(Duration::from_millis(300), proxy.position())
         .await
-        .ok()?
-        .ok();
-
-    let can_go_next = tokio::time::timeout(Duration::from_millis(50), proxy.can_go_next())
-        .await
-        .ok()?
         .ok()
+        .and_then(|r| r.ok());
+
+    let can_go_next = tokio::time::timeout(Duration::from_millis(300), proxy.can_go_next())
+        .await
+        .ok()
+        .and_then(|r| r.ok())
         .unwrap_or(true);
 
-    let can_go_previous = tokio::time::timeout(Duration::from_millis(50), proxy.can_go_previous())
+    let can_go_previous = tokio::time::timeout(Duration::from_millis(300), proxy.can_go_previous())
         .await
-        .ok()?
         .ok()
+        .and_then(|r| r.ok())
         .unwrap_or(true);
 
     let has_media = !title.is_empty() && title != "Silence";
@@ -218,8 +257,14 @@ async fn poll_single_player(connection: &Connection, mpris_name: String) -> Opti
         None
     };
 
+    let final_bus_name = if mpris_name.to_lowercase().contains("spotify") {
+        "org.mpris.MediaPlayer2.spotify".to_string()
+    } else {
+        mpris_name
+    };
+
     Some(MediaTrack {
-        bus_name: mpris_name,
+        bus_name: final_bus_name,
         title,
         artist,
         album,
@@ -249,7 +294,7 @@ async fn poll_all_players_dbus() -> Vec<MediaTrack> {
         &(),
     );
 
-    let reply = match tokio::time::timeout(Duration::from_millis(200), list_call)
+    let reply = match tokio::time::timeout(Duration::from_millis(2000), list_call)
         .await
         .ok()
         .and_then(|r| r.ok())
@@ -266,7 +311,10 @@ async fn poll_all_players_dbus() -> Vec<MediaTrack> {
     let mpris_names: Vec<String> = names
         .into_iter()
         .filter(|name| {
-            name.starts_with("org.mpris.MediaPlayer2.") && !name.ends_with(".playerctld")
+            let n = name.to_lowercase();
+            n.starts_with("org.mpris.mediaplayer2.")
+                && !n.ends_with(".playerctld")
+                && n.contains("spotify")
         })
         .collect();
 
