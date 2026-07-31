@@ -269,8 +269,9 @@ impl Render for ClipboardModule {
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .w_full()
-            .h_full()
+            .w(px(460.0))
+            .min_h(px(240.0))
+            .max_h(px(480.0))
             .p_4()
             .gap_3()
             .child(
