@@ -36,7 +36,7 @@ impl CapsuleMode {
             CapsuleMode::CreateTheme => (348.0, 500.0),
             CapsuleMode::Wallpaper => (700.0, 240.0),
             CapsuleMode::Clipboard => (360.0, 480.0),
-            CapsuleMode::Emoji => (400.0, 420.0),
+            CapsuleMode::Emoji => (520.0, 500.0),
         }
     }
 
