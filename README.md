@@ -10,7 +10,7 @@ A Wayland desktop shell built with GPUI (The Zed UI framework). It's inspired by
 Capsule is designed to be lighter and faster than shells created with Quickshell. It's what you might call an all-in-one solution, since the shell is based on a Capsule / Dynamic Island that expands and changes its content depending on the, This eliminates the need for external apps such as rofi/walker, waybar, etc.
 
 ## Showcase
-
+https://github.com/user-attachments/assets/b3539fce-8281-4b5a-bdf0-1cf1d3646f44
 
 ## Features
 ### Capsule & Widgets

@@ -10,6 +10,7 @@ use super::{CapsuleMode, MARGIN_TOP, apple_island_ease};
 use super::modules::clipboard::{ClipboardEvent, ClipboardModule};
 use super::modules::create_theme::CreateThemeModule;
 use super::modules::dashboard::DashboardModule;
+use super::modules::emoji::{EmojiEvent, EmojiModule};
 use super::modules::idle::IdleModule;
 use super::modules::launcher::LauncherModule;
 use super::modules::notification::NotificationModule;
@@ -30,6 +31,7 @@ pub struct Capsule {
     create_theme_view: Entity<CreateThemeModule>,
     wallpaper_view: Entity<WallpaperModule>,
     clipboard_view: Entity<ClipboardModule>,
+    emoji_view: Entity<EmojiModule>,
     panel_manager: PanelManager,
     current_width: f32,
     current_height: f32,
@@ -544,6 +546,20 @@ impl Capsule {
         )
         .detach();
 
+        let emoji_view = cx.new(EmojiModule::new);
+        cx.observe(&emoji_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(&emoji_view, |capsule, _, event: &EmojiEvent, cx| match event {
+            EmojiEvent::Close => {
+                capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+            }
+        })
+        .detach();
+
         Self {
             mode: CapsuleMode::Default,
             idle_view,
@@ -556,6 +572,7 @@ impl Capsule {
             create_theme_view,
             wallpaper_view,
             clipboard_view,
+            emoji_view,
             panel_manager: PanelManager::new(),
             current_width: initial_w,
             current_height: initial_h,
@@ -847,6 +864,14 @@ impl Capsule {
                 };
                 self.start_transition_internal(target, None, cx);
             }
+            services::IpcCommand::ToggleEmoji => {
+                let target = if self.mode == CapsuleMode::Emoji {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::Emoji
+                };
+                self.start_transition_internal(target, None, cx);
+            }
             services::IpcCommand::ShowLauncher => {
                 self.start_transition_internal(CapsuleMode::Launcher, None, cx);
             }
@@ -858,6 +883,9 @@ impl Capsule {
             }
             services::IpcCommand::ShowClipboard => {
                 self.start_transition_internal(CapsuleMode::Clipboard, None, cx);
+            }
+            services::IpcCommand::ShowEmoji => {
+                self.start_transition_internal(CapsuleMode::Emoji, None, cx);
             }
             services::IpcCommand::Hide | services::IpcCommand::Default => {
                 self.start_transition_internal(CapsuleMode::Default, None, cx);
@@ -922,7 +950,8 @@ impl Render for Capsule {
             || self.mode == CapsuleMode::Polkit
             || self.mode == CapsuleMode::SelectTheme
             || self.mode == CapsuleMode::CreateTheme
-            || self.mode == CapsuleMode::Clipboard;
+            || self.mode == CapsuleMode::Clipboard
+            || self.mode == CapsuleMode::Emoji;
 
         if is_modal {
             window.set_input_region(None);
@@ -953,6 +982,7 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::CreateTheme
                 || self.mode == CapsuleMode::Wallpaper
                 || self.mode == CapsuleMode::Clipboard
+                || self.mode == CapsuleMode::Emoji
             {
                 window.activate_window();
             }
@@ -965,6 +995,12 @@ impl Render for Capsule {
                 let _ = self.clipboard_view.update(cx, |clip, cx| {
                     clip.reload_items(cx);
                     clip.focus(window, cx);
+                });
+            }
+            if self.mode == CapsuleMode::Emoji {
+                let _ = self.emoji_view.update(cx, |emoji, cx| {
+                    emoji.reload_items(cx);
+                    emoji.focus(window, cx);
                 });
             }
             if self.mode == CapsuleMode::Wallpaper {
@@ -981,6 +1017,7 @@ impl Render for Capsule {
             CapsuleMode::CreateTheme => Some(self.create_theme_view.clone().into_any_element()),
             CapsuleMode::Wallpaper => Some(self.wallpaper_view.clone().into_any_element()),
             CapsuleMode::Clipboard => Some(self.clipboard_view.clone().into_any_element()),
+            CapsuleMode::Emoji => Some(self.emoji_view.clone().into_any_element()),
             CapsuleMode::Volume => Some(self.volume_view.clone().into_any_element()),
             CapsuleMode::Notification => Some(self.notification_view.clone().into_any_element()),
             CapsuleMode::Dashboard => Some(self.dashboard_view.clone().into_any_element()),

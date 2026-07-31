@@ -20,6 +20,7 @@ pub enum CapsuleMode {
     CreateTheme,
     Wallpaper,
     Clipboard,
+    Emoji,
 }
 
 impl CapsuleMode {
@@ -35,6 +36,7 @@ impl CapsuleMode {
             CapsuleMode::CreateTheme => (348.0, 500.0),
             CapsuleMode::Wallpaper => (700.0, 240.0),
             CapsuleMode::Clipboard => (360.0, 480.0),
+            CapsuleMode::Emoji => (460.0, 480.0),
         }
     }
 
@@ -50,6 +52,7 @@ impl CapsuleMode {
             CapsuleMode::CreateTheme => 42.0,
             CapsuleMode::Wallpaper => 32.0,
             CapsuleMode::Clipboard => 42.0,
+            CapsuleMode::Emoji => 42.0,
         }
     }
 }
