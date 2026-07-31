@@ -296,7 +296,7 @@ impl Render for EmojiModule {
             ("flags", "Banderas"),
         ];
 
-        let visible_cat_count = 5;
+        let visible_cat_count = 4;
         let max_offset = categories.len().saturating_sub(visible_cat_count);
         let category_offset = self.category_offset.min(max_offset);
 
@@ -311,22 +311,23 @@ impl Render for EmojiModule {
             .justify_between()
             .w_full()
             .px_2()
-            .py_1p5()
+            .py_1()
             .rounded_2xl()
             .bg(theme.surface().opacity(0.35))
             .border_1()
             .border_color(theme.surface().opacity(0.6))
-            .gap_2();
+            .gap_1p5();
 
-        // Chevron Left Button
+        // Chevron Left Button (flex_none prevents squishing)
         cat_bar = cat_bar.child(
             div()
                 .id("cat-prev-btn")
+                .flex_none()
                 .flex()
                 .items_center()
                 .justify_center()
-                .px_2p5()
-                .py_1p5()
+                .w(px(28.0))
+                .h(px(28.0))
                 .rounded_xl()
                 .bg(if can_prev_cat {
                     theme.surface().opacity(0.6)
@@ -351,7 +352,7 @@ impl Render for EmojiModule {
                 .child(
                     svg()
                         .path("chevron-left.svg")
-                        .size(px(14.0))
+                        .size(px(13.0))
                         .text_color(if can_prev_cat {
                             theme.foreground()
                         } else {
@@ -364,9 +365,9 @@ impl Render for EmojiModule {
             .flex()
             .flex_row()
             .items_center()
-            .gap_2()
+            .gap_1p5()
             .flex_1()
-            .justify_center()
+            .justify_between()
             .overflow_hidden();
 
         let visible_cats = &categories[category_offset..(category_offset + visible_cat_count).min(categories.len())];
@@ -387,8 +388,8 @@ impl Render for EmojiModule {
             cat_items_container = cat_items_container.child(
                 div()
                     .id(format!("cat-{cat_id}"))
-                    .px_3()
-                    .py_1p5()
+                    .px_2p5()
+                    .py_1()
                     .rounded_xl()
                     .text_size(px(11.0))
                     .font_weight(if is_cat_active {
@@ -425,15 +426,16 @@ impl Render for EmojiModule {
 
         cat_bar = cat_bar.child(cat_items_container);
 
-        // Chevron Right Button
+        // Chevron Right Button (flex_none prevents squishing or clipping)
         cat_bar = cat_bar.child(
             div()
                 .id("cat-next-btn")
+                .flex_none()
                 .flex()
                 .items_center()
                 .justify_center()
-                .px_2p5()
-                .py_1p5()
+                .w(px(28.0))
+                .h(px(28.0))
                 .rounded_xl()
                 .bg(if can_next_cat {
                     theme.surface().opacity(0.6)
@@ -458,7 +460,7 @@ impl Render for EmojiModule {
                 .child(
                     svg()
                         .path("chevron-right.svg")
-                        .size(px(14.0))
+                        .size(px(13.0))
                         .text_color(if can_next_cat {
                             theme.foreground()
                         } else {
