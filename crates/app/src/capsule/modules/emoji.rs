@@ -5,7 +5,7 @@ use gpui::{
 use services::{EmojiItem, EmojiService};
 use ui::theme::Theme;
 
-const ITEMS_PER_PAGE: usize = 48; // 8 columns x 6 rows = 48 visible emojis
+const ITEMS_PER_PAGE: usize = 40; // 8 columns x 5 rows = 40 visible emojis per page (perfect zero-clipping layout)
 const COLS: usize = 8;
 
 pub enum EmojiEvent {
@@ -502,7 +502,7 @@ impl Render for EmojiModule {
                         .items_center()
                         .justify_center()
                         .w(px(54.0))
-                        .h(px(44.0))
+                        .h(px(40.0))
                         .rounded_2xl()
                         .cursor_pointer()
                         .bg(if is_selected {
@@ -540,7 +540,7 @@ impl Render for EmojiModule {
                         }))
                         .child(
                             div()
-                                .text_size(px(22.0))
+                                .text_size(px(20.0))
                                 .child(item.emoji.clone()),
                         ),
                 );
