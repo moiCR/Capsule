@@ -15,9 +15,19 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 APP_NAME="capsule"
 GITHUB_REPO="moiCR/Capsule"
 DOTFILES_REPO="https://github.com/moiCR/Capsule-Plus.git"
-INSTALL_DIR="${HOME}/.local/bin"
-DESKTOP_DIR="${HOME}/.local/share/applications"
-CONFIG_DIR="${HOME}/.config/capsule"
+INSTALL_DIR="/usr/local/bin"
+DESKTOP_DIR="/usr/share/applications"
+
+REAL_USER="${SUDO_USER:-$USER}"
+USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6 2>/dev/null || echo "$HOME")
+CONFIG_DIR="${USER_HOME}/.config/capsule"
+
+SUDO=""
+if [[ $EUID -ne 0 ]]; then
+    if command -v sudo &>/dev/null; then
+        SUDO="sudo"
+    fi
+fi
 
 echo -e "${BLUE}"
 cat << 'EOF'
@@ -111,8 +121,8 @@ fi
 # 1. Fetch Latest Release Binary or Compile from Source via Temporary Clone
 echo -e "----------------------------------------"
 info "Installing Capsule binary for $ARCH ($TARGET)..."
-mkdir -p "$INSTALL_DIR"
-mkdir -p "$DESKTOP_DIR"
+$SUDO mkdir -p "$INSTALL_DIR"
+$SUDO mkdir -p "$DESKTOP_DIR"
 
 BINARY_INSTALLED=false
 
@@ -124,8 +134,8 @@ if curl -sSL --fail "$RELEASE_URL" -o "$TEMP_BIN_DIR/capsule.tar.gz"; then
     info "Extracting release asset..."
     if tar -xzf "$TEMP_BIN_DIR/capsule.tar.gz" -C "$TEMP_BIN_DIR"; then
         if [[ -f "$TEMP_BIN_DIR/capsule" ]]; then
-            cp "$TEMP_BIN_DIR/capsule" "$INSTALL_DIR/capsule"
-            chmod +x "$INSTALL_DIR/capsule"
+            $SUDO cp "$TEMP_BIN_DIR/capsule" "$INSTALL_DIR/capsule"
+            $SUDO chmod +x "$INSTALL_DIR/capsule"
             BINARY_INSTALLED=true
             success "Capsule binary installed from GitHub Release to $INSTALL_DIR/capsule"
         fi
@@ -146,13 +156,13 @@ if [[ "$BINARY_INSTALLED" == false ]]; then
                 cargo build --release
             )
             if [[ -f "$SRC_TEMP_DIR/target/release/capsule" ]]; then
-                cp "$SRC_TEMP_DIR/target/release/capsule" "$INSTALL_DIR/capsule"
-                chmod +x "$INSTALL_DIR/capsule"
+                $SUDO cp "$SRC_TEMP_DIR/target/release/capsule" "$INSTALL_DIR/capsule"
+                $SUDO chmod +x "$INSTALL_DIR/capsule"
                 BINARY_INSTALLED=true
                 success "Capsule binary compiled from source and installed to $INSTALL_DIR/capsule"
             elif [[ -f "$SRC_TEMP_DIR/target/release/Capsule" ]]; then
-                cp "$SRC_TEMP_DIR/target/release/Capsule" "$INSTALL_DIR/capsule"
-                chmod +x "$INSTALL_DIR/capsule"
+                $SUDO cp "$SRC_TEMP_DIR/target/release/Capsule" "$INSTALL_DIR/capsule"
+                $SUDO chmod +x "$INSTALL_DIR/capsule"
                 BINARY_INSTALLED=true
                 success "Capsule binary compiled from source and installed to $INSTALL_DIR/capsule"
             fi
@@ -167,7 +177,7 @@ fi
 
 # Desktop Entry
 DESKTOP_FILE="$DESKTOP_DIR/capsule.desktop"
-cat << EOF > "$DESKTOP_FILE"
+cat << EOF | $SUDO tee "$DESKTOP_FILE" > /dev/null
 [Desktop Entry]
 Name=Capsule
 Comment=Dynamic Island Bar for Linux
