@@ -27,7 +27,7 @@ impl CapsuleMode {
     pub fn dimensions(&self) -> (f32, f32) {
         match self {
             CapsuleMode::Default => (138.0, 42.0),
-            CapsuleMode::Dashboard => (440.0, 500.0),
+            CapsuleMode::Dashboard => (490.0, 520.0),
             CapsuleMode::Notification => (348.0, 68.0),
             CapsuleMode::Launcher => (348.0, 480.0),
             CapsuleMode::Volume => (280.0, 48.0),

@@ -251,7 +251,7 @@ impl Render for DashboardModule {
             )
             .flex()
             .flex_col()
-            .w(px(440.0))
+            .w(px(490.0))
             .p_4()
             .gap_3p5()
             .overflow_hidden()
