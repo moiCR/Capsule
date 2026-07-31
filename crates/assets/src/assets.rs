@@ -6,6 +6,20 @@ use std::borrow::Cow;
 #[folder = "icons"]
 pub struct Assets;
 
+#[derive(RustEmbed)]
+#[folder = "fonts"]
+pub struct FontAssets;
+
+pub fn load_fonts() -> Vec<Cow<'static, [u8]>> {
+    let mut fonts = Vec::new();
+    for file in FontAssets::iter() {
+        if let Some(f) = FontAssets::get(file.as_ref()) {
+            fonts.push(f.data);
+        }
+    }
+    fonts
+}
+
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         if path.is_empty() {

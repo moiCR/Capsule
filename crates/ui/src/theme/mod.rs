@@ -1,13 +1,15 @@
 pub mod templates;
 pub mod theme_manager;
 
-use gpui::{Hsla, Rgba};
+use gpui::{Hsla, Rgba, SharedString};
 use serde::{Deserialize, Serialize};
 pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Theme {
     pub mode: ThemeMode,
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
     pub background_color: Color,
     pub background_color_alt: Color,
     pub surface_color: Color,
@@ -16,6 +18,10 @@ pub struct Theme {
     pub accent_color: Color,
     pub red_color: Color,
     pub green_color: Color,
+}
+
+fn default_font_family() -> String {
+    "Geist".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +34,7 @@ impl Default for Theme {
     fn default() -> Self {
         Theme {
             mode: ThemeMode::Dark,
+            font_family: "Geist".to_string(),
             background_color: Color::from("#000000"),
             background_color_alt: Color::from("#1A1A1A"),
             surface_color: Color::from("#2D2D2D"),
@@ -41,6 +48,13 @@ impl Default for Theme {
 }
 
 impl Theme {
+    pub fn font_family(&self) -> SharedString {
+        if self.font_family.is_empty() {
+            SharedString::from("Geist")
+        } else {
+            SharedString::from(self.font_family.clone())
+        }
+    }
     pub fn background(&self) -> Hsla {
         self.background_color.to_hsla()
     }

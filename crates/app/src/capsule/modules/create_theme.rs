@@ -77,6 +77,7 @@ impl CreateThemeModule {
     fn current_preview_theme(&self) -> Theme {
         Theme {
             mode: self.mode.clone(),
+            font_family: "Geist".to_string(),
             background_color: Color::from(self.bg_color.clone()),
             background_color_alt: Color::from(self.bg_alt_color.clone()),
             surface_color: Color::from(self.surface_color.clone()),

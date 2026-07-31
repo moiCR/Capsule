@@ -62,6 +62,11 @@ async fn main() {
     let app = application().with_assets(Assets {});
 
     app.run(|cx| {
+        let font_data = assets::load_fonts();
+        if let Err(err) = cx.text_system().add_fonts(font_data) {
+            eprintln!("Failed to load Geist fonts: {err}");
+        }
+
         let app_state = services::AppState::new();
         cx.set_global(app_state);
 

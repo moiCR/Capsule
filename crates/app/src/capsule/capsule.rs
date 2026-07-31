@@ -1102,6 +1102,7 @@ impl Render for Capsule {
 
         let mut pill_container = div()
             .id("capsule-pill")
+            .font_family(theme.font_family())
             .w(px(self.current_width))
             .h(px(self.current_height))
             .rounded(px(self.current_radius))
