@@ -1,11 +1,11 @@
 use gpui::{
     Context, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
-    Window, div, prelude::*, px, svg,
+    ScrollHandle, Window, div, prelude::*, px, svg,
 };
 use services::{EmojiItem, EmojiService};
 use ui::theme::Theme;
 
-const ITEMS_PER_PAGE: usize = 56; // 7 columns x 8 rows = 56 visible emojis (60 FPS rendering)
+const ITEMS_PER_PAGE: usize = 42; // 7 columns x 6 rows = 42 visible emojis (perfect fit in 420px height)
 const COLS: usize = 7;
 
 pub enum EmojiEvent {
@@ -22,6 +22,7 @@ pub struct EmojiModule {
     pub selected_index: usize,
     pub page: usize,
     focus_handle: FocusHandle,
+    scroll_handle: ScrollHandle,
     pub mouse_moved: bool,
 }
 
@@ -31,6 +32,7 @@ impl EmojiModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let service = EmojiService::new();
         let focus_handle = cx.focus_handle();
+        let scroll_handle = ScrollHandle::new();
         let all_emojis = service.load_emojis().as_slice();
         let filtered: Vec<&'static EmojiItem> = all_emojis.iter().collect();
 
@@ -44,6 +46,7 @@ impl EmojiModule {
             selected_index: 0,
             page: 0,
             focus_handle,
+            scroll_handle,
             mouse_moved: false,
         }
     }
@@ -57,6 +60,7 @@ impl EmojiModule {
         self.selected_index = 0;
         self.page = 0;
         self.mouse_moved = false;
+        self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
 
@@ -104,6 +108,7 @@ impl EmojiModule {
         self.filter_items();
         self.selected_index = 0;
         self.page = 0;
+        self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
 
@@ -112,6 +117,7 @@ impl EmojiModule {
         self.filter_items();
         self.selected_index = 0;
         self.page = 0;
+        self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
 
@@ -170,6 +176,7 @@ impl EmojiModule {
         if total_pages > 0 {
             self.page = (self.page + 1) % total_pages;
             self.selected_index = self.page * ITEMS_PER_PAGE;
+            self.scroll_handle.scroll_to_item(0);
             cx.notify();
         }
     }
@@ -183,6 +190,7 @@ impl EmojiModule {
                 self.page -= 1;
             }
             self.selected_index = self.page * ITEMS_PER_PAGE;
+            self.scroll_handle.scroll_to_item(0);
             cx.notify();
         }
     }
@@ -304,7 +312,7 @@ impl Render for EmojiModule {
             .px_1()
             .gap_1();
 
-        // Chevron Left Button
+        // Chevron Left Button with active scale feedback
         cat_bar = cat_bar.child(
             div()
                 .id("cat-prev-btn")
@@ -312,7 +320,7 @@ impl Render for EmojiModule {
                 .items_center()
                 .justify_center()
                 .p_1()
-                .rounded_md()
+                .rounded_lg()
                 .bg(theme.surface().opacity(0.3))
                 .cursor_pointer()
                 .hover(|s| {
@@ -322,6 +330,7 @@ impl Render for EmojiModule {
                         s
                     }
                 })
+                .active(|s| if can_prev_cat { s.opacity(0.6) } else { s })
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if this.category_offset > 0 {
                         this.category_offset -= 1;
@@ -367,10 +376,15 @@ impl Render for EmojiModule {
             cat_items_container = cat_items_container.child(
                 div()
                     .id(format!("cat-{cat_id}"))
-                    .px_2()
-                    .py_0p5()
-                    .rounded_md()
+                    .px_2p5()
+                    .py_1()
+                    .rounded_lg()
                     .text_size(px(10.0))
+                    .font_weight(if is_cat_active {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::MEDIUM
+                    })
                     .cursor_pointer()
                     .bg(if is_cat_active {
                         theme.accent()
@@ -382,6 +396,15 @@ impl Render for EmojiModule {
                     } else {
                         theme.foreground_muted()
                     })
+                    .hover(|s| {
+                        if !is_cat_active {
+                            s.bg(theme.surface().opacity(0.7))
+                                .text_color(theme.foreground())
+                        } else {
+                            s
+                        }
+                    })
+                    .active(|s| s.opacity(0.7))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_category(cat_val.clone(), cx);
                     }))
@@ -399,7 +422,7 @@ impl Render for EmojiModule {
                 .items_center()
                 .justify_center()
                 .p_1()
-                .rounded_md()
+                .rounded_lg()
                 .bg(theme.surface().opacity(0.3))
                 .cursor_pointer()
                 .hover(|s| {
@@ -409,6 +432,7 @@ impl Render for EmojiModule {
                         s
                     }
                 })
+                .active(|s| if can_next_cat { s.opacity(0.6) } else { s })
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if this.category_offset + visible_cat_count < categories.len() {
                         this.category_offset += 1;
@@ -427,7 +451,7 @@ impl Render for EmojiModule {
                 ),
         );
 
-        // Render current page items (56 visible items maximum)
+        // Render current page items
         let page_start = self.page * ITEMS_PER_PAGE;
         let page_end = (page_start + ITEMS_PER_PAGE).min(total_items);
         let current_page_items = if page_start < total_items {
@@ -438,9 +462,11 @@ impl Render for EmojiModule {
 
         let mut grid_rows = div()
             .id("emoji-grid-container")
+            .track_scroll(&self.scroll_handle)
             .flex()
             .flex_col()
             .flex_1()
+            .overflow_hidden()
             .gap_1p5();
 
         for (row_idx, chunk) in current_page_items.chunks(COLS).enumerate() {
@@ -457,8 +483,8 @@ impl Render for EmojiModule {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(52.0))
-                        .h(px(40.0))
+                        .w(px(50.0))
+                        .h(px(36.0))
                         .rounded_xl()
                         .cursor_pointer()
                         .bg(if is_selected {
@@ -479,6 +505,7 @@ impl Render for EmojiModule {
                                 s
                             }
                         })
+                        .active(|s| s.opacity(0.7))
                         .on_mouse_move(cx.listener(move |this, _, _, cx| {
                             if !this.mouse_moved {
                                 this.mouse_moved = true;
@@ -495,7 +522,7 @@ impl Render for EmojiModule {
                         }))
                         .child(
                             div()
-                                .text_size(px(20.0))
+                                .text_size(px(18.0))
                                 .child(item.emoji.clone()),
                         ),
                 );
@@ -519,12 +546,13 @@ impl Render for EmojiModule {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .px_2()
+                    .px_2p5()
                     .py_1()
                     .rounded_lg()
                     .bg(theme.surface().opacity(0.4))
                     .cursor_pointer()
                     .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .active(|s| s.opacity(0.7))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.prev_page(cx);
                     }))
@@ -537,6 +565,7 @@ impl Render for EmojiModule {
                     .child(
                         div()
                             .text_size(px(10.0))
+                            .font_weight(FontWeight::MEDIUM)
                             .text_color(theme.foreground())
                             .child("Anterior"),
                     ),
@@ -544,7 +573,7 @@ impl Render for EmojiModule {
             .child(
                 div()
                     .text_size(px(10.0))
-                    .font_weight(FontWeight::MEDIUM)
+                    .font_weight(FontWeight::BOLD)
                     .text_color(theme.foreground_muted())
                     .child(format!("{current_page_num} / {total_pages}")),
             )
@@ -554,18 +583,20 @@ impl Render for EmojiModule {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .px_2()
+                    .px_2p5()
                     .py_1()
                     .rounded_lg()
                     .bg(theme.surface().opacity(0.4))
                     .cursor_pointer()
                     .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .active(|s| s.opacity(0.7))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.next_page(cx);
                     }))
                     .child(
                         div()
                             .text_size(px(10.0))
+                            .font_weight(FontWeight::MEDIUM)
                             .text_color(theme.foreground())
                             .child("Siguiente"),
                     )
@@ -582,10 +613,10 @@ impl Render for EmojiModule {
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .w(px(440.0))
-            .h(px(460.0))
-            .p_4()
-            .gap_2p5()
+            .w(px(400.0))
+            .max_h(px(400.0))
+            .p_3p5()
+            .gap_2()
             .child(
                 // Header
                 div()
@@ -603,13 +634,13 @@ impl Render for EmojiModule {
                             .child(
                                 svg()
                                     .path("sparkles.svg")
-                                    .size(px(16.0))
+                                    .size(px(15.0))
                                     .text_color(theme.accent()),
                             )
                             .child(
                                 div()
                                     .font_weight(FontWeight::BOLD)
-                                    .text_size(px(13.0))
+                                    .text_size(px(12.0))
                                     .text_color(theme.foreground())
                                     .child("EMOJIS"),
                             ),
