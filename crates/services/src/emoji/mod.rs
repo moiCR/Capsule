@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EmojiItem {
@@ -8,6 +9,8 @@ pub struct EmojiItem {
     pub category: String,
 }
 
+static EMOJI_CACHE: OnceLock<Vec<EmojiItem>> = OnceLock::new();
+
 #[derive(Clone, Default)]
 pub struct EmojiService;
 
@@ -16,9 +19,11 @@ impl EmojiService {
         Self
     }
 
-    pub fn load_emojis(&self) -> Vec<EmojiItem> {
-        let json_str = include_str!("../../../assets/emoji.json");
-        serde_json::from_str(json_str).unwrap_or_default()
+    pub fn load_emojis(&self) -> &'static Vec<EmojiItem> {
+        EMOJI_CACHE.get_or_init(|| {
+            let json_str = include_str!("../../../assets/emoji.json");
+            serde_json::from_str(json_str).unwrap_or_default()
+        })
     }
 
     pub fn copy_emoji(&self, emoji: &str) -> bool {

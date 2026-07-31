@@ -1,9 +1,12 @@
 use gpui::{
     Context, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
-    ScrollHandle, Window, div, prelude::*, px, svg,
+    Window, div, prelude::*, px, svg,
 };
 use services::{EmojiItem, EmojiService};
 use ui::theme::Theme;
+
+const ITEMS_PER_PAGE: usize = 56; // 7 columns x 8 rows = 56 visible emojis (60 FPS rendering)
+const COLS: usize = 7;
 
 pub enum EmojiEvent {
     Close,
@@ -13,11 +16,12 @@ pub struct EmojiModule {
     service: EmojiService,
     query: String,
     category_filter: Option<String>,
-    items: Vec<EmojiItem>,
-    filtered_items: Vec<EmojiItem>,
+    category_offset: usize,
+    items: &'static [EmojiItem],
+    filtered_items: Vec<&'static EmojiItem>,
     pub selected_index: usize,
+    pub page: usize,
     focus_handle: FocusHandle,
-    scroll_handle: ScrollHandle,
     pub mouse_moved: bool,
 }
 
@@ -27,18 +31,19 @@ impl EmojiModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let service = EmojiService::new();
         let focus_handle = cx.focus_handle();
-        let scroll_handle = ScrollHandle::new();
-        let initial_items = service.load_emojis();
+        let all_emojis = service.load_emojis().as_slice();
+        let filtered: Vec<&'static EmojiItem> = all_emojis.iter().collect();
 
         Self {
             service,
             query: String::new(),
             category_filter: None,
-            items: initial_items.clone(),
-            filtered_items: initial_items,
+            category_offset: 0,
+            items: all_emojis,
+            filtered_items: filtered,
             selected_index: 0,
+            page: 0,
             focus_handle,
-            scroll_handle,
             mouse_moved: false,
         }
     }
@@ -46,12 +51,18 @@ impl EmojiModule {
     pub fn reload_items(&mut self, cx: &mut Context<Self>) {
         self.query.clear();
         self.category_filter = None;
-        self.items = self.service.load_emojis();
+        self.category_offset = 0;
+        self.items = self.service.load_emojis().as_slice();
         self.filter_items();
         self.selected_index = 0;
+        self.page = 0;
         self.mouse_moved = false;
-        self.scroll_handle.scroll_to_item(0);
         cx.notify();
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.filtered_items.clear();
+        self.query.clear();
     }
 
     fn filter_items(&mut self) {
@@ -80,7 +91,6 @@ impl EmojiModule {
 
                 item.keywords.iter().any(|kw| kw.to_lowercase().contains(&q))
             })
-            .cloned()
             .collect();
     }
 
@@ -93,7 +103,7 @@ impl EmojiModule {
         self.query = new_query;
         self.filter_items();
         self.selected_index = 0;
-        self.scroll_handle.scroll_to_item(0);
+        self.page = 0;
         cx.notify();
     }
 
@@ -101,15 +111,14 @@ impl EmojiModule {
         self.category_filter = category;
         self.filter_items();
         self.selected_index = 0;
-        self.scroll_handle.scroll_to_item(0);
+        self.page = 0;
         cx.notify();
     }
 
     fn select_next(&mut self, cx: &mut Context<Self>) {
         if !self.filtered_items.is_empty() {
             self.selected_index = (self.selected_index + 1) % self.filtered_items.len();
-            let row = self.selected_index / 8;
-            self.scroll_handle.scroll_to_item(row);
+            self.page = self.selected_index / ITEMS_PER_PAGE;
             cx.notify();
         }
     }
@@ -121,40 +130,59 @@ impl EmojiModule {
             } else {
                 self.selected_index -= 1;
             }
-            let row = self.selected_index / 8;
-            self.scroll_handle.scroll_to_item(row);
+            self.page = self.selected_index / ITEMS_PER_PAGE;
             cx.notify();
         }
     }
 
     fn select_row_down(&mut self, cx: &mut Context<Self>) {
         if !self.filtered_items.is_empty() {
-            if self.selected_index + 8 < self.filtered_items.len() {
-                self.selected_index += 8;
+            if self.selected_index + COLS < self.filtered_items.len() {
+                self.selected_index += COLS;
             } else {
-                self.selected_index = (self.selected_index + 8) % self.filtered_items.len();
+                self.selected_index = (self.selected_index + COLS) % self.filtered_items.len();
             }
-            let row = self.selected_index / 8;
-            self.scroll_handle.scroll_to_item(row);
+            self.page = self.selected_index / ITEMS_PER_PAGE;
             cx.notify();
         }
     }
 
     fn select_row_up(&mut self, cx: &mut Context<Self>) {
         if !self.filtered_items.is_empty() {
-            if self.selected_index >= 8 {
-                self.selected_index -= 8;
+            if self.selected_index >= COLS {
+                self.selected_index -= COLS;
             } else {
                 let remainder = self.selected_index;
-                let last_full = (self.filtered_items.len() / 8) * 8;
+                let last_full = (self.filtered_items.len() / COLS) * COLS;
                 if last_full + remainder < self.filtered_items.len() {
                     self.selected_index = last_full + remainder;
-                } else if last_full >= 8 {
-                    self.selected_index = last_full - 8 + remainder;
+                } else if last_full >= COLS {
+                    self.selected_index = last_full - COLS + remainder;
                 }
             }
-            let row = self.selected_index / 8;
-            self.scroll_handle.scroll_to_item(row);
+            self.page = self.selected_index / ITEMS_PER_PAGE;
+            cx.notify();
+        }
+    }
+
+    fn next_page(&mut self, cx: &mut Context<Self>) {
+        let total_pages = (self.filtered_items.len() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE.max(1);
+        if total_pages > 0 {
+            self.page = (self.page + 1) % total_pages;
+            self.selected_index = self.page * ITEMS_PER_PAGE;
+            cx.notify();
+        }
+    }
+
+    fn prev_page(&mut self, cx: &mut Context<Self>) {
+        let total_pages = (self.filtered_items.len() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE.max(1);
+        if total_pages > 0 {
+            if self.page == 0 {
+                self.page = total_pages - 1;
+            } else {
+                self.page -= 1;
+            }
+            self.selected_index = self.page * ITEMS_PER_PAGE;
             cx.notify();
         }
     }
@@ -162,6 +190,7 @@ impl EmojiModule {
     fn copy_selected(&mut self, cx: &mut Context<Self>) -> bool {
         if let Some(item) = self.filtered_items.get(self.selected_index) {
             self.service.copy_emoji(&item.emoji);
+            self.clear_cache();
             cx.emit(EmojiEvent::Close);
             true
         } else {
@@ -192,10 +221,17 @@ impl EmojiModule {
                 self.mouse_moved = false;
                 self.select_row_up(cx);
             }
+            "pageup" => {
+                self.prev_page(cx);
+            }
+            "pagedown" => {
+                self.next_page(cx);
+            }
             "enter" => {
                 self.copy_selected(cx);
             }
             "escape" => {
+                self.clear_cache();
                 cx.emit(EmojiEvent::Close);
             }
             "backspace" => {
@@ -227,46 +263,119 @@ impl Render for EmojiModule {
 
         let query = self.query.clone();
         let selected_index = self.selected_index;
-        let is_empty = self.filtered_items.is_empty();
+        let total_items = self.filtered_items.len();
+        let is_empty = total_items == 0;
+
+        let total_pages = if total_items == 0 {
+            1
+        } else {
+            (total_items + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE
+        };
+
+        if self.page >= total_pages {
+            self.page = 0;
+        }
 
         let categories = [
             ("all", "Todos"),
             ("people", "Emociones"),
             ("nature", "Naturaleza"),
             ("food", "Comida"),
-            ("activity", "Actividad"),
+            ("activity", "Actividades"),
             ("travel", "Viajes"),
             ("objects", "Objetos"),
             ("symbols", "Símbolos"),
             ("flags", "Banderas"),
         ];
 
-        let mut cat_bar = div().flex().flex_row().items_center().gap_1().overflow_hidden();
-        for (cat_id, cat_label) in categories {
-            let is_cat_active = match (cat_id, self.category_filter.as_deref()) {
+        let visible_cat_count = 5;
+        let max_offset = categories.len().saturating_sub(visible_cat_count);
+        let category_offset = self.category_offset.min(max_offset);
+
+        let can_prev_cat = category_offset > 0;
+        let can_next_cat = category_offset < max_offset;
+
+        let mut cat_bar = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .px_1()
+            .gap_1();
+
+        // Chevron Left Button
+        cat_bar = cat_bar.child(
+            div()
+                .id("cat-prev-btn")
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_1()
+                .rounded_md()
+                .bg(theme.surface().opacity(0.3))
+                .cursor_pointer()
+                .hover(|s| {
+                    if can_prev_cat {
+                        s.bg(theme.surface().opacity(0.7))
+                    } else {
+                        s
+                    }
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if this.category_offset > 0 {
+                        this.category_offset -= 1;
+                        cx.notify();
+                    }
+                }))
+                .child(
+                    svg()
+                        .path("chevron-left.svg")
+                        .size(px(12.0))
+                        .text_color(if can_prev_cat {
+                            theme.foreground()
+                        } else {
+                            theme.foreground_muted().opacity(0.4)
+                        }),
+                ),
+        );
+
+        let mut cat_items_container = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_1()
+            .flex_1()
+            .justify_center()
+            .overflow_hidden();
+
+        let visible_cats = &categories[category_offset..(category_offset + visible_cat_count).min(categories.len())];
+
+        for (cat_id, cat_label) in visible_cats {
+            let is_cat_active = match (*cat_id, self.category_filter.as_deref()) {
                 ("all", None) => true,
                 (cat, Some(active)) => cat.eq_ignore_ascii_case(active),
                 _ => false,
             };
 
-            let cat_val = if cat_id == "all" {
+            let cat_val = if *cat_id == "all" {
                 None
             } else {
-                Some(cat_id.to_string())
+                Some((*cat_id).to_string())
             };
 
-            cat_bar = cat_bar.child(
+            cat_items_container = cat_items_container.child(
                 div()
                     .id(format!("cat-{cat_id}"))
-                    .px_2p5()
-                    .py_1()
-                    .rounded_lg()
-                    .text_size(px(11.0))
+                    .px_2()
+                    .py_0p5()
+                    .rounded_md()
+                    .text_size(px(10.0))
                     .cursor_pointer()
                     .bg(if is_cat_active {
                         theme.accent()
                     } else {
-                        theme.surface().opacity(0.4)
+                        theme.surface().opacity(0.3)
                     })
                     .text_color(if is_cat_active {
                         theme.background()
@@ -276,25 +385,69 @@ impl Render for EmojiModule {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_category(cat_val.clone(), cx);
                     }))
-                    .child(cat_label),
+                    .child(*cat_label),
             );
         }
 
+        cat_bar = cat_bar.child(cat_items_container);
+
+        // Chevron Right Button
+        cat_bar = cat_bar.child(
+            div()
+                .id("cat-next-btn")
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_1()
+                .rounded_md()
+                .bg(theme.surface().opacity(0.3))
+                .cursor_pointer()
+                .hover(|s| {
+                    if can_next_cat {
+                        s.bg(theme.surface().opacity(0.7))
+                    } else {
+                        s
+                    }
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if this.category_offset + visible_cat_count < categories.len() {
+                        this.category_offset += 1;
+                        cx.notify();
+                    }
+                }))
+                .child(
+                    svg()
+                        .path("chevron-right.svg")
+                        .size(px(12.0))
+                        .text_color(if can_next_cat {
+                            theme.foreground()
+                        } else {
+                            theme.foreground_muted().opacity(0.4)
+                        }),
+                ),
+        );
+
+        // Render current page items (56 visible items maximum)
+        let page_start = self.page * ITEMS_PER_PAGE;
+        let page_end = (page_start + ITEMS_PER_PAGE).min(total_items);
+        let current_page_items = if page_start < total_items {
+            &self.filtered_items[page_start..page_end]
+        } else {
+            &[]
+        };
+
         let mut grid_rows = div()
             .id("emoji-grid-container")
-            .track_scroll(&self.scroll_handle)
             .flex()
             .flex_col()
             .flex_1()
-            .overflow_scroll()
             .gap_1p5();
 
-        let chunk_size = 8;
-        for (row_idx, chunk) in self.filtered_items.chunks(chunk_size).enumerate() {
+        for (row_idx, chunk) in current_page_items.chunks(COLS).enumerate() {
             let mut row = div().flex().flex_row().items_center().justify_start().gap_1p5();
 
             for (col_idx, item) in chunk.iter().enumerate() {
-                let global_idx = row_idx * chunk_size + col_idx;
+                let global_idx = page_start + row_idx * COLS + col_idx;
                 let is_selected = global_idx == selected_index;
                 let item_emoji = item.emoji.clone();
 
@@ -304,8 +457,8 @@ impl Render for EmojiModule {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(46.0))
-                        .h(px(46.0))
+                        .w(px(52.0))
+                        .h(px(40.0))
                         .rounded_xl()
                         .cursor_pointer()
                         .bg(if is_selected {
@@ -337,11 +490,12 @@ impl Render for EmojiModule {
                         }))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.service.copy_emoji(&item_emoji);
+                            this.clear_cache();
                             cx.emit(EmojiEvent::Close);
                         }))
                         .child(
                             div()
-                                .text_size(px(22.0))
+                                .text_size(px(20.0))
                                 .child(item.emoji.clone()),
                         ),
                 );
@@ -350,16 +504,88 @@ impl Render for EmojiModule {
             grid_rows = grid_rows.child(row);
         }
 
+        // Page navigation controls
+        let current_page_num = self.page + 1;
+        let pagination_bar = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .pt_1()
+            .child(
+                div()
+                    .id("page-prev-btn")
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .px_2()
+                    .py_1()
+                    .rounded_lg()
+                    .bg(theme.surface().opacity(0.4))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.prev_page(cx);
+                    }))
+                    .child(
+                        svg()
+                            .path("chevron-left.svg")
+                            .size(px(12.0))
+                            .text_color(theme.foreground()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(10.0))
+                            .text_color(theme.foreground())
+                            .child("Anterior"),
+                    ),
+            )
+            .child(
+                div()
+                    .text_size(px(10.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted())
+                    .child(format!("{current_page_num} / {total_pages}")),
+            )
+            .child(
+                div()
+                    .id("page-next-btn")
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .px_2()
+                    .py_1()
+                    .rounded_lg()
+                    .bg(theme.surface().opacity(0.4))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.next_page(cx);
+                    }))
+                    .child(
+                        div()
+                            .text_size(px(10.0))
+                            .text_color(theme.foreground())
+                            .child("Siguiente"),
+                    )
+                    .child(
+                        svg()
+                            .path("chevron-right.svg")
+                            .size(px(12.0))
+                            .text_color(theme.foreground()),
+                    ),
+            );
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .w(px(460.0))
-            .min_h(px(320.0))
-            .max_h(px(480.0))
+            .w(px(440.0))
+            .h(px(460.0))
             .p_4()
-            .gap_3()
+            .gap_2p5()
             .child(
                 // Header
                 div()
@@ -376,8 +602,8 @@ impl Render for EmojiModule {
                             .gap_2()
                             .child(
                                 svg()
-                                    .path("smile.svg")
-                                    .size(px(18.0))
+                                    .path("sparkles.svg")
+                                    .size(px(16.0))
                                     .text_color(theme.accent()),
                             )
                             .child(
@@ -385,7 +611,7 @@ impl Render for EmojiModule {
                                     .font_weight(FontWeight::BOLD)
                                     .text_size(px(13.0))
                                     .text_color(theme.foreground())
-                                    .child("SELECTOR DE EMOJIS"),
+                                    .child("EMOJIS"),
                             ),
                     ),
             )
@@ -397,7 +623,7 @@ impl Render for EmojiModule {
                     .items_center()
                     .gap_2()
                     .px_3()
-                    .py_2()
+                    .py_1p5()
                     .rounded_xl()
                     .bg(theme.surface().opacity(0.5))
                     .border_1()
@@ -405,12 +631,12 @@ impl Render for EmojiModule {
                     .child(
                         svg()
                             .path("search.svg")
-                            .size(px(14.0))
+                            .size(px(13.0))
                             .text_color(theme.foreground_muted()),
                     )
                     .child(
                         div()
-                            .text_size(px(12.0))
+                            .text_size(px(11.0))
                             .text_color(if query.is_empty() {
                                 theme.foreground_muted()
                             } else {
@@ -425,7 +651,7 @@ impl Render for EmojiModule {
             )
             .child(cat_bar)
             .child(
-                // Grid of items
+                // Grid of items or empty state
                 if is_empty {
                     div()
                         .id("emoji-empty-state")
@@ -435,10 +661,11 @@ impl Render for EmojiModule {
                         .justify_center()
                         .text_size(px(12.0))
                         .text_color(theme.foreground_muted())
-                        .child("No se encontraron emojis que coincidan.")
+                        .child("No se encontraron emojis.")
                 } else {
                     grid_rows
                 },
             )
+            .child(pagination_bar)
     }
 }
