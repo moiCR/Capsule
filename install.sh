@@ -47,18 +47,27 @@ case "$ARCH" in
     *)       error "Unsupported architecture: $ARCH" ;;
 esac
 
-info "Detecting AUR helper..."
+info "Detecting package manager..."
+PKG_MANAGER=""
 AUR_HELPER=""
+DNF_CMD=""
 
 if command -v paru &>/dev/null; then
     AUR_HELPER="paru"
+    PKG_MANAGER="aur"
+    info "Found AUR helper: paru"
 elif command -v yay &>/dev/null; then
     AUR_HELPER="yay"
-fi
-
-if [[ -z "$AUR_HELPER" ]]; then
-    warn "Neither 'paru' nor 'yay' was found on your system."
-    warn "Package dependency checks will be skipped. Ensure required libraries are installed."
+    PKG_MANAGER="aur"
+    info "Found AUR helper: yay"
+elif command -v dnf &>/dev/null || command -v dnf5 &>/dev/null; then
+    PKG_MANAGER="dnf"
+    if command -v dnf5 &>/dev/null; then
+        DNF_CMD="dnf5"
+    else
+        DNF_CMD="dnf"
+    fi
+    info "Found package manager: ${DNF_CMD}"
 fi
 
 ARCH_LINUX_DEPENDENCIES=(
@@ -80,9 +89,28 @@ ARCH_LINUX_DEPENDENCIES=(
     "tar"
 )
 
-if [[ -n "$AUR_HELPER" ]]; then
+FEDORA_DEPENDENCIES=(
+    "vulkan-loader"
+    "libxkbcommon"
+    "wayland-devel"
+    "qt5ct"
+    "qt6ct"
+    "gsettings-desktop-schemas"
+    "zenity"
+    "dconf"
+    "xdg-desktop-portal"
+    "xdg-desktop-portal-gtk"
+    "adw-gtk3-theme"
+    "lz4-devel"
+    "cargo"
+    "git"
+    "curl"
+    "tar"
+)
+
+if [[ "$PKG_MANAGER" == "aur" ]]; then
     TO_INSTALL=()
-    info "Checking system dependencies..."
+    info "Checking Arch Linux dependencies..."
     for pkg in "${ARCH_LINUX_DEPENDENCIES[@]}"; do
         if "$AUR_HELPER" -Qq "$pkg" &>/dev/null; then
             echo -e "  \e[1;32m✔ \e[0m $pkg \e[2minstalled\e[0m"
@@ -115,6 +143,70 @@ if [[ -n "$AUR_HELPER" ]]; then
     else
         echo -e "----------------------------------------"
         info "All dependencies are already installed!"
+    fi
+elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+    TO_INSTALL=()
+    info "Checking Fedora dependencies..."
+    for pkg in "${FEDORA_DEPENDENCIES[@]}"; do
+        if rpm -q "$pkg" &>/dev/null; then
+            echo -e "  \e[1;32m✔ \e[0m $pkg \e[2minstalled\e[0m"
+        else
+            echo -e "  \e[1;33m➜ \e[0m $pkg \e[1mwill be installed\e[0m"
+            TO_INSTALL+=("$pkg")
+        fi
+    done
+
+    if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
+        echo -e "----------------------------------------"
+        info "Packages to install: ${#TO_INSTALL[@]}"
+
+        confirm="y"
+        if [[ -t 0 ]]; then
+            read -rp "Do you want to proceed with the installation of dependencies? [Y/n] " confirm
+        fi
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
+
+        if [[ "$confirm" == "n" || "$confirm" == "no" ]]; then
+            info "Package installation skipped by user."
+        else
+            info "Starting installation using $DNF_CMD..."
+            if $SUDO "$DNF_CMD" install -y "${TO_INSTALL[@]}"; then
+                success "All packages installed successfully!"
+            else
+                error "Installation failed. Please check the logs above."
+            fi
+        fi
+    else
+        echo -e "----------------------------------------"
+        info "All dependencies are already installed!"
+    fi
+else
+    warn "No supported package manager ('paru', 'yay', or 'dnf') was found on your system."
+    warn "Package dependency checks will be skipped. Ensure required libraries are installed."
+fi
+
+# Ensure Wayland wallpaper daemon (awww / swww) is available
+if ! command -v awww &>/dev/null && ! command -v swww &>/dev/null; then
+    echo -e "----------------------------------------"
+    info "Neither 'awww' nor 'swww' wallpaper daemon was detected."
+    if command -v cargo &>/dev/null; then
+        info "Compiling and installing 'awww' wallpaper daemon from source..."
+        AWWW_TEMP_DIR=$(mktemp -d)
+        if git clone --depth 1 https://codeberg.org/LGFae/awww.git "$AWWW_TEMP_DIR"; then
+            (
+                cd "$AWWW_TEMP_DIR"
+                cargo build --release
+            )
+            if [[ -f "$AWWW_TEMP_DIR/target/release/awww" && -f "$AWWW_TEMP_DIR/target/release/awww-daemon" ]]; then
+                $SUDO cp "$AWWW_TEMP_DIR/target/release/awww" "$INSTALL_DIR/awww"
+                $SUDO cp "$AWWW_TEMP_DIR/target/release/awww-daemon" "$INSTALL_DIR/awww-daemon"
+                $SUDO chmod +x "$INSTALL_DIR/awww" "$INSTALL_DIR/awww-daemon"
+                success "'awww' wallpaper daemon installed successfully to $INSTALL_DIR!"
+            fi
+        fi
+        rm -rf "$AWWW_TEMP_DIR"
+    else
+        warn "Cargo is not available to compile 'awww'. Please install cargo or 'awww' manually."
     fi
 fi
 
