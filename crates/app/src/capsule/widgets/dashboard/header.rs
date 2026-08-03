@@ -79,8 +79,8 @@ pub fn render_header(
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap_1_5()
-                        .px_2()
+                        .gap(px(3.0))
+                        .px_1p5()
                         .py_1()
                         .rounded_full()
                         .bg(theme.surface())
@@ -96,6 +96,7 @@ pub fn render_header(
                             svg()
                                 .path(power_icon)
                                 .size(px(13.0))
+                                .flex_shrink_0()
                                 .text_color(theme.accent()),
                         )
                         .child(div().text_color(theme.foreground()).child(power_label)),

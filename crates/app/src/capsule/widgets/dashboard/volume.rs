@@ -31,11 +31,10 @@ pub fn render_volume_widget(
         .w_full()
         .px_3()
         .py_2()
-        .rounded_xl()
+        .rounded(px(24.0))
         .bg(theme.surface().opacity(0.4))
         .gap_2p5()
         .child(
-            // Mute / Volume icon button
             div()
                 .id("volume-mute-btn")
                 .flex()

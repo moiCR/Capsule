@@ -11,7 +11,7 @@ pub fn render_notifications_widget(
     let notifications = NotificationStore::global().get_all_notifications();
     let is_empty = notifications.is_empty();
 
-    let box_height = if is_empty { px(56.0) } else { px(130.0) };
+    let box_height = px(130.0);
 
     let notifications_box = div()
         .id("notifications-container-box")
@@ -22,7 +22,7 @@ pub fn render_notifications_widget(
         .bg(theme.background_alt())
         .border_1()
         .border_color(theme.surface())
-        .rounded(px(42.0))
+        .rounded(px(24.0))
         .p_3()
         .overflow_hidden();
 
@@ -78,7 +78,7 @@ pub fn render_notifications_widget(
                     .bg(theme.surface().opacity(0.4))
                     .border_1()
                     .border_color(theme.surface())
-                    .rounded(px(42.0))
+                    .rounded(px(18.0))
                     .p_2p5()
                     .child(
                         div()

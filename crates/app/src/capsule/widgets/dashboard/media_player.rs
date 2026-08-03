@@ -1,4 +1,4 @@
-use gpui::{Context, FontWeight, IntoElement, black, div, prelude::*, px, svg};
+use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::{MediaTrack, MprisService};
 use ui::theme::Theme;
 
@@ -11,54 +11,46 @@ pub fn render_media_player_widget(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let card_radius = px(42.0);
+    let card_radius = px(24.0);
 
-    let player_header = div()
+    let player_badge = div()
         .flex()
-        .flex_row()
         .items_center()
-        .justify_between()
-        .w_full()
+        .justify_center()
+        .p_1p5()
+        .bg(theme.surface().opacity(0.8))
+        .rounded_full()
         .child(
-            div()
-                .flex()
-                .items_center()
-                .px_2()
-                .py_0p5()
-                .bg(theme.surface().opacity(0.8))
-                .rounded_full()
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(theme.accent())
-                        .child(if active_track.has_media {
-                            active_track.player_name.clone()
-                        } else {
-                            "Media".to_string()
-                        }),
-                ),
-        )
-        .child(if total_players > 1 {
-            let mut dots = div().flex().flex_row().items_center().gap_1p5();
-            for i in 0..total_players {
-                let is_active = i == selected_player_idx;
-                dots = dots.child(
-                    div()
-                        .w(px(if is_active { 12.0 } else { 5.0 }))
-                        .h(px(5.0))
-                        .rounded_full()
-                        .bg(if is_active {
-                            theme.accent()
-                        } else {
-                            theme.foreground_muted()
-                        }),
-                );
-            }
-            dots.into_any_element()
-        } else {
-            div().into_any_element()
-        });
+            svg()
+                .path(if active_track.player_name.to_lowercase().contains("spotify") || !active_track.has_media {
+                    "spotify.svg"
+                } else {
+                    "music.svg"
+                })
+                .size(px(16.0))
+                .text_color(theme.accent()),
+        );
+
+    let player_dots = if total_players > 1 {
+        let mut dots = div().flex().flex_row().items_center().gap_1p5();
+        for i in 0..total_players {
+            let is_active = i == selected_player_idx;
+            dots = dots.child(
+                div()
+                    .w(px(if is_active { 12.0 } else { 5.0 }))
+                    .h(px(5.0))
+                    .rounded_full()
+                    .bg(if is_active {
+                        theme.accent()
+                    } else {
+                        theme.foreground_muted()
+                    }),
+            );
+        }
+        div().absolute().top_3().right_3().child(dots).into_any_element()
+    } else {
+        div().into_any_element()
+    };
 
     let media_controls = div()
         .flex()
@@ -121,8 +113,8 @@ pub fn render_media_player_widget(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(28.0))
-                        .h(px(28.0))
+                        .w(px(32.0))
+                        .h(px(32.0))
                         .bg(theme.accent().opacity(0.3))
                         .rounded_full()
                         .child(
@@ -132,7 +124,7 @@ pub fn render_media_player_widget(
                                 } else {
                                     "play.svg"
                                 })
-                                .size(px(14.0))
+                                .size(px(15.0))
                                 .text_color(theme.accent()),
                         ),
                 ),
@@ -168,76 +160,61 @@ pub fn render_media_player_widget(
     div()
         .id("media-player-card")
         .relative()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
         .w_full()
+        .flex_shrink_0()
         .rounded(card_radius)
+        .bg(theme.surface().opacity(0.35))
         .border_1()
-        .border_color(theme.surface())
-        .when_some(active_track.local_art_path.clone(), |this, art_path| {
-            this.child(
-                gpui::img(std::path::PathBuf::from(art_path))
-                    .absolute()
-                    .inset_0()
-                    .w_full()
-                    .h_full()
-                    .rounded(card_radius)
-                    .object_fit(gpui::ObjectFit::Cover),
-            )
-        })
-        .child(div().absolute().inset_0().rounded(card_radius).bg(
-            if active_track.local_art_path.is_some() {
-                black().opacity(0.65)
-            } else {
-                theme.background_alt()
-            },
-        ))
+        .border_color(theme.surface().opacity(0.6))
+        .p_3p5()
+        .gap_2()
+        .child(player_dots)
+        .child(player_badge)
         .child(
             div()
-                .relative()
                 .flex()
                 .flex_col()
+                .items_center()
+                .justify_center()
                 .w_full()
-                .p_3()
-                .gap_2()
-                .child(player_header)
+                .overflow_hidden()
+                .gap_0p5()
                 .child(
                     div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
+                        .font_weight(FontWeight::BOLD)
+                        .text_size(px(15.0))
+                        .text_color(theme.foreground())
+                        .text_center()
                         .w_full()
-                        .overflow_hidden()
-                        .gap_1()
-                        .pt_1()
-                        .child(
-                            div()
-                                .font_weight(FontWeight::BOLD)
-                                .text_size(px(14.0))
-                                .text_color(theme.foreground())
-                                .truncate()
-                                .child(if active_track.has_media {
-                                    active_track.title.clone()
-                                } else {
-                                    let lang = if cx.has_global::<ui::language::Language>() {
-                                        cx.global::<ui::language::Language>().clone()
-                                    } else {
-                                        ui::language::Language::default()
-                                    };
-                                    lang.dashboard.no_media
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.0))
-                                .text_color(theme.foreground_muted())
-                                .truncate()
-                                .child(if active_track.has_media {
-                                    active_track.artist.clone()
-                                } else {
-                                    "Silence".to_string()
-                                }),
-                        )
-                        .child(media_controls),
-                ),
+                        .truncate()
+                        .child(if active_track.has_media {
+                            active_track.title.clone()
+                        } else {
+                            let lang = if cx.has_global::<ui::language::Language>() {
+                                cx.global::<ui::language::Language>().clone()
+                            } else {
+                                ui::language::Language::default()
+                            };
+                            lang.dashboard.no_media
+                        }),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(theme.foreground_muted())
+                        .text_center()
+                        .w_full()
+                        .truncate()
+                        .child(if active_track.has_media {
+                            active_track.artist.clone()
+                        } else {
+                            "Silence".to_string()
+                        }),
+                )
+                .child(media_controls),
         )
 }
