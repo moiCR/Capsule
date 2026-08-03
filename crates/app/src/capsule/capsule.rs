@@ -319,6 +319,10 @@ impl Capsule {
                             }
                         }
 
+                        let _ = capsule.polkit_view.update(cx, |p, cx| {
+                            p.poll_result(cx);
+                        });
+
                         if cx.has_global::<ui::theme::theme_manager::ThemeManager>() {
                             let theme_updated = cx
                                 .global_mut::<ui::theme::theme_manager::ThemeManager>()

@@ -10,6 +10,8 @@ pub enum PolkitEvent {
     Cancelled,
 }
 
+use std::sync::{Arc, Mutex};
+
 pub struct PolkitModule {
     pub request: Option<PolkitAuthRequest>,
     pub password: String,
@@ -18,6 +20,7 @@ pub struct PolkitModule {
     pub is_authenticating: bool,
     pub focus_handle: FocusHandle,
     pub responder: Option<oneshot::Sender<Result<(), String>>>,
+    pub pending_result: Option<Arc<Mutex<Option<Result<(), String>>>>>,
 }
 
 impl EventEmitter<PolkitEvent> for PolkitModule {}
@@ -33,6 +36,7 @@ impl PolkitModule {
             is_authenticating: false,
             focus_handle,
             responder: None,
+            pending_result: None,
         }
     }
 
@@ -48,6 +52,7 @@ impl PolkitModule {
         self.error_msg = None;
         self.is_authenticating = false;
         self.responder = Some(responder);
+        self.pending_result = None;
         cx.notify();
     }
 
@@ -60,7 +65,46 @@ impl PolkitModule {
         self.error_msg = None;
         self.is_authenticating = false;
         self.request = None;
+        self.pending_result = None;
         cx.emit(PolkitEvent::Cancelled);
+    }
+
+    pub fn poll_result(&mut self, cx: &mut Context<Self>) {
+        if !self.is_authenticating {
+            return;
+        }
+        let finished_res = if let Some(ref slot) = self.pending_result {
+            if let Ok(guard) = slot.lock() {
+                guard.clone()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(res) = finished_res {
+            self.is_authenticating = false;
+            self.pending_result = None;
+            match res {
+                Ok(()) => {
+                    if let Some(responder) = self.responder.take() {
+                        let _ = responder.send(Ok(()));
+                    }
+                    self.password.clear();
+                    self.is_error = false;
+                    self.error_msg = None;
+                    self.request = None;
+                    cx.emit(PolkitEvent::Authenticated);
+                }
+                Err(err_msg) => {
+                    self.is_error = true;
+                    self.error_msg = Some(err_msg);
+                    self.password.clear();
+                    cx.notify();
+                }
+            }
+        }
     }
 
     pub fn submit_auth(&mut self, cx: &mut Context<Self>) {
@@ -78,46 +122,29 @@ impl PolkitModule {
             ("root".to_string(), "".to_string())
         };
 
+        let result_slot = Arc::new(Mutex::new(None));
+        self.pending_result = Some(result_slot.clone());
         self.is_authenticating = true;
         self.is_error = false;
         self.error_msg = None;
         cx.notify();
 
-        cx.spawn(async move |this, cx| {
+        tokio::spawn(async move {
             let res = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(30),
                 authenticate_user(&user_name, &cookie, &password),
             )
             .await;
 
-            let res = match res {
+            let final_res = match res {
                 Ok(inner) => inner,
                 Err(_) => Err("La autenticación ha tardado demasiado y ha expirado.".to_string()),
             };
 
-            let _ = this.update(cx, |this: &mut Self, cx| {
-                this.is_authenticating = false;
-                match res {
-                    Ok(()) => {
-                        if let Some(responder) = this.responder.take() {
-                            let _ = responder.send(Ok(()));
-                        }
-                        this.password.clear();
-                        this.is_error = false;
-                        this.error_msg = None;
-                        this.request = None;
-                        cx.emit(PolkitEvent::Authenticated);
-                    }
-                    Err(err_msg) => {
-                        this.is_error = true;
-                        this.error_msg = Some(err_msg);
-                        this.password.clear();
-                        cx.notify();
-                    }
-                }
-            });
-        })
-        .detach();
+            if let Ok(mut guard) = result_slot.lock() {
+                *guard = Some(final_res);
+            }
+        });
     }
 
     fn handle_key_down(
@@ -192,6 +219,14 @@ impl PolkitModule {
                 }
             }
             "escape" => self.cancel(cx),
+            "space" => {
+                if !ctrl {
+                    self.password.push(' ');
+                    self.is_error = false;
+                    self.error_msg = None;
+                    cx.notify();
+                }
+            }
             _ => {
                 let text = event
                     .keystroke

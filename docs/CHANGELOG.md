@@ -1,13 +1,9 @@
-# Changelog
+## What's New in v0.1.1
 
-All notable changes to Capsule will be documented in this file.
+### News
+- None
 
-## [v0.1.0]
-
-### Added
-- Initial release of Capsule Dynamic Island Shell for Wayland.
-- GPUI GPU-accelerated interface architecture with context-aware expanding bar.
-- App launcher, calculator, clipboard manager, theme switcher, and wallpaper manager.
-- Native Polkit authentication agent integration.
-- Full compatibility with Arch Linux and Fedora 44.
-- Automatic installation and build script (`install.sh`).
+### Fixes
+- The Dashboard widgets were redesigned due to inconsistencies in the UI
+- The issue with the SVG for the power button, where its icon was not displaying, has been fixed.
+- The bug that caused the authentication module to get stuck on "Verifying password" has been fixed; it should now work normally.

@@ -22,6 +22,7 @@ chrono = { workspace = true }
 regex = "1.10"
 image = "0.25"
 arc-swap = "1.7"
+libc = "0.2.189"
 futures.workspace = true
 futures-signals.workspace = true
 
