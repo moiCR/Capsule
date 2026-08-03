@@ -91,8 +91,10 @@ ARCH_LINUX_DEPENDENCIES=(
 
 FEDORA_DEPENDENCIES=(
     "vulkan-loader"
+    "vulkan-loader-devel"
     "libxkbcommon"
     "wayland-devel"
+    "wayland-protocols-devel"
     "qt5ct"
     "qt6ct"
     "gsettings-desktop-schemas"
