@@ -133,7 +133,7 @@ pub fn render_wifi_mini_panel(
 
     div()
         .w(px(PANEL_W))
-        .h(px(panel_h))
+        .max_h(px(panel_h))
         .p_2p5()
         .gap_1p5()
         .rounded(px(20.0))

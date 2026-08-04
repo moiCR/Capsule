@@ -1,9 +1,9 @@
-## What's New in v0.1.1
+## What's New in v0.2.0
 
 ### News
-- None
+- Se agrego un nuevo sistema de paneles para la escabilidad de la aplicacion
+- Se agrego un panel nuevo para la pantalla de bloqueo
 
 ### Fixes
-- The Dashboard widgets were redesigned due to inconsistencies in the UI
-- The issue with the SVG for the power button, where its icon was not displaying, has been fixed.
-- The bug that caused the authentication module to get stuck on "Verifying password" has been fixed; it should now work normally.
+- Se arreglo el espacio muerto en los satelittes.
+- Se removio el script de actualizacion de idioma a nivel de sistema el cual ocasionaba errores.

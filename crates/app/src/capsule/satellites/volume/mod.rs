@@ -108,7 +108,7 @@ pub fn render_volume_mini_panel(
 
     div()
         .w(px(PANEL_W))
-        .h(px(panel_h))
+        .max_h(px(panel_h))
         .p_2p5()
         .gap_2()
         .rounded(px(20.0))

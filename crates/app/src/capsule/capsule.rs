@@ -894,6 +894,9 @@ impl Capsule {
             services::IpcCommand::Hide | services::IpcCommand::Default => {
                 self.start_transition_internal(CapsuleMode::Default, None, cx);
             }
+            services::IpcCommand::Lock => {
+                crate::panel::LockScreenPanel::open_all(cx);
+            }
             services::IpcCommand::Quit => {
                 cx.quit();
             }

@@ -46,8 +46,6 @@ impl LanguageManager {
             current_language: language,
             last_modified: mtime,
         };
-
-        manager.apply_language_to_system();
         manager
     }
 
@@ -123,7 +121,6 @@ impl LanguageManager {
                     self.last_modified = Some(mtime);
                     if let Ok(lang) = Self::load(&path) {
                         self.current_language = lang;
-                        self.apply_language_to_system();
                         return true;
                     }
                 }
@@ -138,84 +135,6 @@ impl LanguageManager {
         if let Err(error) = Self::save(&path, &self.current_language) {
             eprintln!("Failed to save current_language.toml: {error}");
         }
-        self.apply_language_to_system();
-    }
-
-    pub fn apply_language_to_system(&self) {
-        let lang = self.current_language.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let locale = lang.locale.clone().unwrap_or_else(|| match lang.code.as_str() {
-                "es" => "es_ES.UTF-8".to_string(),
-                "en" => "en_US.UTF-8".to_string(),
-                other => format!("{}_{}.UTF-8", other.to_lowercase(), other.to_uppercase()),
-            });
-
-            let lang_env = lang.language_env.clone().unwrap_or_else(|| match lang.code.as_str() {
-                "es" => "es_ES:es".to_string(),
-                "en" => "en_US:en".to_string(),
-                other => format!(
-                    "{}_{}:{}",
-                    other.to_lowercase(),
-                    other.to_uppercase(),
-                    other.to_lowercase()
-                ),
-            });
-
-            // 1. Update current process environment
-            unsafe {
-                std::env::set_var("LANG", &locale);
-                std::env::remove_var("LC_ALL");
-                std::env::set_var("LANGUAGE", &lang_env);
-            }
-
-            // 2. Update D-Bus activation environment for desktop apps
-            let _ = Command::new("dbus-update-activation-environment")
-                .args([
-                    "--systemd",
-                    &format!("LANG={locale}"),
-                    &format!("LANGUAGE={lang_env}"),
-                ])
-                .status();
-
-            // 3. Update systemd user environment
-            let _ = Command::new("systemctl")
-                .args([
-                    "--user",
-                    "set-environment",
-                    &format!("LANG={locale}"),
-                    &format!("LANGUAGE={lang_env}"),
-                ])
-                .status();
-
-            let _ = Command::new("systemctl")
-                .args(["--user", "unset-environment", "LC_ALL"])
-                .status();
-
-            // 4. Save to ~/.config/locale.conf & ~/.config/capsule/locale_env.sh
-            if let Some(config_dir) = dirs::config_dir() {
-                let locale_conf = config_dir.join("locale.conf");
-                let content = format!("LANG={locale}\nLANGUAGE={lang_env}\n");
-                let _ = fs::write(locale_conf, content);
-
-                let capsule_dir = config_dir.join("capsule");
-                let _ = fs::create_dir_all(&capsule_dir);
-                let env_sh = capsule_dir.join("locale_env.sh");
-                let sh_content = format!(
-                    "export LANG=\"{locale}\"\nunset LC_ALL\nexport LANGUAGE=\"{lang_env}\"\n"
-                );
-                let _ = fs::write(env_sh, sh_content);
-
-                let fish_conf_dir = config_dir.join("fish").join("conf.d");
-                if fish_conf_dir.exists() || fs::create_dir_all(&fish_conf_dir).is_ok() {
-                    let fish_file = fish_conf_dir.join("capsule_locale.fish");
-                    let fish_content = format!(
-                        "set -gx LANG {locale}\nset -e LC_ALL\nset -gx LANGUAGE {lang_env}\n"
-                    );
-                    let _ = fs::write(fish_file, fish_content);
-                }
-            }
-        });
     }
 
     fn load(path: &PathBuf) -> Result<Language, Box<dyn std::error::Error>> {
