@@ -255,10 +255,13 @@ impl Render for LockScreen {
 
 impl Drop for LockScreen {
     fn drop(&mut self) {
-        if self.is_primary && std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
-            let _ = std::process::Command::new("hyprctl")
-                .args(["eval", "hl.dsp.submap(\"reset\")"])
-                .spawn();
+        if self.is_primary {
+            crate::panel::LockScreenPanel::mark_closed();
+            if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+                let _ = std::process::Command::new("hyprctl")
+                    .args(["eval", "hl.dsp.submap(\"reset\")"])
+                    .spawn();
+            }
         }
     }
 }

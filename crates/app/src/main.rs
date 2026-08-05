@@ -66,6 +66,32 @@ async fn main() {
         let app_state = services::AppState::new();
         cx.set_global(app_state);
 
+        let (lock_tx, mut lock_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
+        let idle_service = cx.global::<services::AppState>().idle.clone();
+        let mut idle_rx = idle_service.subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = idle_rx.recv().await {
+                match event {
+                    services::IdleEvent::IdleTimeoutTriggered => {
+                        let _ = lock_tx.send(());
+                    }
+                }
+            }
+        });
+
+        cx.spawn(|async_cx: &mut gpui::AsyncApp| {
+            let async_app = async_cx.clone();
+            async move {
+                while lock_rx.recv().await.is_some() {
+                    let _ = async_app.update(|cx: &mut gpui::App| {
+                        panel::LockScreenPanel::open_all(cx);
+                    });
+                }
+            }
+        })
+        .detach();
+
         let theme_manager = ui::theme::theme_manager::ThemeManager::new();
         cx.set_global(theme_manager.current_theme.clone());
         cx.set_global(theme_manager);

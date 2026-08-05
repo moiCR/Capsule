@@ -2,8 +2,10 @@ pub mod app_state;
 pub mod calendar;
 pub mod clipboard;
 pub mod compositor;
+pub mod config;
 pub mod dbus_util;
 pub mod emoji;
+pub mod idle;
 pub mod ipc;
 pub mod launcher;
 pub mod logger;
@@ -24,7 +26,9 @@ pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccess
 pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService};
 pub use compositor::CompositorService;
+pub use config::AppConfig;
 pub use emoji::{EmojiItem, EmojiService};
+pub use idle::{IdleEvent, IdleService};
 pub use ipc::{
     IpcCommand, IpcMessage, IpcSubscriber, decode_command, pop_ipc_command, push_ipc_command,
 };

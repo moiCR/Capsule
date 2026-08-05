@@ -14,6 +14,7 @@ use crate::lockscreen::LockScreen;
 pub enum PanelMode {
     Capsule,
     LockScreen,
+    Settings,
 }
 
 pub struct CapsulePanel;
@@ -59,9 +60,21 @@ impl CapsulePanel {
     }
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static IS_LOCKSCREEN_OPEN: AtomicBool = AtomicBool::new(false);
+
 pub struct LockScreenPanel;
 
 impl LockScreenPanel {
+    pub fn is_open() -> bool {
+        IS_LOCKSCREEN_OPEN.load(Ordering::SeqCst)
+    }
+
+    pub fn mark_closed() {
+        IS_LOCKSCREEN_OPEN.store(false, Ordering::SeqCst);
+    }
+
     pub fn window_options(display: &dyn PlatformDisplay) -> WindowOptions {
         WindowOptions {
             display_id: Some(display.id()),
@@ -83,6 +96,11 @@ impl LockScreenPanel {
     }
 
     pub fn open_all(cx: &mut gpui::App) -> Vec<WindowHandle<LockScreen>> {
+        if IS_LOCKSCREEN_OPEN.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            eprintln!("[LockScreenPanel] Lockscreen is already open. Skipping open_all.");
+            return Vec::new();
+        }
+
         if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
             let _ = std::process::Command::new("hyprctl")
                 .args(["eval", "hl.dsp.submap(\"lock\")"])
