@@ -1,4 +1,4 @@
-## What's New in v0.2.2
+## What's New in v0.2.1
 
 ### Features
 - None
