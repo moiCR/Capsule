@@ -109,7 +109,7 @@ impl LockScreenPanel {
 
         if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
             let _ = std::process::Command::new("hyprctl")
-                .args(["eval", "hl.dsp.submap(\"lock\")"])
+                .args(["dispatch", "submap", "lock"])
                 .spawn();
         }
 

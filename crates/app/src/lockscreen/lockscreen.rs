@@ -196,11 +196,22 @@ impl Render for LockScreen {
             .key_context("LockScreen")
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let key = event.keystroke.key.as_str();
+
+                match key {
+                    "escape" | "Escape" | "esc" | "\u{1b}" => {
+                        this.password.clear();
+                        this.auth_failed = false;
+                        cx.notify();
+                        return;
+                    }
+                    _ => {}
+                }
+
                 if !this.is_primary {
                     return;
                 }
                 window.focus(&this.focus_handle, cx);
-                let key = event.keystroke.key.as_str();
                 let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
                 if ctrl {
@@ -242,11 +253,6 @@ impl Render for LockScreen {
                         this.auth_failed = false;
                         cx.notify();
                     }
-                    "escape" => {
-                        this.password.clear();
-                        this.auth_failed = false;
-                        cx.notify();
-                    }
                     "space" => {
                         this.password.push(' ');
                         this.auth_failed = false;
@@ -285,7 +291,7 @@ impl Drop for LockScreen {
             crate::panel::LockScreenPanel::mark_closed();
             if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
                 let _ = std::process::Command::new("hyprctl")
-                    .args(["eval", "hl.dsp.submap(\"reset\")"])
+                    .args(["dispatch", "submap", "reset"])
                     .spawn();
             }
         }
