@@ -90,11 +90,7 @@ impl PowerService {
                 {
                     if let Ok(iface) = "net.hadess.PowerProfiles".try_into() {
                         let _ = proxy
-                            .set(
-                                iface,
-                                "ActiveProfile",
-                                Value::from(profile.as_str()),
-                            )
+                            .set(iface, "ActiveProfile", Value::from(profile.as_str()))
                             .await;
                     }
                 }

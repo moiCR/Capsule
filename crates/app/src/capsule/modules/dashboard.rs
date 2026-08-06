@@ -223,23 +223,25 @@ impl Render for DashboardModule {
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
-            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
-                if this.is_dragging_volume {
-                    let win_w: f32 = window.bounds().size.width.into();
-                    let pill_x = (win_w - 440.0) / 2.0;
-                    let slider_start_x = pill_x + 92.0;
-                    let slider_width = 288.0;
+            .on_mouse_move(
+                cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                    if this.is_dragging_volume {
+                        let win_w: f32 = window.bounds().size.width.into();
+                        let pill_x = (win_w - 440.0) / 2.0;
+                        let slider_start_x = pill_x + 92.0;
+                        let slider_width = 288.0;
 
-                    let x_val = f32::from(event.position.x);
-                    let rel_x = x_val - slider_start_x;
-                    let pct = ((rel_x / slider_width) * 100.0).clamp(0.0, 100.0) as u32;
+                        let x_val = f32::from(event.position.x);
+                        let rel_x = x_val - slider_start_x;
+                        let pct = ((rel_x / slider_width) * 100.0).clamp(0.0, 100.0) as u32;
 
-                    if cx.has_global::<AppState>() {
-                        cx.global::<AppState>().system.set_volume_fast(pct);
+                        if cx.has_global::<AppState>() {
+                            cx.global::<AppState>().system.set_volume_fast(pct);
+                        }
+                        cx.notify();
                     }
-                    cx.notify();
-                }
-            }))
+                }),
+            )
             .on_mouse_up(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _event: &gpui::MouseUpEvent, _window, cx| {

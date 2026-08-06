@@ -1,9 +1,12 @@
-## What's New in v0.1.1
+## What's New in v0.2.0
 
-### News
-- None
+### Features
+- **Panel System Architecture**: Added a new panel system to improve application scalability, modularity, and multi-display support.
+- **Lock Screen**: Introduced a dedicated Lock Screen panel with automatic activation on system idle timeout.
+- **PAM Authentication**: Integrated native Linux PAM (Pluggable Authentication Modules) for secure user authentication.
+- **UI Redesign**: Complete UI redesign for both the Emoji picker and Application Launcher modules.
 
-### Fixes
-- The Dashboard widgets were redesigned due to inconsistencies in the UI
-- The issue with the SVG for the power button, where its icon was not displaying, has been fixed.
-- The bug that caused the authentication module to get stuck on "Verifying password" has been fixed; it should now work normally.
+### Fixes & Improvements
+- Fixed dead space rendering issues in satellite widgets.
+- Removed system-level language update script that was causing runtime errors.
+- Fixed keyboard input capture and control character filtering in the Lock Screen password field.

@@ -30,10 +30,7 @@ impl EmojiService {
         use std::io::Write;
         use std::process::{Command, Stdio};
 
-        if let Ok(mut child) = Command::new("wl-copy")
-            .stdin(Stdio::piped())
-            .spawn()
-        {
+        if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(emoji.as_bytes());
             }

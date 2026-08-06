@@ -4,10 +4,7 @@ use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::{DashboardEvent, DashboardModule};
 
-pub fn render_volume_widget(
-    theme: &Theme,
-    cx: &mut Context<DashboardModule>,
-) -> impl IntoElement {
+pub fn render_volume_widget(theme: &Theme, cx: &mut Context<DashboardModule>) -> impl IntoElement {
     let (volume, is_muted) = if cx.has_global::<AppState>() {
         let status = cx.global::<AppState>().system.get_status();
         (status.volume, status.is_muted)

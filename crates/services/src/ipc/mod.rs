@@ -25,6 +25,7 @@ pub enum IpcCommand {
     Hide,
     Default,
     Ping,
+    Lock,
     Quit,
 }
 
@@ -57,6 +58,7 @@ impl FromStr for IpcCommand {
             "hide" | "close" => Ok(IpcCommand::Hide),
             "default" => Ok(IpcCommand::Default),
             "ping" => Ok(IpcCommand::Ping),
+            "lock" | "lockscreen" | "lock-screen" | "toggle-lock" => Ok(IpcCommand::Lock),
             "quit" | "exit" => Ok(IpcCommand::Quit),
             _ => anyhow::bail!("Unknown IPC command: '{s}'"),
         }
@@ -80,6 +82,7 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::Hide => "hide".to_string(),
         IpcCommand::Default => "default".to_string(),
         IpcCommand::Ping => "ping".to_string(),
+        IpcCommand::Lock => "lock".to_string(),
         IpcCommand::Quit => "quit".to_string(),
     }
 }

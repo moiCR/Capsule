@@ -166,6 +166,36 @@ pub fn render_header(
                                 .text_color(theme.accent()),
                         ),
                 )
+                .children(
+                    if std::env::var("CAPSULE_TEST").is_ok() || std::env::var("CAPSULE_DEV").is_ok()
+                    {
+                        Some(
+                            div()
+                                .id("header-test-any-btn")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .px_2()
+                                .py_1()
+                                .rounded_full()
+                                .bg(theme.accent())
+                                .hover(|s| s.opacity(0.85))
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    crate::panel::LockScreenPanel::open_all(cx);
+                                }))
+                                .child(
+                                    div()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_size(px(11.0))
+                                        .text_color(theme.foreground())
+                                        .child("Test Any"),
+                                ),
+                        )
+                    } else {
+                        None
+                    },
+                )
                 .child(
                     div()
                         .id("header-close-btn")

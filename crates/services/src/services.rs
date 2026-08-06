@@ -2,8 +2,10 @@ pub mod app_state;
 pub mod calendar;
 pub mod clipboard;
 pub mod compositor;
+pub mod config;
 pub mod dbus_util;
 pub mod emoji;
+pub mod idle;
 pub mod ipc;
 pub mod launcher;
 pub mod logger;
@@ -11,6 +13,7 @@ pub mod lyrics;
 pub mod mpris;
 pub mod network;
 pub mod notifications;
+pub mod pam;
 pub mod polkit;
 pub mod power;
 pub mod system;
@@ -24,7 +27,9 @@ pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccess
 pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService};
 pub use compositor::CompositorService;
+pub use config::AppConfig;
 pub use emoji::{EmojiItem, EmojiService};
+pub use idle::{IdleEvent, IdleService};
 pub use ipc::{
     IpcCommand, IpcMessage, IpcSubscriber, decode_command, pop_ipc_command, push_ipc_command,
 };
@@ -33,6 +38,7 @@ pub use logger::init_logger;
 pub use lyrics::{LyricLine, LyricsService, TrackLyrics};
 pub use mpris::{MediaTrack, MprisService};
 pub use notifications::{NotificationItem, NotificationStore, start_notification_server};
+pub use pam::PamService;
 pub use polkit::{
     PolkitAuthRequest, PolkitService, authenticate_user, pop_polkit_request, push_polkit_request,
     start_polkit_agent,

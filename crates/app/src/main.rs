@@ -1,12 +1,8 @@
 mod capsule;
+pub mod lockscreen;
+pub mod panel;
 
 use assets::Assets;
-use capsule::Capsule;
-use gpui::{
-    AppContext, Bounds, Size, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
-    layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
-    point, px,
-};
 use gpui_platform::application;
 
 unsafe fn daemonize() {
@@ -70,6 +66,32 @@ async fn main() {
         let app_state = services::AppState::new();
         cx.set_global(app_state);
 
+        let (lock_tx, mut lock_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
+        let idle_service = cx.global::<services::AppState>().idle.clone();
+        let mut idle_rx = idle_service.subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = idle_rx.recv().await {
+                match event {
+                    services::IdleEvent::IdleTimeoutTriggered => {
+                        let _ = lock_tx.send(());
+                    }
+                }
+            }
+        });
+
+        cx.spawn(|async_cx: &mut gpui::AsyncApp| {
+            let async_app = async_cx.clone();
+            async move {
+                while lock_rx.recv().await.is_some() {
+                    let _ = async_app.update(|cx: &mut gpui::App| {
+                        panel::LockScreenPanel::open_all(cx);
+                    });
+                }
+            }
+        })
+        .detach();
+
         let theme_manager = ui::theme::theme_manager::ThemeManager::new();
         cx.set_global(theme_manager.current_theme.clone());
         cx.set_global(theme_manager);
@@ -78,41 +100,7 @@ async fn main() {
         cx.set_global(lang_manager.current_language.clone());
         cx.set_global(lang_manager);
 
-        let max_w = 3840.0;
-        let max_h = 2160.0;
-        let idle_h = 25.0 + 8.0;
-
-        let options = WindowOptions {
-            titlebar: None,
-            window_bounds: Some(WindowBounds::Windowed(Bounds {
-                origin: point(px(0.0), px(0.0)),
-                size: Size::new(px(max_w), px(max_h)),
-            })),
-            app_id: Some("capsule-panel".to_string()),
-            window_background: WindowBackgroundAppearance::Transparent,
-            kind: WindowKind::LayerShell(LayerShellOptions {
-                namespace: "capsule-panel".to_string(),
-                layer: Layer::Top,
-                anchor: Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
-                margin: Some((px(8.0), px(0.0), px(0.0), px(0.0))),
-                exclusive_zone: Some(px(idle_h)),
-                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let window = match cx.open_window(options, |_, cx| cx.new(Capsule::new)) {
-            Ok(w) => w,
-            Err(err) => {
-                eprintln!("Failed to open layer shell window: {err}");
-                return;
-            }
-        };
-
-        if let Ok(capsule_handle) = window.entity(cx) {
-            ipc_subscriber.start(cx, capsule_handle, Capsule::handle_ipc_command);
-        }
+        panel::CapsulePanel::open(cx, ipc_subscriber);
     });
 }
 
@@ -133,6 +121,7 @@ COMMANDS:
     show-dashboard      Show main dashboard panel
     show-notification   Show notification panel
     show-clipboard      Show clipboard history manager
+    lock                Lock screen (alias: lockscreen)
     hide                Hide panels and return to compact pill (alias: close)
     quit                Stop running Capsule daemon (alias: exit)
     ping                Check if Capsule daemon is running

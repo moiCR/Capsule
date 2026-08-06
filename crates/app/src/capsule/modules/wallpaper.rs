@@ -1,8 +1,8 @@
-use services::AppState;
 use gpui::{
-    Context, ElementId, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent,
-    Render, Task, Window, div, img, prelude::*, px, svg,
+    Context, ElementId, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
+    Task, Window, div, img, prelude::*, px, svg,
 };
+use services::AppState;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
@@ -382,11 +382,7 @@ impl Render for WallpaperModule {
                             .border_color(theme.accent().opacity((border_w / 3.0).min(1.0)))
                             .opacity(opacity)
                             .shadow_lg()
-                            .child(
-                                img(item.thumb_path.clone())
-                                    .w_full()
-                                    .h_full(),
-                            ),
+                            .child(img(item.thumb_path.clone()).w_full().h_full()),
                     );
 
                 carousel_row = carousel_row.child(card);

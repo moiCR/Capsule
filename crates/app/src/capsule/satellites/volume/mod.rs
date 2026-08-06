@@ -23,92 +23,86 @@ pub fn render_volume_mini_panel(
         Vec::new()
     };
 
-    let mut list_col = div()
-        .flex()
-        .flex_col()
-        .w_full()
-        .gap_1();
+    let mut list_col = div().flex().flex_col().w_full().gap_1();
 
     for sink in &sinks {
         let is_def = sink.is_default;
         let sink_name = sink.name.clone();
 
-        list_col = list_col.child(
-            div()
-                .id(format!("sink-item-{}", sink.name))
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .w_full()
-                .px_2()
-                .py_1p5()
-                .rounded_lg()
-                .bg(if is_def {
-                    theme.accent().opacity(0.15)
-                } else {
-                    theme.surface().opacity(0.0)
-                })
-                .hover(|s| {
-                    if is_def {
-                        s
+        list_col =
+            list_col.child(
+                div()
+                    .id(format!("sink-item-{}", sink.name))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .w_full()
+                    .px_2()
+                    .py_1p5()
+                    .rounded_lg()
+                    .bg(if is_def {
+                        theme.accent().opacity(0.15)
                     } else {
-                        s.bg(theme.surface().opacity(0.5))
-                    }
-                })
-                .cursor_pointer()
-                .on_click(cx.listener(move |_this, _, _, cx| {
-                    if cx.has_global::<AppState>() {
-                        let sys = cx.global::<AppState>().system.clone();
-                        let target_name = sink_name.clone();
-                        let this = cx.entity().downgrade();
-                        cx.spawn(async move |_this, cx| {
-                            let _ = sys.set_default_sink(&target_name).await;
-                            let _ = this.update(cx, |_view, cx| cx.notify());
-                        })
-                        .detach();
-                    }
-                }))
-                .child(
-                    div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap_2()
-                        .overflow_hidden()
-                        .child(
-                            svg()
-                                .path("volume-2.svg")
-                                .size(px(13.0))
-                                .text_color(if is_def {
+                        theme.surface().opacity(0.0)
+                    })
+                    .hover(|s| {
+                        if is_def {
+                            s
+                        } else {
+                            s.bg(theme.surface().opacity(0.5))
+                        }
+                    })
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |_this, _, _, cx| {
+                        if cx.has_global::<AppState>() {
+                            let sys = cx.global::<AppState>().system.clone();
+                            let target_name = sink_name.clone();
+                            let this = cx.entity().downgrade();
+                            cx.spawn(async move |_this, cx| {
+                                let _ = sys.set_default_sink(&target_name).await;
+                                let _ = this.update(cx, |_view, cx| cx.notify());
+                            })
+                            .detach();
+                        }
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_2()
+                            .overflow_hidden()
+                            .child(svg().path("volume-2.svg").size(px(13.0)).text_color(
+                                if is_def {
                                     theme.accent()
                                 } else {
                                     theme.foreground_muted()
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.0))
-                                .font_weight(if is_def {
-                                    FontWeight::BOLD
-                                } else {
-                                    FontWeight::NORMAL
-                                })
-                                .text_color(if is_def {
-                                    theme.accent()
-                                } else {
-                                    theme.foreground()
-                                })
-                                .truncate()
-                                .child(sink.description.clone()),
-                        ),
-                ),
-        );
+                                },
+                            ))
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .font_weight(if is_def {
+                                        FontWeight::BOLD
+                                    } else {
+                                        FontWeight::NORMAL
+                                    })
+                                    .text_color(if is_def {
+                                        theme.accent()
+                                    } else {
+                                        theme.foreground()
+                                    })
+                                    .truncate()
+                                    .child(sink.description.clone()),
+                            ),
+                    ),
+            );
     }
 
     div()
         .w(px(PANEL_W))
-        .h(px(panel_h))
+        .max_h(px(panel_h))
         .p_2p5()
         .gap_2()
         .rounded(px(20.0))

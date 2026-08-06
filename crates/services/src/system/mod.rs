@@ -278,7 +278,12 @@ impl SystemService {
             .unwrap_or_default();
 
         let mut sinks = Vec::new();
-        if let Ok(output) = Command::new("pactl").arg("list").arg("sinks").output().await {
+        if let Ok(output) = Command::new("pactl")
+            .arg("list")
+            .arg("sinks")
+            .output()
+            .await
+        {
             let text = String::from_utf8_lossy(&output.stdout);
             let mut current_name = String::new();
             let mut current_desc = String::new();
@@ -301,7 +306,10 @@ impl SystemService {
                     }
                     current_name = trimmed.trim_start_matches("Name: ").trim().to_string();
                 } else if trimmed.starts_with("Description: ") {
-                    current_desc = trimmed.trim_start_matches("Description: ").trim().to_string();
+                    current_desc = trimmed
+                        .trim_start_matches("Description: ")
+                        .trim()
+                        .to_string();
                 }
             }
 

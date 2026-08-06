@@ -122,7 +122,7 @@ pub fn render_mini_panel(
 
     div()
         .w(px(PANEL_W))
-        .h(px(panel_h))
+        .max_h(px(panel_h))
         .p_2p5()
         .gap_1p5()
         .rounded(px(20.0))
@@ -180,42 +180,6 @@ pub fn render_mini_panel(
                 ),
         )
         .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-        .child(
-            div()
-                .id(("activate-sat-app", sni_idx as u32))
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_center()
-                .gap_1p5()
-                .w_full()
-                .py_1()
-                .rounded(px(8.0))
-                .bg(theme.accent().opacity(0.15))
-                .border_1()
-                .border_color(theme.accent().opacity(0.3))
-                .cursor_pointer()
-                .hover(|style| style.bg(theme.accent().opacity(0.25)))
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    if cx.has_global::<AppState>() {
-                        cx.global::<AppState>().sni_host.activate_item(sni_idx);
-                    }
-                }))
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(theme.accent())
-                        .child({
-                            let lang = if cx.has_global::<ui::language::Language>() {
-                                cx.global::<ui::language::Language>().clone()
-                            } else {
-                                ui::language::Language::default()
-                            };
-                            lang.tray.open_app
-                        }),
-                ),
-        )
         .child(menu_list)
         .into_any_element()
 }

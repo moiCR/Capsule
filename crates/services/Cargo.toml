@@ -28,3 +28,7 @@ futures-signals.workspace = true
 
 niri-ipc.workspace = true
 hyprland.workspace = true
+toml = { workspace = true }
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+pam-sys = "0.5.6"

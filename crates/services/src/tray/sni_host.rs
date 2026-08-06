@@ -132,7 +132,10 @@ impl StatusNotifierWatcherServer {
             format!("{}{}", sender, service)
         } else if service.contains('/') {
             service
-        } else if service.starts_with(':') || service.contains("StatusNotifierItem") || service.is_empty() {
+        } else if service.starts_with(':')
+            || service.contains("StatusNotifierItem")
+            || service.is_empty()
+        {
             format!("{}/StatusNotifierItem", sender)
         } else {
             format!("{}/StatusNotifierItem", service)
@@ -297,7 +300,8 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
             host.set_items(detailed_items);
         }
 
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), host.notify.notified()).await;
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_secs(15), host.notify.notified()).await;
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 }
@@ -370,17 +374,19 @@ async fn save_pixmap_to_file(
     obj_path: &str,
     item_id: &str,
 ) -> Option<String> {
-    let msg = tokio::time::timeout(std::time::Duration::from_millis(500), conn
-        .call_method(
+    let msg = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        conn.call_method(
             Some(bus_name),
             obj_path,
             Some("org.freedesktop.DBus.Properties"),
             "Get",
             &("org.kde.StatusNotifierItem", "IconPixmap"),
-        ))
-        .await
-        .ok()?
-        .ok()?;
+        ),
+    )
+    .await
+    .ok()?
+    .ok()?;
 
     let body = msg.body();
     let val: zbus::zvariant::Value = body.deserialize().ok()?;
@@ -476,15 +482,17 @@ async fn get_string_prop(
         "org.freedesktop.StatusNotifierItem",
     ];
     for iface in interfaces {
-        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
-            .call_method(
+        if let Ok(Ok(msg)) = tokio::time::timeout(
+            std::time::Duration::from_millis(300),
+            conn.call_method(
                 Some(bus_name),
                 obj_path,
                 Some("org.freedesktop.DBus.Properties"),
                 "Get",
                 &(iface, prop),
-            ))
-            .await
+            ),
+        )
+        .await
         {
             if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
                 match unwrap_val(&val) {
@@ -508,15 +516,17 @@ async fn get_object_path_prop(
         "org.freedesktop.StatusNotifierItem",
     ];
     for iface in interfaces {
-        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
-            .call_method(
+        if let Ok(Ok(msg)) = tokio::time::timeout(
+            std::time::Duration::from_millis(300),
+            conn.call_method(
                 Some(bus_name),
                 obj_path,
                 Some("org.freedesktop.DBus.Properties"),
                 "Get",
                 &(iface, prop),
-            ))
-            .await
+            ),
+        )
+        .await
         {
             if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
                 match unwrap_val(&val) {
@@ -540,15 +550,17 @@ async fn get_tooltip_title(
         "org.freedesktop.StatusNotifierItem",
     ];
     for iface in interfaces {
-        if let Ok(Ok(msg)) = tokio::time::timeout(std::time::Duration::from_millis(300), conn
-            .call_method(
+        if let Ok(Ok(msg)) = tokio::time::timeout(
+            std::time::Duration::from_millis(300),
+            conn.call_method(
                 Some(bus_name),
                 obj_path,
                 Some("org.freedesktop.DBus.Properties"),
                 "Get",
                 &(iface, "ToolTip"),
-            ))
-            .await
+            ),
+        )
+        .await
         {
             if let Ok(val) = msg.body().deserialize::<zbus::zvariant::Value>() {
                 if let zbus::zvariant::Value::Structure(s) = unwrap_val(&val) {

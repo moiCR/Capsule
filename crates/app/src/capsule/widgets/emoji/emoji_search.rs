@@ -1,20 +1,14 @@
 use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
-use crate::capsule::modules::launcher::LauncherModule;
+use crate::capsule::modules::emoji::EmojiModule;
 
-pub fn render_search_input(
+pub fn render_emoji_search(
     query: &str,
-    apps_count: usize,
+    total_items: usize,
     theme: &Theme,
-    cx: &mut Context<LauncherModule>,
+    cx: &mut Context<EmojiModule>,
 ) -> impl IntoElement {
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
-    } else {
-        ui::language::Language::default()
-    };
-
     let has_query = !query.is_empty();
 
     div()
@@ -45,41 +39,31 @@ pub fn render_search_input(
         } else {
             div()
                 .text_color(theme.foreground_muted())
-                .child(lang.launcher.search_placeholder)
+                .child("Buscar emoji...")
         }))
         .child(if has_query {
             div()
-                .id("clear-search-btn")
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(20.0))
-                .h(px(20.0))
-                .rounded_full()
+                .id("emoji-clear-search")
                 .cursor_pointer()
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.opacity(0.6))
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    this.reset_search(cx);
+                .hover(|s| s.opacity(0.7))
+                .active(|s| s.opacity(0.5))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.update_search(String::new(), cx);
                 }))
                 .child(
                     svg()
                         .path("close.svg")
-                        .w_3()
-                        .h_3()
+                        .w_3p5()
+                        .h_3p5()
                         .text_color(theme.foreground_muted()),
                 )
                 .into_any_element()
         } else {
             div()
-                .px_2()
-                .py_0p5()
-                .rounded(px(10.0))
-                .bg(theme.accent().opacity(0.1))
-                .text_size(px(10.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme.accent())
-                .child(format!("{apps_count}"))
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(theme.foreground_muted())
+                .child(format!("{total_items}"))
                 .into_any_element()
         })
 }

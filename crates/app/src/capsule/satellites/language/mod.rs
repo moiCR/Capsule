@@ -26,73 +26,72 @@ pub fn render_language_widget(
         let is_selected = item.is_current;
         let item_lang = item.language.clone();
 
-        let row = div()
-            .id(format!("lang-item-{}", item.code))
-            .flex()
-            .flex_row()
-            .items_center()
-            .justify_between()
-            .px_3()
-            .py_2()
-            .rounded_xl()
-            .cursor_pointer()
-            .bg(if is_selected {
-                theme.accent().opacity(0.2)
-            } else {
-                theme.surface().opacity(0.4)
-            })
-            .border_1()
-            .border_color(if is_selected {
-                theme.accent()
-            } else {
-                theme.surface().opacity(0.0)
-            })
-            .hover(|s| {
-                if !is_selected {
-                    s.bg(theme.surface().opacity(0.7))
+        let row =
+            div()
+                .id(format!("lang-item-{}", item.code))
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px_3()
+                .py_2()
+                .rounded_xl()
+                .cursor_pointer()
+                .bg(if is_selected {
+                    theme.accent().opacity(0.2)
                 } else {
-                    s
-                }
-            })
-            .on_click(cx.listener(move |_this, _, _, cx| {
-                if cx.has_global::<LanguageManager>() {
-                    cx.global_mut::<LanguageManager>().set_language(item_lang.clone());
-                    cx.set_global(cx.global::<LanguageManager>().current_language.clone());
-                }
-                cx.notify();
-            }))
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        svg()
-                            .path("languages.svg")
-                            .size(px(14.0))
-                            .text_color(if is_selected {
+                    theme.surface().opacity(0.4)
+                })
+                .border_1()
+                .border_color(if is_selected {
+                    theme.accent()
+                } else {
+                    theme.surface().opacity(0.0)
+                })
+                .hover(|s| {
+                    if !is_selected {
+                        s.bg(theme.surface().opacity(0.7))
+                    } else {
+                        s
+                    }
+                })
+                .on_click(cx.listener(move |_this, _, _, cx| {
+                    if cx.has_global::<LanguageManager>() {
+                        cx.global_mut::<LanguageManager>()
+                            .set_language(item_lang.clone());
+                        cx.set_global(cx.global::<LanguageManager>().current_language.clone());
+                    }
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .child(svg().path("languages.svg").size(px(14.0)).text_color(
+                            if is_selected {
                                 theme.accent()
                             } else {
                                 theme.foreground_muted()
-                            }),
-                    )
-                    .child(
-                        div()
-                            .font_weight(if is_selected {
-                                FontWeight::BOLD
-                            } else {
-                                FontWeight::MEDIUM
-                            })
-                            .text_size(px(12.0))
-                            .text_color(if is_selected {
-                                theme.foreground()
-                            } else {
-                                theme.foreground_muted()
-                            })
-                            .child(item.name),
-                    ),
-            );
+                            },
+                        ))
+                        .child(
+                            div()
+                                .font_weight(if is_selected {
+                                    FontWeight::BOLD
+                                } else {
+                                    FontWeight::MEDIUM
+                                })
+                                .text_size(px(12.0))
+                                .text_color(if is_selected {
+                                    theme.foreground()
+                                } else {
+                                    theme.foreground_muted()
+                                })
+                                .child(item.name),
+                        ),
+                );
 
         rows = rows.child(row);
     }
