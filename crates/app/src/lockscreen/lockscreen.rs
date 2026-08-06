@@ -238,7 +238,6 @@ impl Render for LockScreen {
                         this.submit_password(cx);
                     }
                     "backspace" => {
-                        this.password.pop();
                         this.auth_failed = false;
                         cx.notify();
                     }
