@@ -1,8 +1,9 @@
 use gpui::{
     Context, Element, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, px, svg,
+    StatefulInteractiveElement, Styled, StyledImage, div, img, px, svg,
 };
 use services::{AppState, MprisService};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
@@ -28,125 +29,159 @@ pub fn render_lockscreen_media_player(theme: &Theme, cx: &mut Context<LockScreen
     let bus_play = bus_name.clone();
     let is_playing = active_track.is_playing;
 
+    // Album art square thumbnail
+    let art_thumb = if let Some(ref art_path) = active_track.local_art_path {
+        div()
+            .w(px(52.0))
+            .h(px(52.0))
+            .rounded(px(12.0))
+            .overflow_hidden()
+            .flex_shrink_0()
+            .shadow_sm()
+            .child(
+                img(PathBuf::from(art_path))
+                    .size_full()
+                    .object_fit(gpui::ObjectFit::Cover),
+            )
+            .into_any_element()
+    } else {
+        div()
+            .w(px(52.0))
+            .h(px(52.0))
+            .rounded(px(12.0))
+            .bg(theme.accent().opacity(0.15))
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
+            .child(
+                svg()
+                    .path("music.svg")
+                    .size(px(24.0))
+                    .text_color(theme.accent()),
+            )
+            .into_any_element()
+    };
+
     div()
         .id("lockscreen-media-player")
         .flex()
-        .flex_col()
+        .flex_row()
         .items_center()
-        .justify_center()
         .w(px(360.0))
-        .px(px(20.0))
-        .py(px(14.0))
+        .p(px(12.0))
+        .gap(px(12.0))
         .rounded(px(20.0))
-        .bg(theme.surface().opacity(0.35))
+        .bg(theme.surface().opacity(0.45))
         .border_1()
         .border_color(theme.surface().opacity(0.5))
         .shadow_md()
-        .gap(px(8.0))
-        // Track Title & Artist
+        .child(art_thumb)
         .child(
             div()
                 .flex()
                 .flex_col()
-                .items_center()
-                .w_full()
-                .gap(px(2.0))
+                .flex_1()
+                .gap(px(4.0))
+                .overflow_hidden()
+                // Track Title & Artist
                 .child(
                     div()
-                        .font_family(theme.font_family())
-                        .font_weight(FontWeight::BOLD)
-                        .text_size(px(14.0))
-                        .text_color(theme.foreground())
-                        .text_center()
+                        .flex()
+                        .flex_col()
                         .w_full()
-                        .truncate()
-                        .child(active_track.title.clone()),
-                )
-                .child(
-                    div()
-                        .font_family(theme.font_family())
-                        .text_size(px(12.0))
-                        .text_color(theme.foreground_muted())
-                        .text_center()
-                        .w_full()
-                        .truncate()
-                        .child(active_track.artist.clone()),
-                ),
-        )
-        // Media Controls
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_center()
-                .gap(px(16.0))
-                .pt(px(2.0))
-                // Prev
-                .child(
-                    div()
-                        .id("ls-mpris-prev")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            let b = bus_prev.clone();
-                            tokio::spawn(async move {
-                                MprisService::previous_bus(&b).await;
-                            });
-                            cx.notify();
-                        }))
-                        .child(
-                            svg()
-                                .path("skip-back.svg")
-                                .size(px(16.0))
-                                .text_color(theme.foreground_muted()),
-                        ),
-                )
-                // Play / Pause
-                .child(
-                    div()
-                        .id("ls-mpris-play-pause")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            let b = bus_play.clone();
-                            tokio::spawn(async move {
-                                MprisService::play_pause_bus(&b).await;
-                            });
-                            cx.notify();
-                        }))
                         .child(
                             div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .w(px(32.0))
-                                .h(px(32.0))
-                                .bg(theme.accent().opacity(0.25))
-                                .rounded_full()
-                                .child(
-                                    svg()
-                                        .path(if is_playing { "pause.svg" } else { "play.svg" })
-                                        .size(px(15.0))
-                                        .text_color(theme.accent()),
-                                ),
+                                .font_family(theme.font_family())
+                                .font_weight(FontWeight::BOLD)
+                                .text_size(px(13.5))
+                                .text_color(theme.foreground())
+                                .truncate()
+                                .child(active_track.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .font_family(theme.font_family())
+                                .text_size(px(11.5))
+                                .text_color(theme.foreground_muted())
+                                .truncate()
+                                .child(active_track.artist.clone()),
                         ),
                 )
-                // Next
+                // Media Controls
                 .child(
                     div()
-                        .id("ls-mpris-next")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            let b = bus_next.clone();
-                            tokio::spawn(async move {
-                                MprisService::next_bus(&b).await;
-                            });
-                            cx.notify();
-                        }))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(12.0))
+                        .pt(px(2.0))
+                        // Prev
                         .child(
-                            svg()
-                                .path("skip-forward.svg")
-                                .size(px(16.0))
-                                .text_color(theme.foreground_muted()),
+                            div()
+                                .id("ls-mpris-prev")
+                                .cursor_pointer()
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    let b = bus_prev.clone();
+                                    tokio::spawn(async move {
+                                        MprisService::previous_bus(&b).await;
+                                    });
+                                    cx.notify();
+                                }))
+                                .child(
+                                    svg()
+                                        .path("skip-back.svg")
+                                        .size(px(14.0))
+                                        .text_color(theme.foreground_muted()),
+                                ),
+                        )
+                        // Play / Pause
+                        .child(
+                            div()
+                                .id("ls-mpris-play-pause")
+                                .cursor_pointer()
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    let b = bus_play.clone();
+                                    tokio::spawn(async move {
+                                        MprisService::play_pause_bus(&b).await;
+                                    });
+                                    cx.notify();
+                                }))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .w(px(26.0))
+                                        .h(px(26.0))
+                                        .bg(theme.accent().opacity(0.25))
+                                        .rounded_full()
+                                        .child(
+                                            svg()
+                                                .path(if is_playing { "pause.svg" } else { "play.svg" })
+                                                .size(px(13.0))
+                                                .text_color(theme.accent()),
+                                        ),
+                                ),
+                        )
+                        // Next
+                        .child(
+                            div()
+                                .id("ls-mpris-next")
+                                .cursor_pointer()
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    let b = bus_next.clone();
+                                    tokio::spawn(async move {
+                                        MprisService::next_bus(&b).await;
+                                    });
+                                    cx.notify();
+                                }))
+                                .child(
+                                    svg()
+                                        .path("skip-forward.svg")
+                                        .size(px(14.0))
+                                        .text_color(theme.foreground_muted()),
+                                ),
                         ),
                 ),
         )

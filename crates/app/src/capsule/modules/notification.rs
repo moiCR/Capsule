@@ -24,7 +24,7 @@ impl NotificationModule {
                 }
 
                 cx.background_executor()
-                    .timer(std::time::Duration::from_millis(1000))
+                    .timer(std::time::Duration::from_millis(50))
                     .await;
             }
         })

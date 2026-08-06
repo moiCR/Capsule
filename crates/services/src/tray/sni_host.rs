@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::time::{Duration, Instant, sleep, timeout};
 use zbus::interface;
 
 use super::dbus_menu::{DBusMenuItem, fetch_dbus_menu, trigger_dbus_menu_item};
@@ -187,13 +188,13 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
         Err(_) => zbus::Connection::session().await?,
     };
 
-    let mut item_cache: std::collections::HashMap<String, (std::time::Instant, SniItem)> =
+    let mut item_cache: std::collections::HashMap<String, (Instant, SniItem)> =
         std::collections::HashMap::new();
 
     loop {
         let services = fetch_registered_services(&conn, &host).await;
         let mut detailed_items = Vec::new();
-        let now = std::time::Instant::now();
+        let now = Instant::now();
 
         item_cache.retain(|svc, _| services.contains(svc));
 
@@ -204,8 +205,8 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
                 (svc.clone(), "/StatusNotifierItem".to_string())
             };
 
-            let is_alive = tokio::time::timeout(
-                std::time::Duration::from_millis(300),
+            let is_alive = timeout(
+                Duration::from_millis(50),
                 conn.call_method(
                     Some("org.freedesktop.DBus"),
                     "/org/freedesktop/DBus",
@@ -229,7 +230,7 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
             }
 
             if let Some((last_fetch, cached_item)) = item_cache.get(svc) {
-                if now.duration_since(*last_fetch) < std::time::Duration::from_secs(30) {
+                if now.duration_since(*last_fetch) < Duration::from_secs(30) {
                     detailed_items.push(cached_item.clone());
                     continue;
                 }
@@ -261,8 +262,8 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
 
             let mut menu_items = Vec::new();
             if let Some(ref mp) = menu_path {
-                if let Ok(fetched) = tokio::time::timeout(
-                    std::time::Duration::from_millis(1000),
+                if let Ok(fetched) = timeout(
+                    Duration::from_millis(200),
                     fetch_dbus_menu(&conn, &bus_name, mp),
                 )
                 .await
@@ -300,9 +301,8 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
             host.set_items(detailed_items);
         }
 
-        let _ =
-            tokio::time::timeout(std::time::Duration::from_secs(15), host.notify.notified()).await;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let _ = timeout(Duration::from_secs(2), host.notify.notified()).await;
+        sleep(Duration::from_millis(50)).await;
     }
 }
 
@@ -483,7 +483,7 @@ async fn get_string_prop(
     ];
     for iface in interfaces {
         if let Ok(Ok(msg)) = tokio::time::timeout(
-            std::time::Duration::from_millis(300),
+            std::time::Duration::from_millis(50),
             conn.call_method(
                 Some(bus_name),
                 obj_path,
@@ -517,7 +517,7 @@ async fn get_object_path_prop(
     ];
     for iface in interfaces {
         if let Ok(Ok(msg)) = tokio::time::timeout(
-            std::time::Duration::from_millis(300),
+            std::time::Duration::from_millis(50),
             conn.call_method(
                 Some(bus_name),
                 obj_path,
@@ -551,7 +551,7 @@ async fn get_tooltip_title(
     ];
     for iface in interfaces {
         if let Ok(Ok(msg)) = tokio::time::timeout(
-            std::time::Duration::from_millis(300),
+            std::time::Duration::from_millis(50),
             conn.call_method(
                 Some(bus_name),
                 obj_path,

@@ -293,10 +293,11 @@ impl Capsule {
         )
         .detach();
 
+        let compositor = cx.global::<AppState>().compositor.clone();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(500))
+                    .timer(compositor.get_frame_duration())
                     .await;
                 if this
                     .update(cx, |capsule: &mut Self, cx| {

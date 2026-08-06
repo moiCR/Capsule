@@ -1,5 +1,6 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{Context, FontWeight, IntoElement, StyledImage, div, img, prelude::*, px, svg};
 use services::{MediaTrack, MprisService};
+use std::path::PathBuf;
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
@@ -14,12 +15,17 @@ pub fn render_media_player_widget(
     let card_radius = px(24.0);
 
     let player_badge = div()
+        .absolute()
+        .bottom(px(-2.0))
+        .right(px(-2.0))
         .flex()
         .items_center()
         .justify_center()
-        .p_1p5()
-        .bg(theme.surface().opacity(0.8))
+        .p(px(2.0))
+        .bg(theme.surface())
         .rounded_full()
+        .border_1()
+        .border_color(theme.background())
         .child(
             svg()
                 .path(
@@ -31,7 +37,7 @@ pub fn render_media_player_widget(
                         "music.svg"
                     },
                 )
-                .size(px(16.0))
+                .size(px(11.0))
                 .text_color(theme.accent()),
         );
 
@@ -41,8 +47,8 @@ pub fn render_media_player_widget(
             let is_active = i == selected_player_idx;
             dots = dots.child(
                 div()
-                    .w(px(if is_active { 12.0 } else { 5.0 }))
-                    .h(px(5.0))
+                    .w(px(if is_active { 10.0 } else { 4.0 }))
+                    .h(px(4.0))
                     .rounded_full()
                     .bg(if is_active {
                         theme.accent()
@@ -51,12 +57,7 @@ pub fn render_media_player_widget(
                     }),
             );
         }
-        div()
-            .absolute()
-            .top_3()
-            .right_3()
-            .child(dots)
-            .into_any_element()
+        dots.into_any_element()
     } else {
         div().into_any_element()
     };
@@ -65,9 +66,8 @@ pub fn render_media_player_widget(
         .flex()
         .flex_row()
         .items_center()
-        .justify_center()
-        .gap_4()
-        .pt_1()
+        .gap_2p5()
+        .flex_shrink_0()
         .child(
             div()
                 .id("mpris-prev")
@@ -91,7 +91,7 @@ pub fn render_media_player_widget(
                 .child(
                     svg()
                         .path("skip-back.svg")
-                        .size(px(16.0))
+                        .size(px(14.0))
                         .text_color(theme.foreground_muted()),
                 ),
         )
@@ -122,9 +122,9 @@ pub fn render_media_player_widget(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(32.0))
-                        .h(px(32.0))
-                        .bg(theme.accent().opacity(0.3))
+                        .w(px(30.0))
+                        .h(px(30.0))
+                        .bg(theme.accent().opacity(0.25))
                         .rounded_full()
                         .child(
                             svg()
@@ -133,7 +133,7 @@ pub fn render_media_player_widget(
                                 } else {
                                     "play.svg"
                                 })
-                                .size(px(15.0))
+                                .size(px(14.0))
                                 .text_color(theme.accent()),
                         ),
                 ),
@@ -161,44 +161,85 @@ pub fn render_media_player_widget(
                 .child(
                     svg()
                         .path("skip-forward.svg")
-                        .size(px(16.0))
+                        .size(px(14.0))
                         .text_color(theme.foreground_muted()),
                 ),
         );
+
+    // Album art compact square thumbnail (44x44) with overlaid badge
+    let art_thumb = if let Some(ref art_path) = active_track.local_art_path {
+        div()
+            .relative()
+            .w(px(44.0))
+            .h(px(44.0))
+            .flex_shrink_0()
+            .child(
+                div()
+                    .size_full()
+                    .rounded(px(10.0))
+                    .overflow_hidden()
+                    .shadow_sm()
+                    .child(
+                        img(PathBuf::from(art_path))
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Cover),
+                    ),
+            )
+            .child(player_badge)
+            .into_any_element()
+    } else {
+        div()
+            .relative()
+            .w(px(44.0))
+            .h(px(44.0))
+            .flex_shrink_0()
+            .child(
+                div()
+                    .size_full()
+                    .rounded(px(10.0))
+                    .bg(theme.accent().opacity(0.15))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        svg()
+                            .path("music.svg")
+                            .size(px(20.0))
+                            .text_color(theme.accent()),
+                    ),
+            )
+            .child(player_badge)
+            .into_any_element()
+    };
 
     div()
         .id("media-player-card")
         .relative()
         .flex()
-        .flex_col()
+        .flex_row()
         .items_center()
-        .justify_center()
         .w_full()
         .flex_shrink_0()
         .rounded(card_radius)
         .bg(theme.surface().opacity(0.35))
         .border_1()
         .border_color(theme.surface().opacity(0.6))
-        .p_3p5()
-        .gap_2()
-        .child(player_dots)
-        .child(player_badge)
+        .px_3()
+        .py_2p5()
+        .gap_3()
+        .child(art_thumb)
         .child(
             div()
                 .flex()
                 .flex_col()
-                .items_center()
+                .flex_1()
                 .justify_center()
-                .w_full()
                 .overflow_hidden()
-                .gap_0p5()
                 .child(
                     div()
                         .font_weight(FontWeight::BOLD)
-                        .text_size(px(15.0))
+                        .text_size(px(13.5))
                         .text_color(theme.foreground())
-                        .text_center()
-                        .w_full()
                         .truncate()
                         .child(if active_track.has_media {
                             active_track.title.clone()
@@ -213,17 +254,23 @@ pub fn render_media_player_widget(
                 )
                 .child(
                     div()
-                        .text_size(px(12.5))
-                        .text_color(theme.foreground_muted())
-                        .text_center()
-                        .w_full()
-                        .truncate()
-                        .child(if active_track.has_media {
-                            active_track.artist.clone()
-                        } else {
-                            "Silence".to_string()
-                        }),
-                )
-                .child(media_controls),
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(theme.foreground_muted())
+                                .truncate()
+                                .child(if active_track.has_media {
+                                    active_track.artist.clone()
+                                } else {
+                                    "Silence".to_string()
+                                }),
+                        )
+                        .child(player_dots),
+                ),
         )
+        .child(media_controls)
 }

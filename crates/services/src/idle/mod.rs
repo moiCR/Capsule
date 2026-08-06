@@ -56,7 +56,7 @@ impl IdleService {
         let mut last_cursor_pos = String::new();
 
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
             let mut has_activity = false;
 

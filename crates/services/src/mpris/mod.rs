@@ -179,9 +179,7 @@ impl Default for MprisService {
 async fn run_mpris_listener(players: Arc<ArcSwap<Vec<MediaTrack>>>) {
     loop {
         let current_players = poll_all_players_dbus().await;
-        if !current_players.is_empty() || players.load().is_empty() {
-            players.store(Arc::new(current_players));
-        }
+        players.store(Arc::new(current_players));
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
