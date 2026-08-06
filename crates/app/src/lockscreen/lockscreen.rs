@@ -242,18 +242,7 @@ impl Render for LockScreen {
                         this.auth_failed = false;
                         cx.notify();
                     }
-                    "escape" => {
-                        if this.password.is_empty()
-                            || std::env::var("CAPSULE_DEV").is_ok()
-                            || std::env::var("CAPSULE_TEST").is_ok()
-                        {
-                            window.remove_window();
-                        } else {
-                            this.password.clear();
-                            this.auth_failed = false;
-                            cx.notify();
-                        }
-                    }
+
                     "space" => {
                         this.password.push(' ');
                         this.auth_failed = false;
