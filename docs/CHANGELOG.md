@@ -1,9 +1,12 @@
 ## What's New in v0.2.0
 
-### News
-- Se agrego un nuevo sistema de paneles para la escabilidad de la aplicacion
-- Se agrego un panel nuevo para la pantalla de bloqueo
+### Features
+- **Panel System Architecture**: Added a new panel system to improve application scalability, modularity, and multi-display support.
+- **Lock Screen**: Introduced a dedicated Lock Screen panel with automatic activation on system idle timeout.
+- **PAM Authentication**: Integrated native Linux PAM (Pluggable Authentication Modules) for secure user authentication.
+- **UI Redesign**: Complete UI redesign for both the Emoji picker and Application Launcher modules.
 
-### Fixes
-- Se arreglo el espacio muerto en los satelittes.
-- Se removio el script de actualizacion de idioma a nivel de sistema el cual ocasionaba errores.
+### Fixes & Improvements
+- Fixed dead space rendering issues in satellite widgets.
+- Removed system-level language update script that was causing runtime errors.
+- Fixed keyboard input capture and control character filtering in the Lock Screen password field.
