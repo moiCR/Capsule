@@ -25,21 +25,11 @@ impl LockScreen {
         let focus_handle = cx.focus_handle();
 
         if is_primary {
-            let compositor = if cx.has_global::<AppState>() {
-                Some(cx.global::<AppState>().compositor.clone())
-            } else {
-                None
-            };
-
             cx.spawn(async move |this, cx| {
                 loop {
-                    let frame_duration = if let Some(ref comp) = compositor {
-                        comp.get_frame_duration()
-                    } else {
-                        std::time::Duration::from_millis(16)
-                    };
-
-                    cx.background_executor().timer(frame_duration).await;
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(500))
+                        .await;
                     let res = this.update(cx, |_, cx| {
                         cx.notify();
                     });

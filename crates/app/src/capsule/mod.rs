@@ -50,7 +50,7 @@ impl CapsuleMode {
             CapsuleMode::Polkit => 42.0,
             CapsuleMode::SelectTheme => 42.0,
             CapsuleMode::CreateTheme => 42.0,
-            CapsuleMode::Wallpaper => 32.0,
+            CapsuleMode::Wallpaper => 42.0,
             CapsuleMode::Clipboard => 42.0,
             CapsuleMode::Emoji => 42.0,
         }

@@ -21,11 +21,12 @@ pub struct SystemStatus {
     pub audio_sinks: Vec<AudioSink>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct SystemService {
     status: Arc<ArcSwap<SystemStatus>>,
     target_volume: Arc<AtomicU32>,
     volume_pending: Arc<AtomicBool>,
+    volume_notify: Arc<tokio::sync::Notify>,
 }
 
 impl SystemService {
@@ -34,6 +35,7 @@ impl SystemService {
             status: Arc::new(ArcSwap::from_pointee(SystemStatus::default())),
             target_volume: Arc::new(AtomicU32::new(50)),
             volume_pending: Arc::new(AtomicBool::new(false)),
+            volume_notify: Arc::new(tokio::sync::Notify::new()),
         };
 
         let service_clone = service.clone();
@@ -56,7 +58,11 @@ impl SystemService {
 
     async fn run_volume_worker(&self) {
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            // Wait until a volume change is signaled instead of polling at 25Hz
+            self.volume_notify.notified().await;
+            // Small debounce to coalesce rapid slider movements
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
             if self.volume_pending.swap(false, Ordering::SeqCst) {
                 let target = self.target_volume.load(Ordering::SeqCst);
                 let percent_str = format!("{target}%");
@@ -87,6 +93,7 @@ impl SystemService {
 
         self.target_volume.store(percent, Ordering::SeqCst);
         self.volume_pending.store(true, Ordering::SeqCst);
+        self.volume_notify.notify_one();
     }
 
     pub async fn refresh(&self) -> Result<()> {

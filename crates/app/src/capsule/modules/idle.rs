@@ -217,8 +217,11 @@ impl IdleModule {
                     }
                 });
 
+                // Adaptive polling: faster when audio is playing for lyric sync,
+                // much slower when idle to save CPU
+                let poll_interval = if is_audio_playing { 500 } else { 2000 };
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(Duration::from_millis(poll_interval))
                     .await;
             }
         })

@@ -54,7 +54,22 @@ fn get_or_create_thumbnail(original_path: &PathBuf) -> PathBuf {
         }
     }
 
-    original_path.clone()
+    // Both tools failed: create a minimal 1x1 placeholder PNG to avoid loading
+    // full-resolution (4K/8K) images into GPUI's texture memory
+    let placeholder_path = thumbs_dir.join(format!("placeholder_{}", filename));
+    if !placeholder_path.exists() {
+        // Minimal valid 1x1 grey PNG (67 bytes)
+        let png_data: [u8; 69] = [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+            0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+            0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
+            0x00, 0x00, 0x04, 0x00, 0x01, 0xF6, 0x17, 0x8A, 0x44, 0x00, 0x00, 0x00,
+            0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        let _ = std::fs::write(&placeholder_path, &png_data);
+    }
+    placeholder_path
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -400,7 +415,7 @@ impl Render for WallpaperModule {
             .h(px(240.0))
             .p_4()
             .gap_2()
-            .rounded(px(32.0))
+            .rounded(px(42.0))
             .bg(theme.background())
             .border_1()
             .border_color(theme.surface().opacity(0.6))

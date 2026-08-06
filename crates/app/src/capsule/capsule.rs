@@ -296,7 +296,7 @@ impl Capsule {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(Duration::from_millis(500))
                     .await;
                 if this
                     .update(cx, |capsule: &mut Self, cx| {
@@ -427,7 +427,7 @@ impl Capsule {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(150))
+                    .timer(Duration::from_millis(1000))
                     .await;
 
                 let state = this

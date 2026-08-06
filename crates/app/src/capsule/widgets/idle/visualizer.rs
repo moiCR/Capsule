@@ -17,9 +17,19 @@ impl Visualizer {
 
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(compositor.get_frame_duration())
-                    .await;
+                // Check if active to determine sleep duration
+                let is_active = this
+                    .update(cx, |this: &mut Self, _| this.active)
+                    .unwrap_or(false);
+
+                let duration = if is_active {
+                    compositor.get_frame_duration()
+                } else {
+                    std::time::Duration::from_millis(500)
+                };
+
+                cx.background_executor().timer(duration).await;
+
                 let res = this.update(cx, |this: &mut Self, cx| {
                     if this.active {
                         let t = this.start_time.elapsed().as_secs_f32();

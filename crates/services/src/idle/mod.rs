@@ -56,7 +56,7 @@ impl IdleService {
         let mut last_cursor_pos = String::new();
 
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
             let mut has_activity = false;
 
@@ -88,42 +88,14 @@ impl IdleService {
             // Spotify is EXCLUDED: Spotify playing music does NOT prevent locking.
             let is_video_playing = {
                 let players = crate::mpris::MprisService::fetch_all_players().await;
-                let has_mpris_video = players.iter().any(|p| {
+                players.iter().any(|p| {
                     if !p.is_playing {
                         return false;
                     }
                     let bus = p.bus_name.to_lowercase();
                     let name = p.player_name.to_lowercase();
                     !bus.contains("spotify") && !name.contains("spotify")
-                });
-
-                if has_mpris_video {
-                    true
-                } else {
-                    // Fallback check with playerctl for browser video players (e.g. firefox.instance_...)
-                    if let Ok(out) = std::process::Command::new("playerctl")
-                        .args(["-a", "status"])
-                        .output()
-                    {
-                        let stdout = String::from_utf8_lossy(&out.stdout);
-                        if let Ok(list_out) =
-                            std::process::Command::new("playerctl").arg("-l").output()
-                        {
-                            let list = String::from_utf8_lossy(&list_out.stdout);
-                            let lines: Vec<&str> = list.lines().collect();
-                            let statuses: Vec<&str> = stdout.lines().collect();
-
-                            lines.iter().zip(statuses.iter()).any(|(player, status)| {
-                                status.trim().eq_ignore_ascii_case("Playing")
-                                    && !player.to_lowercase().contains("spotify")
-                            })
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }
+                })
             };
 
             if has_activity || is_video_playing {
