@@ -291,7 +291,7 @@ impl Drop for LockScreen {
             crate::panel::LockScreenPanel::mark_closed();
             if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
                 let _ = std::process::Command::new("hyprctl")
-                    .args(["dispatch", "submap", "reset"])
+                    .args(["eval", "hl.dsp.submap(\"reset\")"])
                     .spawn();
             }
         }
