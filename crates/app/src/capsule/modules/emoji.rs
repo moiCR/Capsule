@@ -5,18 +5,34 @@ use gpui::{
 use services::{EmojiItem, EmojiService};
 use ui::theme::Theme;
 
-const ITEMS_PER_PAGE: usize = 40; // 8 columns x 5 rows = 40 visible emojis per page (perfect zero-clipping layout)
-const COLS: usize = 8;
+use crate::capsule::widgets::emoji::{
+    emoji_grid::render_emoji_cell, emoji_search::render_emoji_search,
+};
+
+const COLS: usize = 7;
+const VISIBLE_ROWS: usize = 5;
+const ITEMS_PER_PAGE: usize = COLS * VISIBLE_ROWS;
+
+const CATEGORY_ICONS: &[(&str, &str, &str)] = &[
+    ("all", "sparkles.svg", "Todos"),
+    ("people", "sparkles.svg", "😊"),
+    ("nature", "leaf.svg", "🌿"),
+    ("food", "sparkles.svg", "🍔"),
+    ("activity", "sparkles.svg", "⚽"),
+    ("travel", "sparkles.svg", "✈️"),
+    ("objects", "sparkles.svg", "💡"),
+    ("symbols", "sparkles.svg", "🔣"),
+    ("flags", "sparkles.svg", "🏁"),
+];
 
 pub enum EmojiEvent {
     Close,
 }
 
 pub struct EmojiModule {
-    service: EmojiService,
+    pub service: EmojiService,
     query: String,
     category_filter: Option<String>,
-    category_offset: usize,
     items: &'static [EmojiItem],
     filtered_items: Vec<&'static EmojiItem>,
     pub selected_index: usize,
@@ -40,7 +56,6 @@ impl EmojiModule {
             service,
             query: String::new(),
             category_filter: None,
-            category_offset: 0,
             items: all_emojis,
             filtered_items: filtered,
             selected_index: 0,
@@ -54,7 +69,6 @@ impl EmojiModule {
     pub fn reload_items(&mut self, cx: &mut Context<Self>) {
         self.query.clear();
         self.category_filter = None;
-        self.category_offset = 0;
         self.items = self.service.load_emojis().as_slice();
         self.filter_items();
         self.selected_index = 0;
@@ -93,7 +107,9 @@ impl EmojiModule {
                     return true;
                 }
 
-                item.keywords.iter().any(|kw| kw.to_lowercase().contains(&q))
+                item.keywords
+                    .iter()
+                    .any(|kw| kw.to_lowercase().contains(&q))
             })
             .collect();
     }
@@ -103,7 +119,7 @@ impl EmojiModule {
         window.focus(&self.focus_handle, cx);
     }
 
-    fn update_search(&mut self, new_query: String, cx: &mut Context<Self>) {
+    pub fn update_search(&mut self, new_query: String, cx: &mut Context<Self>) {
         self.query = new_query;
         self.filter_items();
         self.selected_index = 0;
@@ -249,16 +265,22 @@ impl EmojiModule {
                     self.update_search(q, cx);
                 }
             }
-            ch if ch.len() == 1
-                && !event.keystroke.modifiers.control
-                && !event.keystroke.modifiers.alt
-                && !event.keystroke.modifiers.platform =>
-            {
-                let mut q = self.query.clone();
-                q.push_str(ch);
-                self.update_search(q, cx);
+            _ => {
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+                if text.chars().count() == 1
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.alt
+                    && !event.keystroke.modifiers.platform
+                {
+                    let mut q = self.query.clone();
+                    q.push_str(text);
+                    self.update_search(q, cx);
+                }
             }
-            _ => {}
         }
     }
 }
@@ -284,134 +306,53 @@ impl Render for EmojiModule {
             self.page = 0;
         }
 
-        let categories = [
-            ("all", "Todos"),
-            ("people", "Emociones"),
-            ("nature", "Naturaleza"),
-            ("food", "Comida"),
-            ("activity", "Actividades"),
-            ("travel", "Viajes"),
-            ("objects", "Objetos"),
-            ("symbols", "Símbolos"),
-            ("flags", "Banderas"),
-        ];
-
-        let visible_cat_count = 4;
-        let max_offset = categories.len().saturating_sub(visible_cat_count);
-        let category_offset = self.category_offset.min(max_offset);
-
-        let can_prev_cat = category_offset > 0;
-        let can_next_cat = category_offset < max_offset;
-
-        // Spacious Unified Category Wrapper
-        let mut cat_bar = div()
+        let mut cat_strip = div()
             .flex()
             .flex_row()
             .items_center()
-            .justify_between()
             .w_full()
-            .px_2()
-            .py_1()
-            .rounded_2xl()
-            .bg(theme.surface().opacity(0.35))
-            .border_1()
-            .border_color(theme.surface().opacity(0.6))
-            .gap_1p5();
-
-        // Chevron Left Button (flex_none prevents squishing)
-        cat_bar = cat_bar.child(
-            div()
-                .id("cat-prev-btn")
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(28.0))
-                .h(px(28.0))
-                .rounded_xl()
-                .bg(if can_prev_cat {
-                    theme.surface().opacity(0.6)
-                } else {
-                    theme.surface().opacity(0.2)
-                })
-                .cursor_pointer()
-                .hover(|s| {
-                    if can_prev_cat {
-                        s.bg(theme.surface().opacity(0.9))
-                    } else {
-                        s
-                    }
-                })
-                .active(|s| if can_prev_cat { s.opacity(0.6) } else { s })
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if this.category_offset > 0 {
-                        this.category_offset -= 1;
-                        cx.notify();
-                    }
-                }))
-                .child(
-                    svg()
-                        .path("chevron-left.svg")
-                        .size(px(13.0))
-                        .text_color(if can_prev_cat {
-                            theme.foreground()
-                        } else {
-                            theme.foreground_muted().opacity(0.3)
-                        }),
-                ),
-        );
-
-        let mut cat_items_container = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap_1p5()
-            .flex_1()
-            .justify_between()
+            .gap(px(2.0))
             .overflow_hidden();
 
-        let visible_cats = &categories[category_offset..(category_offset + visible_cat_count).min(categories.len())];
-
-        for (cat_id, cat_label) in visible_cats {
-            let is_cat_active = match (*cat_id, self.category_filter.as_deref()) {
+        for &(cat_id, icon_path, label) in CATEGORY_ICONS {
+            let is_active = match (cat_id, self.category_filter.as_deref()) {
                 ("all", None) => true,
                 (cat, Some(active)) => cat.eq_ignore_ascii_case(active),
                 _ => false,
             };
 
-            let cat_val = if *cat_id == "all" {
+            let cat_val = if cat_id == "all" {
                 None
             } else {
-                Some((*cat_id).to_string())
+                Some(cat_id.to_string())
             };
 
-            cat_items_container = cat_items_container.child(
+            let use_emoji_label = cat_id != "all";
+
+            cat_strip = cat_strip.child(
                 div()
                     .id(format!("cat-{cat_id}"))
-                    .px_2p5()
-                    .py_1()
-                    .rounded_xl()
-                    .text_size(px(11.0))
-                    .font_weight(if is_cat_active {
-                        FontWeight::BOLD
-                    } else {
-                        FontWeight::MEDIUM
-                    })
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_1()
+                    .py(px(6.0))
+                    .rounded(px(12.0))
                     .cursor_pointer()
-                    .bg(if is_cat_active {
-                        theme.accent()
+                    .bg(if is_active {
+                        theme.accent().opacity(0.15)
                     } else {
-                        theme.surface().opacity(0.3)
+                        gpui::hsla(0.0, 0.0, 0.0, 0.0)
                     })
-                    .text_color(if is_cat_active {
-                        theme.background()
+                    .border_1()
+                    .border_color(if is_active {
+                        theme.accent().opacity(0.4)
                     } else {
-                        theme.foreground_muted()
+                        gpui::hsla(0.0, 0.0, 0.0, 0.0)
                     })
                     .hover(|s| {
-                        if !is_cat_active {
-                            s.bg(theme.surface().opacity(0.7))
-                                .text_color(theme.foreground())
+                        if !is_active {
+                            s.bg(theme.surface().opacity(0.4))
                         } else {
                             s
                         }
@@ -420,56 +361,25 @@ impl Render for EmojiModule {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_category(cat_val.clone(), cx);
                     }))
-                    .child(*cat_label),
+                    .child(if use_emoji_label {
+                        div()
+                            .text_size(px(14.0))
+                            .child(label.to_string())
+                            .into_any_element()
+                    } else {
+                        svg()
+                            .path(icon_path)
+                            .size(px(14.0))
+                            .text_color(if is_active {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            })
+                            .into_any_element()
+                    }),
             );
         }
 
-        cat_bar = cat_bar.child(cat_items_container);
-
-        // Chevron Right Button (flex_none prevents squishing or clipping)
-        cat_bar = cat_bar.child(
-            div()
-                .id("cat-next-btn")
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(28.0))
-                .h(px(28.0))
-                .rounded_xl()
-                .bg(if can_next_cat {
-                    theme.surface().opacity(0.6)
-                } else {
-                    theme.surface().opacity(0.2)
-                })
-                .cursor_pointer()
-                .hover(|s| {
-                    if can_next_cat {
-                        s.bg(theme.surface().opacity(0.9))
-                    } else {
-                        s
-                    }
-                })
-                .active(|s| if can_next_cat { s.opacity(0.6) } else { s })
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if this.category_offset + visible_cat_count < categories.len() {
-                        this.category_offset += 1;
-                        cx.notify();
-                    }
-                }))
-                .child(
-                    svg()
-                        .path("chevron-right.svg")
-                        .size(px(13.0))
-                        .text_color(if can_next_cat {
-                            theme.foreground()
-                        } else {
-                            theme.foreground_muted().opacity(0.3)
-                        }),
-                ),
-        );
-
-        // Render current page items (48 items per page: 8 cols x 6 rows)
         let page_start = self.page * ITEMS_PER_PAGE;
         let page_end = (page_start + ITEMS_PER_PAGE).min(total_items);
         let current_page_items = if page_start < total_items {
@@ -485,247 +395,176 @@ impl Render for EmojiModule {
             .flex_col()
             .flex_1()
             .overflow_hidden()
-            .gap_2();
+            .gap(px(2.0));
 
         for (row_idx, chunk) in current_page_items.chunks(COLS).enumerate() {
-            let mut row = div().flex().flex_row().items_center().justify_start().gap_2();
+            let mut row = div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_center()
+                .gap(px(2.0));
 
             for (col_idx, item) in chunk.iter().enumerate() {
                 let global_idx = page_start + row_idx * COLS + col_idx;
                 let is_selected = global_idx == selected_index;
-                let item_emoji = item.emoji.clone();
 
-                row = row.child(
-                    div()
-                        .id(format!("emoji-{global_idx}"))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(54.0))
-                        .h(px(40.0))
-                        .rounded_2xl()
-                        .cursor_pointer()
-                        .bg(if is_selected {
-                            theme.accent().opacity(0.25)
-                        } else {
-                            theme.surface().opacity(0.35)
-                        })
-                        .border_1()
-                        .border_color(if is_selected {
-                            theme.accent()
-                        } else {
-                            theme.surface().opacity(0.0)
-                        })
-                        .hover(|s| {
-                            if !is_selected {
-                                s.bg(theme.surface().opacity(0.75))
-                            } else {
-                                s
-                            }
-                        })
-                        .active(|s| s.opacity(0.7))
-                        .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                            if !this.mouse_moved {
-                                this.mouse_moved = true;
-                            }
-                            if this.selected_index != global_idx {
-                                this.selected_index = global_idx;
-                                cx.notify();
-                            }
-                        }))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.service.copy_emoji(&item_emoji);
-                            this.clear_cache();
-                            cx.emit(EmojiEvent::Close);
-                        }))
-                        .child(
-                            div()
-                                .text_size(px(20.0))
-                                .child(item.emoji.clone()),
-                        ),
-                );
+                row = row.child(render_emoji_cell(global_idx, item, is_selected, &theme, cx));
+            }
+
+            if chunk.len() < COLS {
+                for _ in 0..(COLS - chunk.len()) {
+                    row = row.child(div().w(px(56.0)).h(px(56.0)));
+                }
             }
 
             grid_rows = grid_rows.child(row);
         }
 
-        // Page navigation controls
+        let selected_preview = self
+            .filtered_items
+            .get(selected_index)
+            .map(|item| (item.emoji.clone(), item.name.clone(), item.category.clone()));
+
         let current_page_num = self.page + 1;
-        let pagination_bar = div()
+
+        let footer = div()
             .flex()
             .flex_row()
             .items_center()
             .justify_between()
             .w_full()
-            .pt_1()
-            .child(
+            .h(px(36.0))
+            .px_1()
+            .child(if let Some((emoji, name, category)) = selected_preview {
                 div()
-                    .id("page-prev-btn")
                     .flex()
                     .items_center()
-                    .gap_1p5()
-                    .px_3()
-                    .py_1p5()
-                    .rounded_xl()
-                    .bg(theme.surface().opacity(0.4))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                    .active(|s| s.opacity(0.7))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.prev_page(cx);
-                    }))
+                    .gap_2()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(div().text_size(px(18.0)).child(emoji))
                     .child(
-                        svg()
-                            .path("chevron-left.svg")
-                            .size(px(13.0))
-                            .text_color(theme.foreground()),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .overflow_hidden()
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(theme.foreground())
+                                    .text_ellipsis()
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(9.0))
+                                    .text_color(theme.foreground_muted())
+                                    .text_ellipsis()
+                                    .child(category),
+                            ),
+                    )
+                    .into_any_element()
+            } else {
+                div().flex_1().into_any_element()
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(
+                        div()
+                            .id("page-prev-btn")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(24.0))
+                            .h(px(24.0))
+                            .rounded(px(8.0))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(theme.surface().opacity(0.6)))
+                            .active(|s| s.opacity(0.6))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.prev_page(cx);
+                            }))
+                            .child(
+                                svg()
+                                    .path("chevron-left.svg")
+                                    .size(px(12.0))
+                                    .text_color(theme.foreground_muted()),
+                            ),
                     )
                     .child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(10.0))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.foreground())
-                            .child("Anterior"),
-                    ),
-            )
-            .child(
-                div()
-                    .text_size(px(11.0))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(theme.foreground_muted())
-                    .child(format!("{current_page_num} / {total_pages}")),
-            )
-            .child(
-                div()
-                    .id("page-next-btn")
-                    .flex()
-                    .items_center()
-                    .gap_1p5()
-                    .px_3()
-                    .py_1p5()
-                    .rounded_xl()
-                    .bg(theme.surface().opacity(0.4))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                    .active(|s| s.opacity(0.7))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.next_page(cx);
-                    }))
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.foreground())
-                            .child("Siguiente"),
+                            .text_color(theme.foreground_muted())
+                            .child(format!("{current_page_num}/{total_pages}")),
                     )
                     .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(13.0))
-                            .text_color(theme.foreground()),
+                        div()
+                            .id("page-next-btn")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(24.0))
+                            .h(px(24.0))
+                            .rounded(px(8.0))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(theme.surface().opacity(0.6)))
+                            .active(|s| s.opacity(0.6))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.next_page(cx);
+                            }))
+                            .child(
+                                svg()
+                                    .path("chevron-right.svg")
+                                    .size(px(12.0))
+                                    .text_color(theme.foreground_muted()),
+                            ),
                     ),
             );
 
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
+            .on_mouse_move(cx.listener(|this, _, _window, cx| {
+                if !this.mouse_moved {
+                    this.mouse_moved = true;
+                    cx.notify();
+                }
+            }))
             .flex()
             .flex_col()
-            .w(px(520.0))
-            .h(px(500.0))
-            .p_4()
-            .gap_3()
-            .child(
-                // Header
+            .w(px(430.0))
+            .max_h(px(480.0))
+            .p_3p5()
+            .gap_2p5()
+            .child(render_emoji_search(&query, total_items, &theme, cx))
+            .child(cat_strip)
+            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
+            .child(if is_empty {
                 div()
+                    .id("emoji-empty-state")
                     .flex()
-                    .flex_row()
+                    .flex_col()
+                    .flex_1()
                     .items_center()
-                    .justify_between()
-                    .w_full()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                svg()
-                                    .path("sparkles.svg")
-                                    .size(px(18.0))
-                                    .text_color(theme.accent()),
-                            )
-                            .child(
-                                div()
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_size(px(14.0))
-                                    .text_color(theme.foreground())
-                                    .child("EMOJIS"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2p5()
-                            .py_0p5()
-                            .rounded_full()
-                            .bg(theme.surface().opacity(0.4))
-                            .text_size(px(10.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.foreground_muted())
-                            .child(format!("{total_items} disponibles")),
-                    ),
-            )
-            .child(
-                // Search bar
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap_2p5()
-                    .px_3p5()
-                    .py_2()
-                    .rounded_2xl()
-                    .bg(theme.surface().opacity(0.45))
-                    .border_1()
-                    .border_color(theme.surface().opacity(0.7))
-                    .child(
-                        svg()
-                            .path("search.svg")
-                            .size(px(14.0))
-                            .text_color(theme.foreground_muted()),
-                    )
+                    .justify_center()
+                    .gap_2()
+                    .child(div().text_size(px(32.0)).child("🔍"))
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(if query.is_empty() {
-                                theme.foreground_muted()
-                            } else {
-                                theme.foreground()
-                            })
-                            .child(if query.is_empty() {
-                                "Buscar emoji por nombre o palabra clave...".to_string()
-                            } else {
-                                query
-                            }),
-                    ),
-            )
-            .child(cat_bar)
-            .child(
-                // Grid of items or empty state
-                if is_empty {
-                    div()
-                        .id("emoji-empty-state")
-                        .flex()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(12.0))
-                        .text_color(theme.foreground_muted())
-                        .child("No se encontraron emojis.")
-                } else {
-                    grid_rows
-                },
-            )
-            .child(pagination_bar)
+                            .text_color(theme.foreground_muted())
+                            .child("No se encontraron emojis"),
+                    )
+            } else {
+                grid_rows
+            })
+            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
+            .child(footer)
     }
 }

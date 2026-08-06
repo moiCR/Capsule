@@ -4,10 +4,7 @@ use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
 
-pub fn render_power_widget(
-    theme: &Theme,
-    cx: &mut Context<DashboardModule>,
-) -> impl IntoElement {
+pub fn render_power_widget(theme: &Theme, cx: &mut Context<DashboardModule>) -> impl IntoElement {
     let lang = if cx.has_global::<ui::language::Language>() {
         cx.global::<ui::language::Language>().clone()
     } else {
@@ -21,16 +18,27 @@ pub fn render_power_widget(
     };
 
     let profiles = [
-        (PowerProfile::Performance, lang.power.performance.clone(), "zap.svg", "power-profile-perf"),
-        (PowerProfile::Balanced, lang.power.balanced.clone(), "scale.svg", "power-profile-bal"),
-        (PowerProfile::PowerSaver, lang.power.power_saver.clone(), "leaf.svg", "power-profile-saver"),
+        (
+            PowerProfile::Performance,
+            lang.power.performance.clone(),
+            "zap.svg",
+            "power-profile-perf",
+        ),
+        (
+            PowerProfile::Balanced,
+            lang.power.balanced.clone(),
+            "scale.svg",
+            "power-profile-bal",
+        ),
+        (
+            PowerProfile::PowerSaver,
+            lang.power.power_saver.clone(),
+            "leaf.svg",
+            "power-profile-saver",
+        ),
     ];
 
-    let mut profile_rows = div()
-        .flex()
-        .flex_col()
-        .gap_1p5()
-        .w_full();
+    let mut profile_rows = div().flex().flex_col().gap_1p5().w_full();
 
     for (profile_val, label, icon_file, element_id) in profiles {
         let is_selected = current_profile == profile_val;
@@ -66,7 +74,9 @@ pub fn render_power_widget(
             })
             .on_click(cx.listener(move |_this, _, _, cx| {
                 if cx.has_global::<AppState>() {
-                    cx.global::<AppState>().power.set_active_profile(prof_clone.clone());
+                    cx.global::<AppState>()
+                        .power
+                        .set_active_profile(prof_clone.clone());
                 }
                 cx.notify();
             }))

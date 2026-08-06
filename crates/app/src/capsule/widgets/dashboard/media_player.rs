@@ -22,11 +22,15 @@ pub fn render_media_player_widget(
         .rounded_full()
         .child(
             svg()
-                .path(if active_track.player_name.to_lowercase().contains("spotify") || !active_track.has_media {
-                    "spotify.svg"
-                } else {
-                    "music.svg"
-                })
+                .path(
+                    if active_track.player_name.to_lowercase().contains("spotify")
+                        || !active_track.has_media
+                    {
+                        "spotify.svg"
+                    } else {
+                        "music.svg"
+                    },
+                )
                 .size(px(16.0))
                 .text_color(theme.accent()),
         );
@@ -47,7 +51,12 @@ pub fn render_media_player_widget(
                     }),
             );
         }
-        div().absolute().top_3().right_3().child(dots).into_any_element()
+        div()
+            .absolute()
+            .top_3()
+            .right_3()
+            .child(dots)
+            .into_any_element()
     } else {
         div().into_any_element()
     };

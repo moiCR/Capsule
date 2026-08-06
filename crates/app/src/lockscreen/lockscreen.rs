@@ -39,9 +39,7 @@ impl LockScreen {
                         std::time::Duration::from_millis(16)
                     };
 
-                    cx.background_executor()
-                        .timer(frame_duration)
-                        .await;
+                    cx.background_executor().timer(frame_duration).await;
                     let res = this.update(cx, |_, cx| {
                         cx.notify();
                     });
@@ -107,8 +105,7 @@ impl LockScreen {
 
         tokio::spawn(async move {
             let is_valid = tokio::task::spawn_blocking(move || {
-                // PAM / System Password verification stub/implementation
-                !pass.is_empty()
+                services::PamService::authenticate_current_user(&pass).unwrap_or(false)
             })
             .await
             .unwrap_or(false);
@@ -203,8 +200,41 @@ impl Render for LockScreen {
                     return;
                 }
                 window.focus(&this.focus_handle, cx);
-                match event.keystroke.key.as_str() {
-                    "enter" | "return" => {
+                let key = event.keystroke.key.as_str();
+                let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+                if ctrl {
+                    match key {
+                        "v" => {
+                            if let Some(item) = cx.read_from_clipboard() {
+                                if let Some(text) = item.text() {
+                                    let clean_text: String =
+                                        text.chars().filter(|c| !c.is_control()).collect();
+                                    if !clean_text.is_empty() {
+                                        this.password.push_str(&clean_text);
+                                        this.auth_failed = false;
+                                        cx.notify();
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                        "u" | "w" | "c" | "x" => {
+                            this.password.clear();
+                            this.auth_failed = false;
+                            cx.notify();
+                            return;
+                        }
+                        _ => return,
+                    }
+                }
+
+                if event.keystroke.modifiers.alt {
+                    return;
+                }
+
+                match key {
+                    "enter" | "return" | "numpad_enter" | "kp_enter" | "numpadenter" => {
                         this.submit_password(cx);
                     }
                     "backspace" => {
@@ -231,9 +261,12 @@ impl Render for LockScreen {
                     }
                     k => {
                         if let Some(ref ch) = event.keystroke.key_char {
-                            this.password.push_str(ch.as_str());
-                            this.auth_failed = false;
-                            cx.notify();
+                            let clean: String = ch.chars().filter(|c| !c.is_control()).collect();
+                            if !clean.is_empty() {
+                                this.password.push_str(&clean);
+                                this.auth_failed = false;
+                                cx.notify();
+                            }
                         } else if k.chars().count() == 1 {
                             let c = k.chars().next().unwrap();
                             if !c.is_control() {

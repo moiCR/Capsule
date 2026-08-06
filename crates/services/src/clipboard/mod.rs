@@ -50,11 +50,17 @@ impl ClipboardService {
 
             if !is_running {
                 let _ = Command::new("sh")
-                    .args(["-c", "wl-paste --type text --watch cliphist store >/dev/null 2>&1 &"])
+                    .args([
+                        "-c",
+                        "wl-paste --type text --watch cliphist store >/dev/null 2>&1 &",
+                    ])
                     .spawn();
 
                 let _ = Command::new("sh")
-                    .args(["-c", "wl-paste --type image --watch cliphist store >/dev/null 2>&1 &"])
+                    .args([
+                        "-c",
+                        "wl-paste --type image --watch cliphist store >/dev/null 2>&1 &",
+                    ])
                     .spawn();
             }
         });
@@ -146,10 +152,7 @@ impl ClipboardService {
             }
         }
 
-        if let Ok(mut child) = Command::new("wl-copy")
-            .stdin(Stdio::piped())
-            .spawn()
-        {
+        if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
             if let Some(mut stdin) = child.stdin.take() {
                 use std::io::Write;
                 let _ = stdin.write_all(item.preview.as_bytes());

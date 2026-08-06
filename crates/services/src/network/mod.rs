@@ -1,7 +1,7 @@
 use crate::dbus_util::get_shared_system_conn;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{Duration, sleep, timeout};
 use zbus::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
 use zbus::proxy;
@@ -186,7 +186,8 @@ impl NetworkService {
         let mut target_conn = None;
         for c_path in conns {
             let c_proxy = NMSettingsConnectionProxy::builder(conn)
-                .path(&c_path).unwrap()
+                .path(&c_path)
+                .unwrap()
                 .build()
                 .await?;
             if let Ok(dict) = c_proxy.get_settings().await {
@@ -209,15 +210,17 @@ impl NetworkService {
 
         for dev_path in devices {
             let props = PropertiesProxy::builder(conn)
-                .destination("org.freedesktop.NetworkManager").unwrap()
-                .path(&dev_path).unwrap()
+                .destination("org.freedesktop.NetworkManager")
+                .unwrap()
+                .path(&dev_path)
+                .unwrap()
                 .build()
                 .await?;
 
             let dev_type = props
                 .get(
                     InterfaceName::try_from("org.freedesktop.NetworkManager.Device").unwrap(),
-                    "DeviceType"
+                    "DeviceType",
                 )
                 .await
                 .and_then(|v| Ok(<u32>::try_from(&*v).unwrap_or(0)))
@@ -227,22 +230,34 @@ impl NetworkService {
                 // Wi-Fi
                 target_dev = Some(dev_path.clone());
                 // Find AP
-                if let Ok(wireless) = NMWirelessProxy::builder(conn).path(&dev_path).unwrap().build().await {
+                if let Ok(wireless) = NMWirelessProxy::builder(conn)
+                    .path(&dev_path)
+                    .unwrap()
+                    .build()
+                    .await
+                {
                     if let Ok(aps) = wireless.get_all_access_points().await {
                         for ap_path in aps {
                             let ap_props = PropertiesProxy::builder(conn)
-                                .destination("org.freedesktop.NetworkManager").unwrap()
-                                .path(&ap_path).unwrap()
+                                .destination("org.freedesktop.NetworkManager")
+                                .unwrap()
+                                .path(&ap_path)
+                                .unwrap()
                                 .build()
                                 .await?;
                             if let Ok(ap_ssid_val) = ap_props
                                 .get(
-                                    InterfaceName::try_from("org.freedesktop.NetworkManager.AccessPoint").unwrap(),
-                                    "Ssid"
+                                    InterfaceName::try_from(
+                                        "org.freedesktop.NetworkManager.AccessPoint",
+                                    )
+                                    .unwrap(),
+                                    "Ssid",
                                 )
                                 .await
                             {
-                                if let Ok(ap_ssid_bytes) = <Vec<u8>>::try_from((*ap_ssid_val).clone()) {
+                                if let Ok(ap_ssid_bytes) =
+                                    <Vec<u8>>::try_from((*ap_ssid_val).clone())
+                                {
                                     if String::from_utf8_lossy(&ap_ssid_bytes) == ssid {
                                         target_ap = Some(ap_path.clone());
                                         break;
@@ -267,8 +282,10 @@ impl NetworkService {
         tokio::spawn(async move {
             if let Some(conn) = get_shared_system_conn().await {
                 if let Ok(om) = BluezObjectManagerProxy::builder(&conn)
-                    .destination("org.bluez").unwrap()
-                    .path("/").unwrap()
+                    .destination("org.bluez")
+                    .unwrap()
+                    .path("/")
+                    .unwrap()
                     .build()
                     .await
                 {
@@ -279,7 +296,8 @@ impl NetworkService {
                                     if let Ok(addr) = <&str>::try_from(&**addr_val) {
                                         if addr == mac {
                                             if let Ok(dev_proxy) = BluezDeviceProxy::builder(&conn)
-                                                .path(&path).unwrap()
+                                                .path(&path)
+                                                .unwrap()
                                                 .build()
                                                 .await
                                             {
@@ -316,8 +334,10 @@ impl NetworkService {
             if let Ok(devices) = nm.get_devices().await {
                 for dev_path in devices {
                     let props = match PropertiesProxy::builder(conn)
-                        .destination("org.freedesktop.NetworkManager").unwrap()
-                        .path(&dev_path).unwrap()
+                        .destination("org.freedesktop.NetworkManager")
+                        .unwrap()
+                        .path(&dev_path)
+                        .unwrap()
                         .build()
                         .await
                     {
@@ -325,7 +345,13 @@ impl NetworkService {
                         Err(_) => continue,
                     };
 
-                    let dict = match props.get_all(InterfaceName::try_from("org.freedesktop.NetworkManager.Device").unwrap()).await {
+                    let dict = match props
+                        .get_all(
+                            InterfaceName::try_from("org.freedesktop.NetworkManager.Device")
+                                .unwrap(),
+                        )
+                        .await
+                    {
                         Ok(d) => d,
                         Err(_) => continue,
                     };
@@ -346,15 +372,20 @@ impl NetworkService {
                         if let Some(ac_val) = dict.get("ActiveConnection") {
                             if let Ok(ac_path) = <&ObjectPath>::try_from(&**ac_val) {
                                 if let Ok(ac_props) = PropertiesProxy::builder(conn)
-                                    .destination("org.freedesktop.NetworkManager").unwrap()
-                                    .path(ac_path.clone()).unwrap()
+                                    .destination("org.freedesktop.NetworkManager")
+                                    .unwrap()
+                                    .path(ac_path.clone())
+                                    .unwrap()
                                     .build()
                                     .await
                                 {
                                     if let Ok(ac_id_val) = ac_props
                                         .get(
-                                            InterfaceName::try_from("org.freedesktop.NetworkManager.Connection.Active").unwrap(), 
-                                            "Id"
+                                            InterfaceName::try_from(
+                                                "org.freedesktop.NetworkManager.Connection.Active",
+                                            )
+                                            .unwrap(),
+                                            "Id",
                                         )
                                         .await
                                     {
@@ -371,8 +402,10 @@ impl NetworkService {
                             if let Some(ac_val) = dict.get("ActiveConnection") {
                                 if let Ok(ac_path) = <&ObjectPath>::try_from(&**ac_val) {
                                     if let Ok(ac_props) = PropertiesProxy::builder(conn)
-                                        .destination("org.freedesktop.NetworkManager").unwrap()
-                                        .path(ac_path.clone()).unwrap()
+                                        .destination("org.freedesktop.NetworkManager")
+                                        .unwrap()
+                                        .path(ac_path.clone())
+                                        .unwrap()
                                         .build()
                                         .await
                                     {
@@ -393,15 +426,20 @@ impl NetworkService {
                         }
 
                         if status.wifi_enabled {
-                            if let Ok(wireless) =
-                                NMWirelessProxy::builder(conn).path(&dev_path).unwrap().build().await
+                            if let Ok(wireless) = NMWirelessProxy::builder(conn)
+                                .path(&dev_path)
+                                .unwrap()
+                                .build()
+                                .await
                             {
                                 if let Ok(aps) = wireless.get_all_access_points().await {
                                     // Limit to 30 APs to avoid bus congestion
                                     for ap_path in aps.into_iter().take(30) {
                                         if let Ok(ap_props) = PropertiesProxy::builder(conn)
-                                            .destination("org.freedesktop.NetworkManager").unwrap()
-                                            .path(&ap_path).unwrap()
+                                            .destination("org.freedesktop.NetworkManager")
+                                            .unwrap()
+                                            .path(&ap_path)
+                                            .unwrap()
                                             .build()
                                             .await
                                         {
@@ -470,8 +508,10 @@ impl NetworkService {
 
         // 2. Check BlueZ
         if let Ok(om) = BluezObjectManagerProxy::builder(conn)
-            .destination("org.bluez").unwrap()
-            .path("/").unwrap()
+            .destination("org.bluez")
+            .unwrap()
+            .path("/")
+            .unwrap()
             .build()
             .await
         {

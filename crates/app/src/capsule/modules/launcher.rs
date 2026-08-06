@@ -1,6 +1,6 @@
 use gpui::{
-    EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window, div,
-    prelude::*, px,
+    EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
+    div, prelude::*, px, svg,
 };
 use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;
@@ -199,6 +199,14 @@ impl Render for LauncherModule {
 
         window.focus(&self.focus_handle, cx);
 
+        let lang = if cx.has_global::<ui::language::Language>() {
+            cx.global::<ui::language::Language>().clone()
+        } else {
+            ui::language::Language::default()
+        };
+
+        let is_empty = self.apps.is_empty();
+
         let mut app_list = div()
             .id("launcher-app-list")
             .track_scroll(&self.scroll_handle)
@@ -206,18 +214,61 @@ impl Render for LauncherModule {
             .flex_col()
             .flex_1()
             .overflow_scroll()
-            .gap_1();
+            .gap(px(4.0));
 
         for (idx, app) in self.apps.iter().enumerate() {
             let is_selected = idx == self.selected_index;
             app_list = app_list.child(render_app_item(idx, app, is_selected, &theme, cx));
         }
 
-        let lang = if cx.has_global::<ui::language::Language>() {
-            cx.global::<ui::language::Language>().clone()
+        let content = if is_empty {
+            div()
+                .id("launcher-empty-state")
+                .flex()
+                .flex_col()
+                .flex_1()
+                .items_center()
+                .justify_center()
+                .gap_2()
+                .child(
+                    svg()
+                        .path("search.svg")
+                        .size(px(24.0))
+                        .text_color(theme.foreground_muted().opacity(0.4)),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_color(theme.foreground_muted())
+                        .child(lang.launcher.no_apps),
+                )
+                .into_any_element()
         } else {
-            ui::language::Language::default()
+            app_list.into_any_element()
         };
+
+        let footer = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.0))
+                    .child(render_shortcut_hint(
+                        "↑↓",
+                        &lang.launcher.navigate_hint,
+                        &theme,
+                    ))
+                    .child(render_shortcut_hint("↵", &lang.launcher.open_hint, &theme)),
+            )
+            .child(render_shortcut_hint(
+                "esc",
+                &lang.launcher.close_hint,
+                &theme,
+            ));
 
         div()
             .track_focus(&self.focus_handle)
@@ -230,7 +281,7 @@ impl Render for LauncherModule {
             }))
             .flex()
             .flex_col()
-            .w(px(348.0))
+            .w(px(380.0))
             .max_h(px(500.0))
             .p_3p5()
             .gap_2p5()
@@ -241,27 +292,32 @@ impl Render for LauncherModule {
                 cx,
             ))
             .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            .child(app_list)
+            .child(content)
             .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_1()
-                    .py_1()
-                    .text_xs()
-                    .text_color(theme.foreground_muted())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(lang.launcher.navigate_hint)
-                            .child("·")
-                            .child(lang.launcher.open_hint),
-                    )
-                    .child(lang.launcher.close_hint),
-            )
+            .child(footer)
     }
+}
+
+fn render_shortcut_hint(key: &str, label: &str, theme: &Theme) -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(
+            div()
+                .px(px(5.0))
+                .py(px(1.0))
+                .rounded(px(5.0))
+                .bg(theme.surface().opacity(0.6))
+                .text_size(px(9.0))
+                .font_weight(FontWeight::BOLD)
+                .text_color(theme.foreground_muted())
+                .child(key.to_string()),
+        )
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(theme.foreground_muted().opacity(0.7))
+                .child(label.to_string()),
+        )
 }

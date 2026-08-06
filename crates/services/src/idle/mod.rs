@@ -106,9 +106,8 @@ impl IdleService {
                         .output()
                     {
                         let stdout = String::from_utf8_lossy(&out.stdout);
-                        if let Ok(list_out) = std::process::Command::new("playerctl")
-                            .arg("-l")
-                            .output()
+                        if let Ok(list_out) =
+                            std::process::Command::new("playerctl").arg("-l").output()
                         {
                             let list = String::from_utf8_lossy(&list_out.stdout);
                             let lines: Vec<&str> = list.lines().collect();

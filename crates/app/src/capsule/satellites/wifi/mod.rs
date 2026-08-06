@@ -189,16 +189,13 @@ pub fn render_wifi_mini_panel(
                             }
                             cx.notify();
                         }))
-                        .child(
-                            svg()
-                                .path("power.svg")
-                                .size(px(10.0))
-                                .text_color(if status.wifi_enabled {
-                                    theme.accent()
-                                } else {
-                                    theme.foreground_muted()
-                                }),
-                        ),
+                        .child(svg().path("power.svg").size(px(10.0)).text_color(
+                            if status.wifi_enabled {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            },
+                        )),
                 ),
         )
         .child(ap_list)

@@ -11,10 +11,7 @@ use crate::lockscreen::LockScreen;
 
 static LAST_MEDIA_STATE: Mutex<Option<(String, u64, Instant)>> = Mutex::new(None);
 
-pub fn render_lockscreen_media_player(
-    theme: &Theme,
-    cx: &mut Context<LockScreen>,
-) -> impl Element {
+pub fn render_lockscreen_media_player(theme: &Theme, cx: &mut Context<LockScreen>) -> impl Element {
     let active_track = if cx.has_global::<AppState>() {
         cx.global::<AppState>().mpris.get_current_track()
     } else {
@@ -158,10 +155,7 @@ pub fn render_lockscreen_media_player(
 
 static LAST_LYRIC_ANIM: Mutex<Option<(usize, Instant)>> = Mutex::new(None);
 
-pub fn render_lyrics_cascade(
-    theme: &Theme,
-    cx: &mut Context<LockScreen>,
-) -> impl Element {
+pub fn render_lyrics_cascade(theme: &Theme, cx: &mut Context<LockScreen>) -> impl Element {
     let (active_track, lyrics_data) = if cx.has_global::<AppState>() {
         let app_state = cx.global::<AppState>();
         let track = app_state.mpris.get_current_track();

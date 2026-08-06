@@ -13,6 +13,7 @@ pub mod lyrics;
 pub mod mpris;
 pub mod network;
 pub mod notifications;
+pub mod pam;
 pub mod polkit;
 pub mod power;
 pub mod system;
@@ -37,6 +38,7 @@ pub use logger::init_logger;
 pub use lyrics::{LyricLine, LyricsService, TrackLyrics};
 pub use mpris::{MediaTrack, MprisService};
 pub use notifications::{NotificationItem, NotificationStore, start_notification_server};
+pub use pam::PamService;
 pub use polkit::{
     PolkitAuthRequest, PolkitService, authenticate_user, pop_polkit_request, push_polkit_request,
     start_polkit_agent,

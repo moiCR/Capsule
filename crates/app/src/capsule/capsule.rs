@@ -141,9 +141,7 @@ impl Capsule {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let panel_h = if cx.has_global::<AppState>() {
                         let status = cx.global::<AppState>().network.get_status();
-                        super::satellites::bluetooth::compute_bluetooth_panel_height(
-                            &status,
-                        )
+                        super::satellites::bluetooth::compute_bluetooth_panel_height(&status)
                     } else {
                         180.0
                     };
@@ -167,11 +165,16 @@ impl Capsule {
                 super::modules::dashboard::DashboardEvent::VolumeChevronClicked => {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let sink_count = if cx.has_global::<AppState>() {
-                        cx.global::<AppState>().system.get_status().audio_sinks.len()
+                        cx.global::<AppState>()
+                            .system
+                            .get_status()
+                            .audio_sinks
+                            .len()
                     } else {
                         1
                     };
-                    let panel_h = super::satellites::volume::compute_volume_panel_height(sink_count);
+                    let panel_h =
+                        super::satellites::volume::compute_volume_panel_height(sink_count);
                     capsule.panel_manager.toggle(
                         super::satellites::PanelKind::Volume,
                         panel_h,
@@ -187,11 +190,9 @@ impl Capsule {
                 }
                 super::modules::dashboard::DashboardEvent::PowerClicked => {
                     let max_h = capsule.current_height;
-                    capsule.panel_manager.toggle(
-                        super::satellites::PanelKind::Power,
-                        130.0,
-                        max_h,
-                    );
+                    capsule
+                        .panel_manager
+                        .toggle(super::satellites::PanelKind::Power, 130.0, max_h);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::LanguageClicked => {
@@ -401,8 +402,9 @@ impl Capsule {
         .detach();
 
         let wallpaper_view = cx.new(WallpaperModule::new);
-        cx.subscribe(&wallpaper_view, |capsule, _, event: &WallpaperEvent, cx| {
-            match event {
+        cx.subscribe(
+            &wallpaper_view,
+            |capsule, _, event: &WallpaperEvent, cx| match event {
                 WallpaperEvent::CloseRequested => {
                     capsule.wallpaper_view.update(cx, |wallpaper, cx| {
                         wallpaper.clear_cache(cx);
@@ -418,8 +420,8 @@ impl Capsule {
                     });
                     capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                 }
-            }
-        })
+            },
+        )
         .detach();
 
         cx.spawn(async move |this, cx| {
@@ -557,11 +559,14 @@ impl Capsule {
         })
         .detach();
 
-        cx.subscribe(&emoji_view, |capsule, _, event: &EmojiEvent, cx| match event {
-            EmojiEvent::Close => {
-                capsule.start_transition_internal(CapsuleMode::Default, None, cx);
-            }
-        })
+        cx.subscribe(
+            &emoji_view,
+            |capsule, _, event: &EmojiEvent, cx| match event {
+                EmojiEvent::Close => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            },
+        )
         .detach();
 
         Self {
@@ -1180,7 +1185,15 @@ impl Render for Capsule {
                 .panel_manager
                 .left
                 .iter()
-                .map(|p| (p.kind.clone(), p.anim_t(), p.height, p.is_closing(), p.tracker.clone()))
+                .map(|p| {
+                    (
+                        p.kind.clone(),
+                        p.anim_t(),
+                        p.height,
+                        p.is_closing(),
+                        p.tracker.clone(),
+                    )
+                })
                 .collect();
 
             let mut y_stack = 0.0;
@@ -1240,16 +1253,12 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::power::render_power_widget(
-                            &active_theme,
-                            cx,
-                        ).into_any_element()
+                        super::satellites::power::render_power_widget(&active_theme, cx)
+                            .into_any_element()
                     })),
                     PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::language::render_language_widget(
-                            &active_theme,
-                            cx,
-                        ).into_any_element()
+                        super::satellites::language::render_language_widget(&active_theme, cx)
+                            .into_any_element()
                     })),
                 };
 
@@ -1264,8 +1273,13 @@ impl Render for Capsule {
                     );
 
                     let tracked_mini = tracker.track(mini);
-                    pill_wrapper = pill_wrapper
-                        .child(div().absolute().left(px(off_x)).top(px(off_y)).child(tracked_mini));
+                    pill_wrapper = pill_wrapper.child(
+                        div()
+                            .absolute()
+                            .left(px(off_x))
+                            .top(px(off_y))
+                            .child(tracked_mini),
+                    );
                 }
             }
 
@@ -1275,7 +1289,15 @@ impl Render for Capsule {
                 .panel_manager
                 .right
                 .iter()
-                .map(|p| (p.kind.clone(), p.anim_t(), p.height, p.is_closing(), p.tracker.clone()))
+                .map(|p| {
+                    (
+                        p.kind.clone(),
+                        p.anim_t(),
+                        p.height,
+                        p.is_closing(),
+                        p.tracker.clone(),
+                    )
+                })
                 .collect();
 
             let mut y_stack = 0.0;
@@ -1335,16 +1357,12 @@ impl Render for Capsule {
                         )
                     })),
                     PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::power::render_power_widget(
-                            &active_theme,
-                            cx,
-                        ).into_any_element()
+                        super::satellites::power::render_power_widget(&active_theme, cx)
+                            .into_any_element()
                     })),
                     PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::language::render_language_widget(
-                            &active_theme,
-                            cx,
-                        ).into_any_element()
+                        super::satellites::language::render_language_widget(&active_theme, cx)
+                            .into_any_element()
                     })),
                 };
 
@@ -1359,8 +1377,13 @@ impl Render for Capsule {
                     );
 
                     let tracked_mini = tracker.track(mini);
-                    pill_wrapper = pill_wrapper
-                        .child(div().absolute().left(px(off_x)).top(px(off_y)).child(tracked_mini));
+                    pill_wrapper = pill_wrapper.child(
+                        div()
+                            .absolute()
+                            .left(px(off_x))
+                            .top(px(off_y))
+                            .child(tracked_mini),
+                    );
                 }
             }
         }

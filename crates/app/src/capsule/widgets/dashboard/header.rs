@@ -167,7 +167,8 @@ pub fn render_header(
                         ),
                 )
                 .children(
-                    if std::env::var("CAPSULE_TEST").is_ok() || std::env::var("CAPSULE_DEV").is_ok() {
+                    if std::env::var("CAPSULE_TEST").is_ok() || std::env::var("CAPSULE_DEV").is_ok()
+                    {
                         Some(
                             div()
                                 .id("header-test-any-btn")

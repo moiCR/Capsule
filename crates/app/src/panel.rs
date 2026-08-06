@@ -1,6 +1,6 @@
 use gpui::{
-    AppContext, PlatformDisplay, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
-    WindowOptions,
+    AppContext, PlatformDisplay, WindowBackgroundAppearance, WindowBounds, WindowHandle,
+    WindowKind, WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
     px,
 };
@@ -42,7 +42,10 @@ impl CapsulePanel {
         }
     }
 
-    pub fn open(cx: &mut gpui::App, ipc_subscriber: IpcSubscriber) -> Option<WindowHandle<Capsule>> {
+    pub fn open(
+        cx: &mut gpui::App,
+        ipc_subscriber: IpcSubscriber,
+    ) -> Option<WindowHandle<Capsule>> {
         let options = Self::window_options(cx);
         let window = match cx.open_window(options, |_, cx| cx.new(Capsule::new)) {
             Ok(w) => w,
@@ -96,7 +99,10 @@ impl LockScreenPanel {
     }
 
     pub fn open_all(cx: &mut gpui::App) -> Vec<WindowHandle<LockScreen>> {
-        if IS_LOCKSCREEN_OPEN.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if IS_LOCKSCREEN_OPEN
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
             eprintln!("[LockScreenPanel] Lockscreen is already open. Skipping open_all.");
             return Vec::new();
         }
@@ -114,7 +120,9 @@ impl LockScreenPanel {
             let is_primary = index == 0;
             let options = Self::window_options(&**display);
 
-            match cx.open_window(options, |_, cx| cx.new(|cx| LockScreen::new(cx, is_primary))) {
+            match cx.open_window(options, |_, cx| {
+                cx.new(|cx| LockScreen::new(cx, is_primary))
+            }) {
                 Ok(w) => handles.push(w),
                 Err(err) => eprintln!("Failed to open lockscreen on display {index}: {err}"),
             }

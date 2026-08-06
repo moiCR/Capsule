@@ -67,8 +67,6 @@ fn set_agent_connection(conn: Option<zbus::Connection>) {
     }
 }
 
-
-
 pub fn push_polkit_request(
     req: PolkitAuthRequest,
 
@@ -386,12 +384,11 @@ async fn run_helper_process(
         buf
     };
 
-    let status_fut = async {
-        child.wait().await
-    };
+    let status_fut = async { child.wait().await };
 
     let wait_all = async move {
-        let (_, stdout_buf, stderr_buf, status_res) = tokio::join!(stdin_fut, stdout_fut, stderr_fut, status_fut);
+        let (_, stdout_buf, stderr_buf, status_res) =
+            tokio::join!(stdin_fut, stdout_fut, stderr_fut, status_fut);
         match status_res {
             Ok(status) => Ok(std::process::Output {
                 status,
@@ -434,7 +431,9 @@ pub async fn authenticate_user(
         .iter()
         .find(|path| std::path::Path::new(path).exists())
         .copied()
-        .ok_or_else(|| "No se encontró el ejecutable polkit-agent-helper-1 en el sistema.".to_string())?;
+        .ok_or_else(|| {
+            "No se encontró el ejecutable polkit-agent-helper-1 en el sistema.".to_string()
+        })?;
 
     let helper_path = std::path::Path::new(helper);
     let has_setuid = is_setuid(helper_path);
@@ -477,14 +476,7 @@ pub async fn authenticate_user(
         let _ = run_helper_process("sudo", &["-k"], "", 2).await;
 
         let stdin_sudo_helper = format!("{password}\n{cookie}\n{password}\n");
-        match run_helper_process(
-            "sudo",
-            &["-S", helper, user_name],
-            &stdin_sudo_helper,
-            15,
-        )
-        .await
-        {
+        match run_helper_process("sudo", &["-S", helper, user_name], &stdin_sudo_helper, 15).await {
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let ok = output.status.success();

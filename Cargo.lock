@@ -4021,6 +4021,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pam-sys"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd4858311a097f01a0006ef7d0cd50bca81ec430c949d7bf95cbefd202282434"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5335,6 +5344,7 @@ dependencies = [
  "ksni",
  "libc",
  "niri-ipc",
+ "pam-sys",
  "regex",
  "reqwest",
  "serde",

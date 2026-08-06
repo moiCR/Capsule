@@ -1,4 +1,4 @@
-use gpui::{div, px, Element, ParentElement, Styled};
+use gpui::{Element, ParentElement, Styled, div, px};
 use ui::theme::Theme;
 
 pub fn render_auth_form(

@@ -1,6 +1,7 @@
 use crate::{
-    CalendarService, ClipboardService, CompositorService, IdleService, LauncherService, LyricsService, MprisService, NetworkService,
-    PolkitService, PowerService, SniHostService, SystemService, wallpaper::WallpaperService,
+    CalendarService, ClipboardService, CompositorService, IdleService, LauncherService,
+    LyricsService, MprisService, NetworkService, PolkitService, PowerService, SniHostService,
+    SystemService, wallpaper::WallpaperService,
 };
 
 /// Global application state holding all singleton services.

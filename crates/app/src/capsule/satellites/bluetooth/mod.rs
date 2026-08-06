@@ -186,16 +186,13 @@ pub fn render_bluetooth_mini_panel(
                             }
                             cx.notify();
                         }))
-                        .child(
-                            svg()
-                                .path("power.svg")
-                                .size(px(10.0))
-                                .text_color(if status.bluetooth_enabled {
-                                    theme.accent()
-                                } else {
-                                    theme.foreground_muted()
-                                }),
-                        ),
+                        .child(svg().path("power.svg").size(px(10.0)).text_color(
+                            if status.bluetooth_enabled {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            },
+                        )),
                 ),
         )
         .child(dev_list)

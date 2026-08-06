@@ -134,11 +134,7 @@ pub fn render_calendar_mini_panel(
 
     let day_headers = ["L", "M", "M", "J", "V", "S", "D"];
 
-    let mut grid = div()
-        .flex()
-        .flex_col()
-        .w_full()
-        .gap_1();
+    let mut grid = div().flex().flex_col().w_full().gap_1();
 
     let mut header_row = div()
         .flex()

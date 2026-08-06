@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, svg, Element, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled,
+    Element, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, px, svg,
 };
 use ui::theme::Theme;
 

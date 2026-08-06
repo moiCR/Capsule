@@ -1,5 +1,6 @@
 pub mod create_theme;
 pub mod dashboard;
+pub mod emoji;
 pub mod idle;
 pub mod launcher;
 pub mod polkit;
