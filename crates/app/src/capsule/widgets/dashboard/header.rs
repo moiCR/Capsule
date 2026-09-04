@@ -14,20 +14,46 @@ pub fn render_header(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
-    } else {
-        ui::language::Language::default()
-    };
-
     let date_time_text = format!("{date_str} • {time_str}");
 
-    let (power_icon, power_label) = match (battery_percentage, battery_charging) {
-        (Some(pct), true) => ("battery-charging.svg", format!("{pct}%")),
-        (Some(pct), false) if pct <= 20 => ("battery-low.svg", format!("{pct}%")),
-        (Some(pct), false) if pct <= 60 => ("battery-medium.svg", format!("{pct}%")),
-        (Some(pct), false) => ("battery-full.svg", format!("{pct}%")),
-        (None, _) => ("plug.svg", lang.power.ac_desktop),
+    let battery_chip = if let Some(pct) = battery_percentage {
+        let icon = if battery_charging {
+            "battery-charging.svg"
+        } else if pct <= 20 {
+            "battery-low.svg"
+        } else if pct <= 60 {
+            "battery-medium.svg"
+        } else {
+            "battery-full.svg"
+        };
+        Some(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(3.0))
+                .px_1p5()
+                .py_1()
+                .rounded_full()
+                .bg(theme.surface())
+                .text_color(theme.foreground())
+                .text_size(px(11.0))
+                .font_weight(FontWeight::MEDIUM)
+                .child(
+                    svg()
+                        .path(icon)
+                        .size(px(13.0))
+                        .flex_shrink_0()
+                        .text_color(theme.accent()),
+                )
+                .child(
+                    div()
+                        .text_color(theme.foreground())
+                        .child(format!("{pct}%")),
+                ),
+        )
+    } else {
+        None
     };
 
     div()
@@ -73,34 +99,7 @@ pub fn render_header(
                 .flex_row()
                 .items_center()
                 .gap_2()
-                .child(
-                    div()
-                        .id("header-power-btn")
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap(px(3.0))
-                        .px_1p5()
-                        .py_1()
-                        .rounded_full()
-                        .bg(theme.surface())
-                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::PowerClicked);
-                        }))
-                        .text_color(theme.foreground())
-                        .text_size(px(11.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(
-                            svg()
-                                .path(power_icon)
-                                .size(px(13.0))
-                                .flex_shrink_0()
-                                .text_color(theme.accent()),
-                        )
-                        .child(div().text_color(theme.foreground()).child(power_label)),
-                )
+                .children(battery_chip)
                 .child(
                     div()
                         .id("header-theme-btn")
@@ -146,7 +145,7 @@ pub fn render_header(
                 )
                 .child(
                     div()
-                        .id("header-language-btn")
+                        .id("header-settings-btn")
                         .flex()
                         .items_center()
                         .justify_center()
@@ -157,11 +156,11 @@ pub fn render_header(
                         .hover(|s| s.bg(theme.surface().opacity(0.8)))
                         .cursor_pointer()
                         .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::LanguageClicked);
+                            cx.emit(DashboardEvent::SettingsRequested);
                         }))
                         .child(
                             svg()
-                                .path("languages.svg")
+                                .path("settings.svg")
                                 .size(px(13.0))
                                 .text_color(theme.accent()),
                         ),

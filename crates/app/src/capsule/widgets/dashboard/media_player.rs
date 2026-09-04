@@ -12,7 +12,15 @@ pub fn render_media_player_widget(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let card_radius = px(24.0);
+    let card_radius = px(if cx.has_global::<services::AppState>() {
+        cx.global::<services::AppState>()
+            .config
+            .get()
+            .ui
+            .cards_round
+    } else {
+        24.0
+    });
 
     let player_badge = div()
         .absolute()

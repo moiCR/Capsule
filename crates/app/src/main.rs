@@ -122,6 +122,10 @@ COMMANDS:
     show-notification   Show notification panel
     show-clipboard      Show clipboard history manager
     lock                Lock screen (alias: lockscreen)
+    terminal            Launch default terminal (alias: term)
+    browser             Launch default browser (alias: web)
+    editor              Launch default editor (alias: edit)
+    settings            Open settings application (alias: config, preferences)
     hide                Hide panels and return to compact pill (alias: close)
     quit                Stop running Capsule daemon (alias: exit)
     ping                Check if Capsule daemon is running

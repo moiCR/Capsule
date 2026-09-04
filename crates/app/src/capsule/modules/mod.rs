@@ -7,5 +7,6 @@ pub mod launcher;
 pub mod notification;
 pub mod polkit;
 pub mod select_theme;
+pub mod settings;
 pub mod volume;
 pub mod wallpaper;

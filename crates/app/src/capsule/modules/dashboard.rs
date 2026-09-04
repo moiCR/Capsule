@@ -23,8 +23,7 @@ pub enum DashboardEvent {
     CalendarClicked,
     VolumeChevronClicked,
     WallpaperRequested,
-    PowerClicked,
-    LanguageClicked,
+    SettingsRequested,
 }
 
 pub struct DashboardModule {

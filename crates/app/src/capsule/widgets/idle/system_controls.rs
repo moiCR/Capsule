@@ -2,6 +2,7 @@ use gpui::{Context, FontWeight, IntoElement, div, prelude::*, svg};
 use services::{SystemService, SystemStatus};
 use ui::theme::Theme;
 
+#[allow(dead_code)]
 pub fn render_system_controls_widget<V: 'static>(
     status: &SystemStatus,
     service: &SystemService,

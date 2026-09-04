@@ -122,7 +122,6 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
         method
     );
 
-    // 1. Try D-Bus first (returns immediately on success)
     if let Some(conn) = get_session_conn().await {
         let target = if requested_bus.trim().is_empty() {
             "org.mpris.MediaPlayer2.spotify"
@@ -166,7 +165,6 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
         }
     }
 
-    // 2. Only if D-Bus failed/timed out, execute playerctl fallback once
     run_playerctl_fallback(requested_bus, method).await
 }
 

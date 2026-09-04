@@ -22,7 +22,12 @@ pub struct CapsulePanel;
 impl CapsulePanel {
     pub fn window_options(cx: &gpui::App) -> WindowOptions {
         let display_bounds = cx.displays().first().map(|d| d.bounds());
-        let idle_h = 25.0 + 8.0;
+        let (margin_top, exclusive_zone) = if cx.has_global::<services::AppState>() {
+            let config = cx.global::<services::AppState>().config.get();
+            (config.ui.margin_top, config.ui.exclusive_zone())
+        } else {
+            (8.0, 25.0 + 8.0)
+        };
 
         WindowOptions {
             titlebar: None,
@@ -33,8 +38,8 @@ impl CapsulePanel {
                 namespace: "capsule-panel".to_string(),
                 layer: Layer::Top,
                 anchor: Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
-                margin: Some((px(8.0), px(0.0), px(0.0), px(0.0))),
-                exclusive_zone: Some(px(idle_h)),
+                margin: Some((px(margin_top), px(0.0), px(0.0), px(0.0))),
+                exclusive_zone: Some(px(exclusive_zone)),
                 keyboard_interactivity: KeyboardInteractivity::OnDemand,
                 ..Default::default()
             }),

@@ -27,7 +27,9 @@ pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccess
 pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService};
 pub use compositor::CompositorService;
-pub use config::AppConfig;
+pub use config::{
+    AppConfig, ConfigService, Defaults, LockScreenConfig, LockscreenConfig, UIConfig, UiConfig,
+};
 pub use emoji::{EmojiItem, EmojiService};
 pub use idle::{IdleEvent, IdleService};
 pub use ipc::{

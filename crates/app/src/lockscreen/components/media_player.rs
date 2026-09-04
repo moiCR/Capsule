@@ -158,7 +158,11 @@ pub fn render_lockscreen_media_player(theme: &Theme, cx: &mut Context<LockScreen
                                         .rounded_full()
                                         .child(
                                             svg()
-                                                .path(if is_playing { "pause.svg" } else { "play.svg" })
+                                                .path(if is_playing {
+                                                    "pause.svg"
+                                                } else {
+                                                    "play.svg"
+                                                })
                                                 .size(px(13.0))
                                                 .text_color(theme.accent()),
                                         ),

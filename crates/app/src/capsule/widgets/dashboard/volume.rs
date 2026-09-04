@@ -20,6 +20,12 @@ pub fn render_volume_widget(theme: &Theme, cx: &mut Context<DashboardModule>) ->
 
     let vol_percentage = volume.min(100);
 
+    let card_radius = px(if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
+    } else {
+        24.0
+    });
+
     div()
         .flex()
         .flex_row()
@@ -28,7 +34,7 @@ pub fn render_volume_widget(theme: &Theme, cx: &mut Context<DashboardModule>) ->
         .w_full()
         .px_3()
         .py_2()
-        .rounded(px(24.0))
+        .rounded(card_radius)
         .bg(theme.surface().opacity(0.4))
         .gap_2p5()
         .child(

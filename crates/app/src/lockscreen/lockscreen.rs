@@ -120,6 +120,11 @@ impl Render for LockScreen {
             window.focus(&self.focus_handle, cx);
         }
         let theme = cx.global::<Theme>().clone();
+        let lock_config = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().lockscreen.clone()
+        } else {
+            services::LockScreenConfig::default()
+        };
 
         let content = if self.is_primary {
             div()
@@ -127,14 +132,16 @@ impl Render for LockScreen {
                 .w_full()
                 .h_full()
                 // Center: Clock & Date - Exact Screen Center
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .h_full()
-                        .child(render_clock(&theme)),
-                )
+                .when(lock_config.show_clock, |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .h_full()
+                            .child(render_clock(&theme, &lock_config)),
+                    )
+                })
                 // Bottom-Center: Password Input Box
                 .child(
                     div()
@@ -160,7 +167,9 @@ impl Render for LockScreen {
                         .flex_col()
                         .gap(px(12.0))
                         .child(render_lyrics_cascade(&theme, cx))
-                        .child(render_lockscreen_media_player(&theme, cx)),
+                        .when(lock_config.show_media_player, |d| {
+                            d.child(render_lockscreen_media_player(&theme, cx))
+                        }),
                 )
                 // Bottom-Right: Power Menu with SVG icons
                 .child(
@@ -178,7 +187,9 @@ impl Render for LockScreen {
                 .items_center()
                 .justify_center()
                 .h_full()
-                .child(render_clock(&theme))
+                .when(lock_config.show_clock, |d| {
+                    d.child(render_clock(&theme, &lock_config))
+                })
         };
 
         div()

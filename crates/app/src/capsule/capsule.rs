@@ -5,7 +5,7 @@ use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
 use super::satellites::PanelManager;
-use super::{CapsuleMode, MARGIN_TOP, apple_island_ease};
+use super::{CapsuleMode, apple_island_ease};
 
 use super::modules::clipboard::{ClipboardEvent, ClipboardModule};
 use super::modules::create_theme::CreateThemeModule;
@@ -16,6 +16,7 @@ use super::modules::launcher::LauncherModule;
 use super::modules::notification::NotificationModule;
 use super::modules::polkit::PolkitModule;
 use super::modules::select_theme::SelectThemeModule;
+use super::modules::settings::{SettingsEvent, SettingsModule};
 use super::modules::volume::VolumeModule;
 use super::modules::wallpaper::{WallpaperEvent, WallpaperModule};
 
@@ -32,18 +33,23 @@ pub struct Capsule {
     wallpaper_view: Entity<WallpaperModule>,
     clipboard_view: Entity<ClipboardModule>,
     emoji_view: Entity<EmojiModule>,
+    settings_view: Entity<SettingsModule>,
     panel_manager: PanelManager,
     current_width: f32,
     current_height: f32,
     current_radius: f32,
+    current_y: f32,
     target_width: f32,
     target_height: f32,
     target_radius: f32,
+    target_y: f32,
     anim_progress: f32,
     anim_start_time: Option<Instant>,
     anim_start_w: f32,
     anim_start_h: f32,
     anim_start_r: f32,
+    anim_start_y: f32,
+    window_height: f32,
     anim_start_progress: f32,
     animating: bool,
     anim_task: Option<Task<()>>,
@@ -60,7 +66,11 @@ impl Capsule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let idle_view = cx.new(IdleModule::new);
         let (initial_w, initial_h) = idle_view.read(cx).desired_dimensions();
-        let r = CapsuleMode::Default.radius();
+        let r = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.capsule_round
+        } else {
+            CapsuleMode::Default.radius()
+        };
 
         cx.observe(&idle_view, |capsule, idle_view, cx| {
             if capsule.mode == CapsuleMode::Default {
@@ -188,21 +198,11 @@ impl Capsule {
                     });
                     capsule.start_transition_internal(CapsuleMode::Wallpaper, None, cx);
                 }
-                super::modules::dashboard::DashboardEvent::PowerClicked => {
-                    let max_h = capsule.current_height;
-                    capsule
-                        .panel_manager
-                        .toggle(super::satellites::PanelKind::Power, 130.0, max_h);
-                    cx.notify();
-                }
-                super::modules::dashboard::DashboardEvent::LanguageClicked => {
-                    let max_h = capsule.current_height;
-                    capsule.panel_manager.toggle(
-                        super::satellites::PanelKind::Language,
-                        110.0,
-                        max_h,
-                    );
-                    cx.notify();
+
+                super::modules::dashboard::DashboardEvent::SettingsRequested => {
+                    capsule.panel_manager.close_all();
+                    capsule.sync_panel_indices(cx);
+                    capsule.start_transition_internal(CapsuleMode::Settings, None, cx);
                 }
             },
         )
@@ -570,6 +570,35 @@ impl Capsule {
         )
         .detach();
 
+        let settings_view = cx.new(SettingsModule::new);
+        cx.observe(&settings_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            if cx.has_global::<AppState>() && capsule.mode == CapsuleMode::Settings {
+                let r = cx.global::<AppState>().config.get().ui.capsule_round;
+                capsule.target_radius = r;
+                capsule.current_radius = r;
+            }
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(
+            &settings_view,
+            |capsule, _, event: &SettingsEvent, cx| match event {
+                SettingsEvent::Close => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            },
+        )
+        .detach();
+
+        let initial_margin_top = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.margin_top
+        } else {
+            8.0
+        };
+        let initial_y = initial_margin_top / 2.0;
+
         Self {
             mode: CapsuleMode::Default,
             idle_view,
@@ -583,18 +612,23 @@ impl Capsule {
             wallpaper_view,
             clipboard_view,
             emoji_view,
+            settings_view,
             panel_manager: PanelManager::new(),
             current_width: initial_w,
             current_height: initial_h,
             current_radius: r,
+            current_y: initial_y,
             target_width: initial_w,
             target_height: initial_h,
             target_radius: r,
+            target_y: initial_y,
             anim_progress: 0.0,
             anim_start_time: None,
             anim_start_w: initial_w,
             anim_start_h: initial_h,
             anim_start_r: r,
+            anim_start_y: initial_y,
+            window_height: 1080.0,
             anim_start_progress: 0.0,
             animating: false,
             anim_task: None,
@@ -650,6 +684,7 @@ impl Capsule {
         self.anim_start_w = self.current_width;
         self.anim_start_h = self.current_height;
         self.anim_start_r = self.current_radius;
+        self.anim_start_y = self.current_y;
         self.anim_start_progress = self.anim_progress;
         self.animating = true;
         self.is_mode_transition = false;
@@ -663,7 +698,17 @@ impl Capsule {
                     .await;
                 let done = this
                     .update(cx, |capsule, cx| {
-                        let finished = capsule.tick_animation();
+                        let duration = if cx.has_global::<AppState>() {
+                            cx.global::<AppState>()
+                                .config
+                                .get()
+                                .ui
+                                .animation_duration_ms as f32
+                                / 1000.0
+                        } else {
+                            0.28
+                        };
+                        let finished = capsule.tick_animation(duration);
                         cx.notify();
                         finished
                     })
@@ -725,6 +770,7 @@ impl Capsule {
             && mode != CapsuleMode::Dashboard
             && mode != CapsuleMode::Launcher
             && mode != CapsuleMode::Polkit
+            && mode != CapsuleMode::Settings
         {
             self.inactivity_generation += 1;
             let current_gen = self.inactivity_generation;
@@ -741,6 +787,7 @@ impl Capsule {
                                 || capsule.mode == CapsuleMode::Launcher
                                 || capsule.mode == CapsuleMode::Default
                                 || capsule.mode == CapsuleMode::Polkit
+                                || capsule.mode == CapsuleMode::Settings
                             {
                                 return true;
                             }
@@ -776,15 +823,32 @@ impl Capsule {
                 target_h = h;
             }
         }
-        let target_r = mode.radius();
+        let target_r = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.capsule_round
+        } else {
+            mode.radius()
+        };
+
+        let margin_top = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.margin_top
+        } else {
+            8.0
+        };
+        let target_y = if mode == CapsuleMode::Settings {
+            ((self.window_height - target_h) / 2.0).max(margin_top / 2.0)
+        } else {
+            margin_top / 2.0
+        };
 
         self.target_width = target_w;
         self.target_height = target_h;
         self.target_radius = target_r;
+        self.target_y = target_y;
 
         self.anim_start_w = self.current_width;
         self.anim_start_h = self.current_height;
         self.anim_start_r = self.current_radius;
+        self.anim_start_y = self.current_y;
         self.anim_start_progress = self.anim_progress;
 
         let _ = window_opt;
@@ -801,7 +865,17 @@ impl Capsule {
                     .await;
                 let done = this
                     .update(cx, |capsule, cx| {
-                        let finished = capsule.tick_animation();
+                        let duration = if cx.has_global::<AppState>() {
+                            cx.global::<AppState>()
+                                .config
+                                .get()
+                                .ui
+                                .animation_duration_ms as f32
+                                / 1000.0
+                        } else {
+                            0.28
+                        };
+                        let finished = capsule.tick_animation(duration);
                         cx.notify();
                         finished
                     })
@@ -906,11 +980,55 @@ impl Capsule {
             services::IpcCommand::Quit => {
                 cx.quit();
             }
+            services::IpcCommand::Terminal => {
+                if cx.has_global::<AppState>() {
+                    let config = cx.global::<AppState>().config.get();
+                    let term = &config.defaults.terminal;
+                    let cmd = format!("{term} >/dev/null 2>&1 &");
+                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                }
+            }
+            services::IpcCommand::Browser => {
+                if cx.has_global::<AppState>() {
+                    let config = cx.global::<AppState>().config.get();
+                    let browser = &config.defaults.browser;
+                    let cmd = format!("{browser} >/dev/null 2>&1 &");
+                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                }
+            }
+            services::IpcCommand::Editor => {
+                if cx.has_global::<AppState>() {
+                    let config = cx.global::<AppState>().config.get();
+                    let editor = &config.defaults.editor;
+                    let is_terminal_app = matches!(
+                        editor.trim().split_whitespace().next().unwrap_or(""),
+                        "nvim" | "vim" | "vi" | "nano" | "hx" | "helix" | "micro"
+                    );
+                    let cmd = if is_terminal_app {
+                        let term = &config.defaults.terminal;
+                        format!("{term} -e {editor} >/dev/null 2>&1 &")
+                    } else {
+                        format!("{editor} >/dev/null 2>&1 &")
+                    };
+                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                }
+            }
+            services::IpcCommand::ToggleSettings => {
+                let target = if self.mode == CapsuleMode::Settings {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::Settings
+                };
+                self.start_transition_internal(target, None, cx);
+            }
+            services::IpcCommand::ShowSettings => {
+                self.start_transition_internal(CapsuleMode::Settings, None, cx);
+            }
             _ => {}
         }
     }
 
-    fn tick_animation(&mut self) -> bool {
+    fn tick_animation(&mut self, duration: f32) -> bool {
         if !self.animating || self.anim_start_time.is_none() {
             self.animating = false;
             self.is_mode_transition = false;
@@ -918,15 +1036,25 @@ impl Capsule {
         }
 
         if let Some(start_time) = self.anim_start_time {
-            let duration = 0.28;
-            let t = (start_time.elapsed().as_secs_f32() / duration).min(1.0);
-            let eased = apple_island_ease(t);
-
             let target_progress = if self.mode == CapsuleMode::Dashboard {
                 1.0
             } else {
                 0.0
             };
+
+            if duration <= 0.001 {
+                self.current_width = self.target_width;
+                self.current_height = self.target_height;
+                self.current_radius = self.target_radius;
+                self.current_y = self.target_y;
+                self.anim_progress = target_progress;
+                self.animating = false;
+                self.is_mode_transition = false;
+                return true;
+            }
+
+            let t = (start_time.elapsed().as_secs_f32() / duration).min(1.0);
+            let eased = apple_island_ease(t);
 
             self.current_width =
                 self.anim_start_w + (self.target_width - self.anim_start_w) * eased;
@@ -934,6 +1062,7 @@ impl Capsule {
                 self.anim_start_h + (self.target_height - self.anim_start_h) * eased;
             self.current_radius =
                 self.anim_start_r + (self.target_radius - self.anim_start_r) * eased;
+            self.current_y = self.anim_start_y + (self.target_y - self.anim_start_y) * eased;
             self.anim_progress =
                 self.anim_start_progress + (target_progress - self.anim_start_progress) * eased;
 
@@ -941,6 +1070,7 @@ impl Capsule {
                 self.current_width = self.target_width;
                 self.current_height = self.target_height;
                 self.current_radius = self.target_radius;
+                self.current_y = self.target_y;
                 self.anim_progress = target_progress;
                 self.animating = false;
                 self.is_mode_transition = false;
@@ -956,21 +1086,33 @@ impl Capsule {
 impl Render for Capsule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
+        let ui_config = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.clone()
+        } else {
+            services::UIConfig::default()
+        };
+        let anim_duration = (ui_config.animation_duration_ms as f32 / 1000.0).max(0.001);
 
         let win_w: f32 = window.bounds().size.width.into();
+        let win_h: f32 = window.bounds().size.height.into();
+        if win_h > 100.0 {
+            self.window_height = win_h;
+        }
+
         let is_modal = self.mode == CapsuleMode::Launcher
             || self.mode == CapsuleMode::Dashboard
             || self.mode == CapsuleMode::Polkit
             || self.mode == CapsuleMode::SelectTheme
             || self.mode == CapsuleMode::CreateTheme
             || self.mode == CapsuleMode::Clipboard
-            || self.mode == CapsuleMode::Emoji;
+            || self.mode == CapsuleMode::Emoji
+            || self.mode == CapsuleMode::Settings;
 
         if is_modal {
             window.set_input_region(None);
         } else {
             let pill_x = (win_w - self.current_width) / 2.0;
-            let pill_y = MARGIN_TOP / 2.0;
+            let pill_y = self.current_y;
             let pill_bounds = Bounds {
                 origin: point(px(pill_x), px(pill_y)),
                 size: Size::new(px(self.current_width), px(self.current_height)),
@@ -982,7 +1124,7 @@ impl Render for Capsule {
 
         let anim_t = self
             .anim_start_time
-            .map(|start| (start.elapsed().as_secs_f32() / 0.28).min(1.0))
+            .map(|start| (start.elapsed().as_secs_f32() / anim_duration).min(1.0))
             .unwrap_or(1.0);
         let eased = apple_island_ease(anim_t);
 
@@ -996,6 +1138,7 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::Wallpaper
                 || self.mode == CapsuleMode::Clipboard
                 || self.mode == CapsuleMode::Emoji
+                || self.mode == CapsuleMode::Settings
             {
                 window.activate_window();
             }
@@ -1021,6 +1164,12 @@ impl Render for Capsule {
                     wallpaper.reload_items(cx);
                 });
             }
+            if self.mode == CapsuleMode::Settings {
+                let _ = self.settings_view.update(cx, |settings, cx| {
+                    settings.reload_from_config(cx);
+                    settings.focus(window, cx);
+                });
+            }
         }
 
         let mode_element = match self.mode {
@@ -1034,6 +1183,7 @@ impl Render for Capsule {
             CapsuleMode::Volume => Some(self.volume_view.clone().into_any_element()),
             CapsuleMode::Notification => Some(self.notification_view.clone().into_any_element()),
             CapsuleMode::Dashboard => Some(self.dashboard_view.clone().into_any_element()),
+            CapsuleMode::Settings => Some(self.settings_view.clone().into_any_element()),
             CapsuleMode::Default => None,
         };
 
@@ -1132,6 +1282,10 @@ impl Render for Capsule {
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.start_transition_internal(CapsuleMode::Dashboard, None, cx);
                     }));
+        } else if self.mode == CapsuleMode::Settings {
+            pill_container = pill_container.on_click(cx.listener(|_this, _, _, cx| {
+                cx.stop_propagation();
+            }));
         }
 
         // Wrap the pill in a relative container so satellite panels can be
@@ -1201,7 +1355,7 @@ impl Render for Capsule {
             for (kind, anim_t, panel_h, is_closing, tracker) in left_snapshot {
                 let current_y = y_stack;
                 if !is_closing {
-                    y_stack += panel_h + PM::PANEL_GAP;
+                    y_stack += panel_h + ui_config.gap;
                 }
 
                 let mini_opt = match kind {
@@ -1252,14 +1406,6 @@ impl Render for Capsule {
                             &active_theme,
                             cx,
                         )
-                    })),
-                    PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::power::render_power_widget(&active_theme, cx)
-                            .into_any_element()
-                    })),
-                    PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::language::render_language_widget(&active_theme, cx)
-                            .into_any_element()
                     })),
                 };
 
@@ -1305,7 +1451,7 @@ impl Render for Capsule {
             for (kind, anim_t, panel_h, is_closing, tracker) in right_snapshot {
                 let current_y = y_stack;
                 if !is_closing {
-                    y_stack += panel_h + PM::PANEL_GAP;
+                    y_stack += panel_h + ui_config.gap;
                 }
 
                 let mini_opt = match kind {
@@ -1357,14 +1503,6 @@ impl Render for Capsule {
                             cx,
                         )
                     })),
-                    PM::PanelKind::Power => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::power::render_power_widget(&active_theme, cx)
-                            .into_any_element()
-                    })),
-                    PM::PanelKind::Language => Some(self.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::language::render_language_widget(&active_theme, cx)
-                            .into_any_element()
-                    })),
                 };
 
                 if let Some(mini) = mini_opt {
@@ -1398,12 +1536,21 @@ impl Render for Capsule {
             .justify_center()
             .child(pill_wrapper);
 
-        div()
+        let mut root = div()
+            .id("capsule-root")
             .size_full()
             .flex()
             .items_start()
             .justify_center()
-            .pt(px(MARGIN_TOP / 2.0))
-            .child(flex_container)
+            .pt(px(self.current_y))
+            .child(flex_container);
+
+        if self.mode == CapsuleMode::Settings {
+            root = root.on_click(cx.listener(|this, _, _, cx| {
+                this.start_transition_internal(CapsuleMode::Default, None, cx);
+            }));
+        }
+
+        root
     }
 }

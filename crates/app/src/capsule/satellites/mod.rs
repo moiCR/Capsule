@@ -1,7 +1,5 @@
 pub mod bluetooth;
 pub mod calendar;
-pub mod language;
-pub mod power;
 pub mod tray;
 pub mod volume;
 pub mod wifi;
@@ -38,13 +36,12 @@ pub enum PanelKind {
     Bluetooth,
     Calendar,
     Volume,
-    Power,
-    Language,
 }
 
 /// A single open satellite panel.
 #[derive(Clone, Debug)]
 pub struct OpenPanel {
+    #[allow(dead_code)]
     pub lane: Lane,
     pub kind: PanelKind,
     /// Logical height of this panel in pixels.
@@ -116,6 +113,7 @@ impl PanelManager {
         free.max(0.0)
     }
 
+    #[allow(dead_code)]
     pub fn is_open(&self, kind: &PanelKind) -> bool {
         self.left
             .iter()
@@ -201,6 +199,7 @@ impl PanelManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn close(&mut self, kind: &PanelKind) {
         if let Some(p) = self.left.iter_mut().find(|p| p.kind == *kind) {
             p.closing_at = Some(Instant::now());

@@ -27,6 +27,11 @@ pub enum IpcCommand {
     Ping,
     Lock,
     Quit,
+    Terminal,
+    Browser,
+    Editor,
+    ToggleSettings,
+    ShowSettings,
 }
 
 impl FromStr for IpcCommand {
@@ -60,6 +65,12 @@ impl FromStr for IpcCommand {
             "ping" => Ok(IpcCommand::Ping),
             "lock" | "lockscreen" | "lock-screen" | "toggle-lock" => Ok(IpcCommand::Lock),
             "quit" | "exit" => Ok(IpcCommand::Quit),
+            "terminal" | "term" | "launch-terminal" => Ok(IpcCommand::Terminal),
+            "browser" | "web" | "launch-browser" => Ok(IpcCommand::Browser),
+            "editor" | "edit" | "launch-editor" => Ok(IpcCommand::Editor),
+            "settings" | "config" | "configuration" | "preferences" | "toggle-settings"
+            | "toggle settings" => Ok(IpcCommand::ToggleSettings),
+            "show-settings" | "show settings" => Ok(IpcCommand::ShowSettings),
             _ => anyhow::bail!("Unknown IPC command: '{s}'"),
         }
     }
@@ -84,6 +95,11 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::Ping => "ping".to_string(),
         IpcCommand::Lock => "lock".to_string(),
         IpcCommand::Quit => "quit".to_string(),
+        IpcCommand::Terminal => "terminal".to_string(),
+        IpcCommand::Browser => "browser".to_string(),
+        IpcCommand::Editor => "editor".to_string(),
+        IpcCommand::ToggleSettings => "settings".to_string(),
+        IpcCommand::ShowSettings => "show-settings".to_string(),
     }
 }
 

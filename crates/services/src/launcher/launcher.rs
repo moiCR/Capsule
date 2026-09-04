@@ -69,7 +69,8 @@ impl LauncherService {
         }
 
         let cmd_str = if app.terminal {
-            format!("x-terminal-emulator -e {clean_exec} >/dev/null 2>&1 &")
+            let term = crate::AppConfig::load().defaults.terminal;
+            format!("{term} -e {clean_exec} >/dev/null 2>&1 &")
         } else {
             format!("{clean_exec} >/dev/null 2>&1 &")
         };

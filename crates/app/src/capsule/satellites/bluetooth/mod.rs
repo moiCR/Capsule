@@ -128,12 +128,18 @@ pub fn render_bluetooth_mini_panel(
         }
     }
 
+    let radius = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.satellite_round
+    } else {
+        20.0
+    };
+
     div()
         .w(px(PANEL_W))
         .max_h(px(panel_h))
         .p_2p5()
         .gap_1p5()
-        .rounded(px(20.0))
+        .rounded(px(radius))
         .bg(theme.background())
         .border_1()
         .border_color(theme.surface().opacity(0.6))

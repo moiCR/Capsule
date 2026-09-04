@@ -114,11 +114,17 @@ fn render_wifi_card(
         "Desconectado".to_string()
     };
 
+    let card_radius = px(if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
+    } else {
+        24.0
+    });
+
     div()
         .id("wifi-card-main")
         .flex_1()
         .h(px(72.0))
-        .rounded(px(24.0))
+        .rounded(card_radius)
         .bg(theme.surface().opacity(0.4))
         .border_1()
         .border_color(theme.surface().opacity(0.3))
@@ -240,11 +246,17 @@ fn render_bluetooth_card(
         "Desconectado".to_string()
     };
 
+    let card_radius = px(if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
+    } else {
+        24.0
+    });
+
     div()
         .id("bt-card-main")
         .flex_1()
         .h(px(72.0))
-        .rounded(px(24.0))
+        .rounded(card_radius)
         .bg(theme.surface().opacity(0.4))
         .border_1()
         .border_color(theme.surface().opacity(0.3))

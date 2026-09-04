@@ -41,6 +41,11 @@ https://github.com/user-attachments/assets/b3539fce-8281-4b5a-bdf0-1cf1d3646f44
 - **Compositor Integration**: IPC support for Hyprland and Niri.
 - **GPUI Powered**: Built with Zed's GPU-accelerated UI framework.
 
+
+## Language Support
+- **Spanish**: 100% (Default)
+- **English**: 1%
+
 ## Installation
 ```bash
 curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | bash

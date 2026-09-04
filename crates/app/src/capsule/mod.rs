@@ -6,8 +6,6 @@ pub mod widgets;
 
 pub use capsule::Capsule;
 
-pub const MARGIN_TOP: f32 = 8.0;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CapsuleMode {
     Default,
@@ -21,6 +19,7 @@ pub enum CapsuleMode {
     Wallpaper,
     Clipboard,
     Emoji,
+    Settings,
 }
 
 impl CapsuleMode {
@@ -37,6 +36,7 @@ impl CapsuleMode {
             CapsuleMode::Wallpaper => (700.0, 240.0),
             CapsuleMode::Clipboard => (360.0, 480.0),
             CapsuleMode::Emoji => (520.0, 500.0),
+            CapsuleMode::Settings => (840.0, 560.0),
         }
     }
 
@@ -53,6 +53,7 @@ impl CapsuleMode {
             CapsuleMode::Wallpaper => 42.0,
             CapsuleMode::Clipboard => 42.0,
             CapsuleMode::Emoji => 42.0,
+            CapsuleMode::Settings => 36.0,
         }
     }
 }

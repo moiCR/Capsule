@@ -17,6 +17,16 @@ pub fn render_notifications_widget(
         ui::language::Language::default()
     };
 
+    let card_radius = px(if cx.has_global::<services::AppState>() {
+        cx.global::<services::AppState>()
+            .config
+            .get()
+            .ui
+            .cards_round
+    } else {
+        24.0
+    });
+
     let notifications_box = div()
         .id("notifications-container-box")
         .flex()
@@ -27,7 +37,7 @@ pub fn render_notifications_widget(
         .bg(theme.background_alt())
         .border_1()
         .border_color(theme.surface())
-        .rounded(px(24.0))
+        .rounded(card_radius)
         .overflow_hidden();
 
     let clear_all_btn = if !is_empty {
@@ -158,12 +168,7 @@ pub fn render_notifications_widget(
             list = list.child(notif_item);
 
             if idx < notif_count - 1 {
-                list = list.child(
-                    div()
-                        .w_full()
-                        .h(px(1.0))
-                        .bg(theme.surface().opacity(0.3)),
-                );
+                list = list.child(div().w_full().h(px(1.0)).bg(theme.surface().opacity(0.3)));
             }
         }
         list.into_any_element()

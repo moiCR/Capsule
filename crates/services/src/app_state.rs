@@ -1,7 +1,7 @@
 use crate::{
-    CalendarService, ClipboardService, CompositorService, IdleService, LauncherService,
-    LyricsService, MprisService, NetworkService, PolkitService, PowerService, SniHostService,
-    SystemService, wallpaper::WallpaperService,
+    CalendarService, ClipboardService, CompositorService, ConfigService, IdleService,
+    LauncherService, LyricsService, MprisService, NetworkService, PolkitService, PowerService,
+    SniHostService, SystemService, wallpaper::WallpaperService,
 };
 
 /// Global application state holding all singleton services.
@@ -9,6 +9,7 @@ use crate::{
 /// Read anywhere via `cx.global::<AppState>()`.
 #[derive(Clone)]
 pub struct AppState {
+    pub config: ConfigService,
     pub launcher: LauncherService,
     pub mpris: MprisService,
     pub system: SystemService,
@@ -26,8 +27,15 @@ pub struct AppState {
 
 impl gpui::Global for AppState {}
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
+        let config = ConfigService::new();
         let sni_host = SniHostService::new();
         sni_host.start();
 
@@ -40,6 +48,7 @@ impl AppState {
         let idle = IdleService::new();
 
         Self {
+            config,
             launcher: LauncherService::new(),
             mpris: MprisService::new(),
             system: SystemService::new(),

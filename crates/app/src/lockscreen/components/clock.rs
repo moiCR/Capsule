@@ -1,11 +1,12 @@
 use chrono::Local;
 use gpui::{Element, ParentElement, Styled, div, px};
+use services::LockScreenConfig;
 use ui::theme::Theme;
 
-pub fn render_clock(theme: &Theme) -> impl Element {
+pub fn render_clock(theme: &Theme, config: &LockScreenConfig) -> impl Element {
     let now = Local::now();
-    let time_str = now.format("%H:%M").to_string();
-    let date_str = now.format("%A, %B %e, %Y").to_string();
+    let time_str = now.format(&config.time_format).to_string();
+    let date_str = now.format(&config.date_format).to_string();
 
     div()
         .flex()
