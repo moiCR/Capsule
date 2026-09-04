@@ -69,15 +69,6 @@ impl AppTheme for GhosttyApp {
     }
 
     fn reload_apps(&self) {
-        if let Some(config_dir) = dirs::config_dir() {
-            let main_config = config_dir.join("ghostty").join("config");
-            if main_config.exists() {
-                let _ = std::process::Command::new("touch")
-                    .arg(&main_config)
-                    .status();
-            }
-        }
-
         let _ = std::process::Command::new("pkill")
             .args(["-USR2", "-x", "ghostty"])
             .status();
