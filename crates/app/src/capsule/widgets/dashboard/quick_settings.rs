@@ -15,8 +15,7 @@ pub fn render_quick_settings_widget(
     };
 
     let wifi_card = if status.ethernet_connected {
-        // Ethernet connected special case: no toggle, no chevron, no mini panel
-        render_ethernet_card(&status, theme)
+        render_ethernet_card(&status, theme, cx)
     } else {
         render_wifi_card(&status, theme, cx)
     };
@@ -33,7 +32,17 @@ pub fn render_quick_settings_widget(
         .child(bt_card)
 }
 
-fn render_ethernet_card(status: &NetworkStatus, theme: &Theme) -> AnyElement {
+fn render_ethernet_card(
+    status: &NetworkStatus,
+    theme: &Theme,
+    cx: &mut Context<DashboardModule>,
+) -> AnyElement {
+    let card_radius = px(if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
+    } else {
+        24.0
+    });
+
     div()
         .id("ethernet-card-main")
         .flex_1()
@@ -47,7 +56,6 @@ fn render_ethernet_card(status: &NetworkStatus, theme: &Theme) -> AnyElement {
         .flex_col()
         .justify_between()
         .child(
-            // Top row
             div()
                 .flex()
                 .flex_row()
@@ -57,12 +65,11 @@ fn render_ethernet_card(status: &NetworkStatus, theme: &Theme) -> AnyElement {
                 .child(
                     svg()
                         .path("ethernet.svg")
-                        .size(px(16.0))
+                        .size(card_radius)
                         .text_color(theme.accent()),
                 ),
         )
         .child(
-            // Bottom row
             div()
                 .flex()
                 .flex_col()
@@ -133,7 +140,6 @@ fn render_wifi_card(
         .flex_col()
         .justify_between()
         .child(
-            // Top row: Icon + Toggle Switch
             div()
                 .flex()
                 .flex_row()
@@ -146,7 +152,6 @@ fn render_wifi_card(
                     theme.foreground_muted()
                 }))
                 .child(
-                    // Toggle Switch
                     div()
                         .id("wifi-toggle-switch")
                         .flex()
@@ -178,7 +183,6 @@ fn render_wifi_card(
                 ),
         )
         .child(
-            // Bottom row: Title/Subtitle + Chevron Arrow
             div()
                 .flex()
                 .flex_row()
@@ -204,7 +208,6 @@ fn render_wifi_card(
                         ),
                 )
                 .child(
-                    // Chevron arrow button
                     div()
                         .id("wifi-chevron-btn")
                         .flex()
@@ -265,7 +268,6 @@ fn render_bluetooth_card(
         .flex_col()
         .justify_between()
         .child(
-            // Top row: Icon + Toggle Switch
             div()
                 .flex()
                 .flex_row()
