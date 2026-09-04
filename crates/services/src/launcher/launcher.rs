@@ -24,7 +24,7 @@ impl LauncherService {
                 if let Err(err) = service_clone.refresh().await {
                     crate::log_warn!("LAUNCHER", "LauncherService refresh warning: {err}");
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(25)).await;
             }
         });
 
