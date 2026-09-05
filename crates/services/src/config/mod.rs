@@ -4,7 +4,7 @@ pub mod ui_config;
 
 pub use defaults::Defaults;
 pub use lock_screen_config::{LockScreenConfig, LockscreenConfig};
-pub use ui_config::{UIConfig, UiConfig};
+pub use ui_config::{CapsuleStyle, UIConfig, UiConfig};
 
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};

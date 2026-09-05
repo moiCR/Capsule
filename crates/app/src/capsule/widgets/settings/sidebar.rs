@@ -99,10 +99,10 @@ pub fn render_sidebar(
                         .flex_col()
                         .gap(px(6.0))
                         .child(render_tab_button(
-                            SettingsTab::Defaults,
-                            "search.svg",
-                            "Aplicaciones",
-                            active_tab == SettingsTab::Defaults,
+                            SettingsTab::General,
+                            "settings.svg",
+                            "General",
+                            active_tab == SettingsTab::General,
                             theme,
                             cx,
                         ))
@@ -119,14 +119,6 @@ pub fn render_sidebar(
                             "moon_1.svg",
                             "Bloqueo",
                             active_tab == SettingsTab::LockScreen,
-                            theme,
-                            cx,
-                        ))
-                        .child(render_tab_button(
-                            SettingsTab::System,
-                            "zap.svg",
-                            "Sistema & Energía",
-                            active_tab == SettingsTab::System,
                             theme,
                             cx,
                         )),

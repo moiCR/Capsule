@@ -1,21 +1,23 @@
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render,
-    ScrollHandle, Styled, Window, div, prelude::*, px,
+    ScrollHandle, Styled, Task, Window, canvas, div, prelude::*, px,
 };
-use services::AppState;
+use services::{AppState, CapsuleStyle};
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
 use crate::capsule::widgets::settings::{
-    render_defaults_section, render_lockscreen_section, render_sidebar, render_system_section,
+    render_dropdown_overlay, render_general_section, render_lockscreen_section, render_sidebar,
     render_ui_section,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SettingsTab {
-    Defaults = 0,
+    General = 0,
     UI = 1,
     LockScreen = 2,
-    System = 3,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -42,6 +44,7 @@ pub enum SettingsEvent {
 pub struct SettingsModule {
     pub active_tab: SettingsTab,
     pub active_field: Option<SettingsField>,
+    pub capsule_style: CapsuleStyle,
 
     pub terminal_input: String,
     pub browser_input: String,
@@ -61,6 +64,17 @@ pub struct SettingsModule {
     pub show_clock: bool,
     pub show_media_player: bool,
     pub open_dropdown: Option<SettingsField>,
+    pub dropdown_anim_field: Option<SettingsField>,
+    pub dropdown_anim_progress: f32,
+    pub dropdown_anim_task: Option<Task<()>>,
+    pub splat_anim_field: Option<SettingsField>,
+    pub splat_anim_progress: f32,
+    pub splat_anim_task: Option<Task<()>>,
+
+    pub terminal_trigger_bounds: Rc<Cell<(f32, f32)>>,
+    pub browser_trigger_bounds: Rc<Cell<(f32, f32)>>,
+    pub editor_trigger_bounds: Rc<Cell<(f32, f32)>>,
+    pub settings_top_y: Rc<Cell<f32>>,
 
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
@@ -74,9 +88,9 @@ impl SettingsModule {
         let scroll_handle = ScrollHandle::new();
 
         let mut module = Self {
-            active_tab: SettingsTab::Defaults,
+            active_tab: SettingsTab::General,
             active_field: None,
-            open_dropdown: None,
+            capsule_style: CapsuleStyle::Normal,
             terminal_input: String::new(),
             browser_input: String::new(),
             editor_input: String::new(),
@@ -92,6 +106,17 @@ impl SettingsModule {
             date_format_input: String::new(),
             show_clock: true,
             show_media_player: true,
+            open_dropdown: None,
+            dropdown_anim_field: None,
+            dropdown_anim_progress: 1.0,
+            dropdown_anim_task: None,
+            splat_anim_field: None,
+            splat_anim_progress: 1.0,
+            splat_anim_task: None,
+            terminal_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
+            browser_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
+            editor_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
+            settings_top_y: Rc::new(Cell::new(0.0)),
             focus_handle,
             scroll_handle,
         };
@@ -107,6 +132,7 @@ impl SettingsModule {
 
         let cfg = cx.global::<AppState>().config.get();
 
+        self.capsule_style = cfg.ui.capsule_style;
         self.terminal_input = cfg.defaults.terminal.clone();
         self.browser_input = cfg.defaults.browser.clone();
         self.editor_input = cfg.defaults.editor.clone();
@@ -130,6 +156,10 @@ impl SettingsModule {
         self.active_tab = tab;
         self.active_field = None;
         self.open_dropdown = None;
+        self.dropdown_anim_field = None;
+        self.dropdown_anim_task = None;
+        self.splat_anim_field = None;
+        self.splat_anim_task = None;
         self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
@@ -137,10 +167,54 @@ impl SettingsModule {
     pub fn toggle_dropdown(&mut self, field: SettingsField, cx: &mut Context<Self>) {
         if self.open_dropdown == Some(field) {
             self.open_dropdown = None;
+            self.dropdown_anim_field = None;
+            self.dropdown_anim_task = None;
         } else {
             self.open_dropdown = Some(field);
+            self.active_field = None;
+            self.start_dropdown_anim(field, cx);
         }
         cx.notify();
+    }
+
+    fn start_dropdown_anim(&mut self, field: SettingsField, cx: &mut Context<Self>) {
+        let compositor = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().compositor.clone())
+        } else {
+            None
+        };
+        self.dropdown_anim_field = Some(field);
+        self.dropdown_anim_progress = 0.0;
+        let start = Instant::now();
+
+        let anim_task = cx.spawn(async move |this, cx| {
+            let duration_ms = 220.0;
+            loop {
+                let frame_dur = if let Some(ref comp) = compositor {
+                    comp.get_frame_duration()
+                } else {
+                    Duration::from_millis(16)
+                };
+
+                cx.background_executor().timer(frame_dur).await;
+
+                let finished = this
+                    .update(cx, |module: &mut Self, cx| {
+                        let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+                        let p = (elapsed / duration_ms).min(1.0);
+                        module.dropdown_anim_progress = p;
+                        cx.notify();
+                        p >= 1.0
+                    })
+                    .unwrap_or(true);
+
+                if finished {
+                    break;
+                }
+            }
+        });
+
+        self.dropdown_anim_task = Some(anim_task);
     }
 
     pub fn select_app_command(
@@ -156,9 +230,55 @@ impl SettingsModule {
             _ => {}
         }
         self.open_dropdown = None;
+        self.dropdown_anim_field = None;
+        self.dropdown_anim_task = None;
         self.active_field = None;
+        self.start_splat_anim(field, cx);
         self.save_to_app_config(cx);
         cx.notify();
+    }
+
+    fn start_splat_anim(&mut self, field: SettingsField, cx: &mut Context<Self>) {
+        let compositor = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().compositor.clone())
+        } else {
+            None
+        };
+        self.splat_anim_field = Some(field);
+        self.splat_anim_progress = 0.0;
+        let start = Instant::now();
+
+        let anim_task = cx.spawn(async move |this, cx| {
+            let duration_ms = 220.0;
+            loop {
+                let frame_dur = if let Some(ref comp) = compositor {
+                    comp.get_frame_duration()
+                } else {
+                    Duration::from_millis(16)
+                };
+
+                cx.background_executor().timer(frame_dur).await;
+
+                let finished = this
+                    .update(cx, |module: &mut Self, cx| {
+                        let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+                        let p = (elapsed / duration_ms).min(1.0);
+                        module.splat_anim_progress = p;
+                        if p >= 1.0 {
+                            module.splat_anim_field = None;
+                        }
+                        cx.notify();
+                        p >= 1.0
+                    })
+                    .unwrap_or(true);
+
+                if finished {
+                    break;
+                }
+            }
+        });
+
+        self.splat_anim_task = Some(anim_task);
     }
 
     pub fn set_active_field(&mut self, field: Option<SettingsField>, cx: &mut Context<Self>) {
@@ -210,6 +330,12 @@ impl SettingsModule {
         cx.notify();
     }
 
+    pub fn set_capsule_style(&mut self, style: CapsuleStyle, cx: &mut Context<Self>) {
+        self.capsule_style = style;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
     pub fn toggle_show_media_player(&mut self, cx: &mut Context<Self>) {
         self.show_media_player = !self.show_media_player;
         self.save_to_app_config(cx);
@@ -221,6 +347,7 @@ impl SettingsModule {
             return;
         }
 
+        let capsule_style = self.capsule_style;
         let terminal = self.terminal_input.clone();
         let browser = self.browser_input.clone();
         let editor = self.editor_input.clone();
@@ -240,6 +367,7 @@ impl SettingsModule {
         let show_media_player = self.show_media_player;
 
         let _ = cx.global::<AppState>().config.update(|cfg| {
+            cfg.ui.capsule_style = capsule_style;
             cfg.defaults.terminal = terminal;
             cfg.defaults.browser = browser;
             cfg.defaults.editor = editor;
@@ -262,6 +390,12 @@ impl SettingsModule {
 
     pub fn close(&mut self, cx: &mut Context<Self>) {
         self.active_field = None;
+        self.open_dropdown = None;
+        self.dropdown_anim_field = None;
+        self.dropdown_anim_task = None;
+        self.splat_anim_field = None;
+        self.splat_anim_task = None;
+        self.set_tab(SettingsTab::General, cx);
         cx.emit(SettingsEvent::Close);
     }
 
@@ -280,6 +414,12 @@ impl SettingsModule {
         let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
         if key == "escape" {
+            if self.open_dropdown.is_some() {
+                self.open_dropdown = None;
+                self.dropdown_anim_field = None;
+                cx.notify();
+                return;
+            }
             if self.active_field.is_some() {
                 self.active_field = None;
                 cx.notify();
@@ -291,10 +431,9 @@ impl SettingsModule {
 
         if key == "tab" && self.active_field.is_none() {
             let next_tab = match self.active_tab {
-                SettingsTab::Defaults => SettingsTab::UI,
+                SettingsTab::General => SettingsTab::UI,
                 SettingsTab::UI => SettingsTab::LockScreen,
-                SettingsTab::LockScreen => SettingsTab::System,
-                SettingsTab::System => SettingsTab::Defaults,
+                SettingsTab::LockScreen => SettingsTab::General,
             };
             self.set_tab(next_tab, cx);
             return;
@@ -387,12 +526,17 @@ impl Render for SettingsModule {
         window.focus(&self.focus_handle, cx);
 
         let content_view = match self.active_tab {
-            SettingsTab::Defaults => render_defaults_section(self, &theme, cx).into_any_element(),
+            SettingsTab::General => render_general_section(self, &theme, cx).into_any_element(),
             SettingsTab::UI => render_ui_section(self, &theme, cx).into_any_element(),
             SettingsTab::LockScreen => {
                 render_lockscreen_section(self, &theme, cx).into_any_element()
             }
-            SettingsTab::System => render_system_section(self, &theme, cx).into_any_element(),
+        };
+
+        let dropdown_overlay = if self.active_tab == SettingsTab::General {
+            render_dropdown_overlay(self, &theme, cx)
+        } else {
+            None
         };
 
         let capsule_radius = if cx.has_global::<AppState>() {
@@ -401,7 +545,10 @@ impl Render for SettingsModule {
             36.0
         };
 
+        let settings_top_cell = self.settings_top_y.clone();
+
         div()
+            .relative()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
@@ -410,6 +557,16 @@ impl Render for SettingsModule {
             .h(px(560.0))
             .rounded(px(capsule_radius))
             .overflow_hidden()
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        settings_top_cell.set(bounds.origin.y.into());
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_0(),
+            )
             .child(render_sidebar(self.active_tab, &theme, cx))
             .child(
                 div()
@@ -423,5 +580,6 @@ impl Render for SettingsModule {
                     .overflow_scroll()
                     .child(content_view),
             )
+            .children(dropdown_overlay)
     }
 }

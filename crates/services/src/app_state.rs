@@ -45,7 +45,7 @@ impl AppState {
         let calendar = CalendarService::new();
         let power = PowerService::new();
         let clipboard = ClipboardService::new();
-        let idle = IdleService::new();
+        let idle = IdleService::new(config.clone());
 
         Self {
             config,

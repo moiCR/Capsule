@@ -1,4 +1,7 @@
-use gpui::{Context, ElementId, IntoElement, ParentElement, Styled, div, prelude::*, px};
+use gpui::{
+    Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px,
+};
+use services::CapsuleStyle;
 use ui::theme::Theme;
 
 use super::setting_item::{render_section_header, render_setting_row};
@@ -19,6 +22,13 @@ pub fn render_ui_section(
         .child(render_section_header(
             "Apariencia & Dimensiones",
             "Ajusta los radios, márgenes, separación de elementos y la velocidad de animación de la interfaz.",
+            theme,
+        ))
+        .child(render_setting_row(
+            "Estilo de Cápsula",
+            "Elige entre la cápsula flotante normal o la cápsula cóncava integrada a la pantalla.",
+            render_capsule_style_selector(module, theme, cx),
+            cards_round,
             theme,
         ))
         .child(render_setting_row(
@@ -230,4 +240,81 @@ fn render_number_stepper(
                 }))
                 .child("+"),
         )
+}
+
+fn render_capsule_style_selector(
+    module: &SettingsModule,
+    theme: &Theme,
+    cx: &mut Context<SettingsModule>,
+) -> impl IntoElement {
+    let options = [
+        (CapsuleStyle::Normal, "Normal"),
+        (CapsuleStyle::Concave, "Cóncava"),
+    ];
+
+    let mut container = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .p_1()
+        .gap(px(2.0))
+        .rounded(px(12.0))
+        .bg(theme.background())
+        .border_1()
+        .border_color(theme.surface().opacity(0.6));
+
+    for (style, label) in options {
+        let is_active = module.capsule_style == style;
+
+        container = container.child(
+            div()
+                .id(ElementId::Name(format!("ui-capsule-style-{label}").into()))
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_center()
+                .px_3()
+                .py_1()
+                .rounded(px(8.0))
+                .bg(if is_active {
+                    theme.accent().opacity(0.2)
+                } else {
+                    gpui::transparent_black()
+                })
+                .border_1()
+                .border_color(if is_active {
+                    theme.accent().opacity(0.5)
+                } else {
+                    gpui::transparent_black()
+                })
+                .hover(|s| {
+                    if !is_active {
+                        s.bg(theme.surface().opacity(0.4))
+                    } else {
+                        s
+                    }
+                })
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.set_capsule_style(style, cx);
+                }))
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .font_weight(if is_active {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::NORMAL
+                        })
+                        .text_color(if is_active {
+                            theme.accent()
+                        } else {
+                            theme.foreground_muted()
+                        })
+                        .child(label),
+                ),
+        );
+    }
+
+    container
 }

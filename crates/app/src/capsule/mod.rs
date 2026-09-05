@@ -1,5 +1,6 @@
 #[allow(clippy::module_inception)]
 pub mod capsule;
+pub mod container;
 pub mod modules;
 pub mod satellites;
 pub mod widgets;

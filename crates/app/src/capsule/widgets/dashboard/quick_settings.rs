@@ -47,7 +47,7 @@ fn render_ethernet_card(
         .id("ethernet-card-main")
         .flex_1()
         .h(px(72.0))
-        .rounded(px(18.0))
+        .rounded(card_radius)
         .bg(theme.surface().opacity(0.4))
         .border_1()
         .border_color(theme.surface().opacity(0.3))
