@@ -43,8 +43,8 @@ https://github.com/user-attachments/assets/b3539fce-8281-4b5a-bdf0-1cf1d3646f44
 
 
 ## Language Support
-- **Spanish**: 100% (Default)
-- **English**: 1%
+- **Spanish**: 100%
+- **English**: 100%
 
 ## Installation
 ```bash
