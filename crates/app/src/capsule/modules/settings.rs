@@ -35,6 +35,7 @@ pub enum SettingsField {
     IdleTimeout = 10,
     TimeFormat = 11,
     DateFormat = 12,
+    Language = 13,
 }
 
 pub enum SettingsEvent {
@@ -74,6 +75,7 @@ pub struct SettingsModule {
     pub terminal_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub browser_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub editor_trigger_bounds: Rc<Cell<(f32, f32)>>,
+    pub language_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub settings_top_y: Rc<Cell<f32>>,
 
     focus_handle: FocusHandle,
@@ -116,6 +118,7 @@ impl SettingsModule {
             terminal_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             browser_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             editor_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
+            language_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             settings_top_y: Rc::new(Cell::new(0.0)),
             focus_handle,
             scroll_handle,
@@ -235,6 +238,20 @@ impl SettingsModule {
         self.active_field = None;
         self.start_splat_anim(field, cx);
         self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn select_language(&mut self, target_name: String, cx: &mut Context<Self>) {
+        if cx.has_global::<AppState>() {
+            let app_state = cx.global::<AppState>();
+            let _ = app_state.language.set_language(&target_name);
+            let _ = app_state.config.update(|cfg| cfg.ui.language = target_name);
+        }
+        self.open_dropdown = None;
+        self.dropdown_anim_field = None;
+        self.dropdown_anim_task = None;
+        self.active_field = None;
+        self.start_splat_anim(SettingsField::Language, cx);
         cx.notify();
     }
 
@@ -496,6 +513,7 @@ impl SettingsModule {
             SettingsField::IdleTimeout => &mut self.idle_timeout_input,
             SettingsField::TimeFormat => &mut self.time_format_input,
             SettingsField::DateFormat => &mut self.date_format_input,
+            SettingsField::Language => return,
         };
         target.push_str(text);
     }
@@ -515,6 +533,7 @@ impl SettingsModule {
             SettingsField::IdleTimeout => &mut self.idle_timeout_input,
             SettingsField::TimeFormat => &mut self.time_format_input,
             SettingsField::DateFormat => &mut self.date_format_input,
+            SettingsField::Language => return,
         };
         target.pop();
     }

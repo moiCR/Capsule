@@ -159,13 +159,10 @@ pub fn render_volume_mini_panel(
                         .font_weight(FontWeight::BOLD)
                         .text_size(px(11.5))
                         .text_color(theme.foreground())
-                        .child({
-                            let lang = if cx.has_global::<ui::language::Language>() {
-                                cx.global::<ui::language::Language>().clone()
-                            } else {
-                                ui::language::Language::default()
-                            };
-                            lang.volume.audio_output
+                        .child(if cx.has_global::<AppState>() {
+                            cx.global::<AppState>().language.get("volume.audio_output")
+                        } else {
+                            "Salida de audio".to_string()
                         }),
                 ),
         )

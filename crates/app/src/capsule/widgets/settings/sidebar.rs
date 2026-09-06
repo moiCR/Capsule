@@ -15,6 +15,23 @@ pub fn render_sidebar(
         36.0
     };
 
+    let (title, tab_gen, tab_ui, tab_lock) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("settings.title"),
+            lang.get("settings.tab_general"),
+            lang.get("settings.tab_appearance"),
+            lang.get("settings.tab_lockscreen"),
+        )
+    } else {
+        (
+            "Configuración".to_string(),
+            "General".to_string(),
+            "Apariencia".to_string(),
+            "Bloqueo".to_string(),
+        )
+    };
+
     div()
         .flex()
         .flex_col()
@@ -65,7 +82,7 @@ pub fn render_sidebar(
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_size(px(14.0))
                                         .text_color(theme.foreground())
-                                        .child("Configuración"),
+                                        .child(title),
                                 ),
                         )
                         .child(
@@ -100,7 +117,7 @@ pub fn render_sidebar(
                         .child(render_tab_button(
                             SettingsTab::General,
                             "settings.svg",
-                            "General",
+                            tab_gen,
                             active_tab == SettingsTab::General,
                             theme,
                             cx,
@@ -108,7 +125,7 @@ pub fn render_sidebar(
                         .child(render_tab_button(
                             SettingsTab::UI,
                             "palette_2.svg",
-                            "Apariencia",
+                            tab_ui,
                             active_tab == SettingsTab::UI,
                             theme,
                             cx,
@@ -116,7 +133,7 @@ pub fn render_sidebar(
                         .child(render_tab_button(
                             SettingsTab::LockScreen,
                             "moon_1.svg",
-                            "Bloqueo",
+                            tab_lock,
                             active_tab == SettingsTab::LockScreen,
                             theme,
                             cx,
@@ -128,7 +145,7 @@ pub fn render_sidebar(
 fn render_tab_button(
     tab: SettingsTab,
     icon: &'static str,
-    label: &'static str,
+    label: String,
     is_active: bool,
     theme: &Theme,
     cx: &mut Context<SettingsModule>,

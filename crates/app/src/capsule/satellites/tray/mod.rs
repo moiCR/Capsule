@@ -38,13 +38,10 @@ pub fn render_mini_panel(
                     div()
                         .text_size(px(10.0))
                         .text_color(theme.foreground_muted())
-                        .child({
-                            let lang = if cx.has_global::<ui::language::Language>() {
-                                cx.global::<ui::language::Language>().clone()
-                            } else {
-                                ui::language::Language::default()
-                            };
-                            lang.tray.no_menu
+                        .child(if cx.has_global::<AppState>() {
+                            cx.global::<AppState>().language.get("tray.no_menu")
+                        } else {
+                            "Sin menú disponible".to_string()
                         }),
                 ),
         );

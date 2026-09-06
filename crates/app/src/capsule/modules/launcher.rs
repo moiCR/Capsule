@@ -199,10 +199,12 @@ impl Render for LauncherModule {
 
         window.focus(&self.focus_handle, cx);
 
-        let lang = if cx.has_global::<ui::language::Language>() {
-            cx.global::<ui::language::Language>().clone()
+        let no_apps = if cx.has_global::<services::AppState>() {
+            cx.global::<services::AppState>()
+                .language
+                .get("launcher.no_apps")
         } else {
-            ui::language::Language::default()
+            "No se encontraron aplicaciones".to_string()
         };
 
         let is_empty = self.apps.is_empty();
@@ -240,7 +242,7 @@ impl Render for LauncherModule {
                     div()
                         .text_size(px(12.0))
                         .text_color(theme.foreground_muted())
-                        .child(lang.launcher.no_apps),
+                        .child(no_apps),
                 )
                 .into_any_element()
         } else {

@@ -302,20 +302,18 @@ impl Capsule {
                             }
                         }
 
-                        if cx.has_global::<ui::language::language_manager::LanguageManager>() {
+                        if cx.has_global::<services::AppState>() {
                             let lang_updated = cx
-                                .global_mut::<ui::language::language_manager::LanguageManager>()
+                                .global::<services::AppState>()
+                                .language
                                 .check_and_reload();
                             if lang_updated {
-                                let new_lang = cx
-                                    .global::<ui::language::language_manager::LanguageManager>()
-                                    .current_language
-                                    .clone();
-                                cx.set_global(new_lang);
                                 services::log_info!(
                                     "LANG",
-                                    "Reloaded current_language.toml!"
+                                    "Reloaded language bundle!"
                                 );
+                                capsule.modules.notify_all(cx);
+                                cx.notify();
                             }
                         }
 

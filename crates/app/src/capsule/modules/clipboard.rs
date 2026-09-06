@@ -183,11 +183,21 @@ impl ClipboardModule {
 impl Render for ClipboardModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        let lang = if cx.has_global::<ui::language::Language>() {
-            cx.global::<ui::language::Language>().clone()
-        } else {
-            ui::language::Language::default()
-        };
+        let (search_placeholder, empty_item, empty_history) =
+            if cx.has_global::<services::AppState>() {
+                let lang = &cx.global::<services::AppState>().language;
+                (
+                    lang.get("clipboard.search_placeholder"),
+                    lang.get("clipboard.empty_item"),
+                    lang.get("clipboard.empty_history"),
+                )
+            } else {
+                (
+                    "Buscar en el historial...".to_string(),
+                    "[Elemento vacío]".to_string(),
+                    "No hay elementos en el historial".to_string(),
+                )
+            };
 
         window.focus(&self.focus_handle, cx);
 
@@ -218,7 +228,7 @@ impl Render for ClipboardModule {
             } else {
                 div()
                     .text_color(theme.foreground_muted().opacity(0.7))
-                    .child(lang.clipboard.search_placeholder)
+                    .child(search_placeholder)
             }))
             .children(if has_query {
                 Some(
@@ -282,7 +292,7 @@ impl Render for ClipboardModule {
         for (idx, item) in self.filtered_items.iter().enumerate() {
             let is_selected = idx == selected_index;
             let item_clone = item.clone();
-            let empty_text = lang.clipboard.empty_item.clone();
+            let empty_text = empty_item.clone();
 
             let indicator_color = if is_selected {
                 theme.accent()
@@ -391,7 +401,7 @@ impl Render for ClipboardModule {
                     .py_8()
                     .text_size(px(13.0))
                     .text_color(theme.foreground_muted())
-                    .child(lang.clipboard.empty_history)
+                    .child(empty_history)
             } else {
                 list_container
             })

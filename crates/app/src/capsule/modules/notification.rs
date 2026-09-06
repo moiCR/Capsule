@@ -1,5 +1,5 @@
 use gpui::{Context, FontWeight, IntoElement, Render, Window, div, prelude::*, px, svg};
-use services::{NotificationItem, NotificationStore};
+use services::{AppState, NotificationItem, NotificationStore};
 use ui::theme::Theme;
 
 pub struct NotificationModule {
@@ -46,15 +46,12 @@ impl Render for NotificationModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
 
-        let (app_name, summary, body) = if let Some(item) = &self.active_item {
+        let (def_app, def_summary, def_body) = if cx.has_global::<AppState>() {
+            let lang = &cx.global::<AppState>().language;
             (
-                if item.app_name.is_empty() {
-                    "Notificación".to_string()
-                } else {
-                    item.app_name.clone()
-                },
-                item.summary.clone(),
-                item.body.clone(),
+                lang.get("notifications_module.default_title"),
+                lang.get("notifications_module.default_summary"),
+                lang.get("notifications_module.default_body"),
             )
         } else {
             (
@@ -62,6 +59,20 @@ impl Render for NotificationModule {
                 "Resumen".to_string(),
                 "Mensaje".to_string(),
             )
+        };
+
+        let (app_name, summary, body) = if let Some(item) = &self.active_item {
+            (
+                if item.app_name.is_empty() {
+                    def_app
+                } else {
+                    item.app_name.clone()
+                },
+                item.summary.clone(),
+                item.body.clone(),
+            )
+        } else {
+            (def_app, def_summary, def_body)
         };
 
         div()

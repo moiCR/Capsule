@@ -155,6 +155,7 @@ impl Render for LockScreen {
                             self.password.len(),
                             self.auth_failed,
                             self.is_checking,
+                            cx,
                         )),
                 )
                 // Bottom-Left: Lyrics Cascade & Media Player

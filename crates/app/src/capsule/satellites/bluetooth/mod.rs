@@ -27,10 +27,17 @@ pub fn render_bluetooth_mini_panel(
         NetworkStatus::default()
     };
 
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
+    let (no_bt_found, bt_devices) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("quick_settings.no_bt_found"),
+            lang.get("quick_settings.bt_devices"),
+        )
     } else {
-        ui::language::Language::default()
+        (
+            "No hay dispositivos Bluetooth".to_string(),
+            "Dispositivos Bluetooth".to_string(),
+        )
     };
 
     let mut dev_list = div()
@@ -54,7 +61,7 @@ pub fn render_bluetooth_mini_panel(
                     div()
                         .text_size(px(10.0))
                         .text_color(theme.foreground_muted())
-                        .child(lang.quick_settings.no_bt_found),
+                        .child(no_bt_found),
                 ),
         );
     } else {
@@ -186,7 +193,7 @@ pub fn render_bluetooth_mini_panel(
                                 .font_weight(FontWeight::BOLD)
                                 .text_size(px(11.5))
                                 .text_color(theme.foreground())
-                                .child(lang.quick_settings.bt_devices),
+                                .child(bt_devices),
                         ),
                 )
                 .child(

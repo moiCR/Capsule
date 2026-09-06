@@ -2,8 +2,7 @@ use gpui::{
     AnyElement, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, canvas, div,
     prelude::*, px, svg,
 };
-use services::{AppState, Application, PowerProfile};
-use ui::language::language_manager::LanguageManager;
+use services::{AppState, Application, LanguageInfo, PowerProfile};
 use ui::theme::Theme;
 
 use super::setting_item::{render_section_header, render_setting_row};
@@ -20,8 +19,8 @@ pub fn render_general_section(
         PowerProfile::Balanced
     };
 
-    let languages = if cx.has_global::<LanguageManager>() {
-        cx.global::<LanguageManager>().list_languages()
+    let languages = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.list_languages()
     } else {
         Vec::new()
     };
@@ -39,42 +38,86 @@ pub fn render_general_section(
         16.0
     };
 
+    let (
+        header_title,
+        header_sub,
+        power_title,
+        power_sub,
+        lang_title,
+        lang_sub,
+        apps_title,
+        apps_sub,
+        term_title,
+        term_sub,
+        browser_title,
+        browser_sub,
+        editor_title,
+        editor_sub,
+    ) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("settings.general_header_title"),
+            lang.get("settings.general_header_subtitle"),
+            lang.get("settings.power_plan_title"),
+            lang.get("settings.power_plan_subtitle"),
+            lang.get("settings.language_title"),
+            lang.get("settings.language_subtitle"),
+            lang.get("settings.default_apps_title"),
+            lang.get("settings.default_apps_subtitle"),
+            lang.get("settings.terminal_title"),
+            lang.get("settings.terminal_subtitle"),
+            lang.get("settings.browser_title"),
+            lang.get("settings.browser_subtitle"),
+            lang.get("settings.editor_title"),
+            lang.get("settings.editor_subtitle"),
+        )
+    } else {
+        (
+            "General".to_string(),
+            "Configuración general del sistema, perfiles de energía, idioma y aplicaciones predeterminadas.".to_string(),
+            "Plan de Energía".to_string(),
+            "Ajusta el consumo y velocidad del procesador vía power-profiles-daemon.".to_string(),
+            "Idioma de la Interfaz".to_string(),
+            "Cambia el idioma activo de las etiquetas, controles y textos del sistema.".to_string(),
+            "Aplicaciones Predeterminadas".to_string(),
+            "Configura los binarios o comandos ejecutados por Capsule para tus herramientas principales.".to_string(),
+            "Terminal".to_string(),
+            "Lanzado con 'capsule terminal' o apps en terminal.".to_string(),
+            "Navegador Web".to_string(),
+            "Lanzado con 'capsule browser' o links del sistema.".to_string(),
+            "Editor de Código / Texto".to_string(),
+            "Lanzado con 'capsule editor'. Si es CLI, se ejecuta en terminal.".to_string(),
+        )
+    };
+
     div()
         .flex()
         .flex_col()
         .gap(px(12.0))
         .w_full()
-        .child(render_section_header(
-            "General",
-            "Configuración general del sistema, perfiles de energía, idioma y aplicaciones predeterminadas.",
-            theme,
-        ))
+        .child(render_section_header(&header_title, &header_sub, theme))
         .child(render_setting_row(
-            "Plan de Energía",
-            "Ajusta el consumo y velocidad del procesador vía power-profiles-daemon.",
+            &power_title,
+            &power_sub,
             render_power_selector(current_profile, theme, cx),
             cards_round,
             theme,
         ))
         .child(render_setting_row(
-            "Idioma de la Interfaz",
-            "Cambia el idioma activo de las etiquetas, controles y textos del sistema.",
-            render_language_selector(languages, theme, cx),
+            &lang_title,
+            &lang_sub,
+            render_language_select(module, &languages, theme, cx),
             cards_round,
             theme,
         ))
         .child(
             div()
                 .pt_3()
-                .child(render_section_header(
-                    "Aplicaciones Predeterminadas",
-                    "Configura los binarios o comandos ejecutados por Capsule para tus herramientas principales.",
-                    theme,
-                )),
+                .child(render_section_header(&apps_title, &apps_sub, theme)),
         )
         .child(render_setting_row(
-            "Terminal",
-            "Lanzado con 'capsule terminal' o apps en terminal.",
+            &term_title,
+            &term_sub,
             render_app_select(
                 module,
                 SettingsField::Terminal,
@@ -89,8 +132,8 @@ pub fn render_general_section(
             theme,
         ))
         .child(render_setting_row(
-            "Navegador Web",
-            "Lanzado con 'capsule browser' o links del sistema.",
+            &browser_title,
+            &browser_sub,
             render_app_select(
                 module,
                 SettingsField::Browser,
@@ -105,8 +148,8 @@ pub fn render_general_section(
             theme,
         ))
         .child(render_setting_row(
-            "Editor de Código / Texto",
-            "Lanzado con 'capsule editor'. Si es CLI, se ejecuta en terminal.",
+            &editor_title,
+            &editor_sub,
             render_app_select(
                 module,
                 SettingsField::Editor,
@@ -127,10 +170,25 @@ fn render_power_selector(
     theme: &Theme,
     cx: &mut Context<SettingsModule>,
 ) -> impl IntoElement {
+    let (perf_label, bal_label, saver_label) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("power.performance"),
+            lang.get("power.balanced"),
+            lang.get("power.power_saver"),
+        )
+    } else {
+        (
+            "Rendimiento".to_string(),
+            "Equilibrado".to_string(),
+            "Ahorro".to_string(),
+        )
+    };
+
     let profiles = [
-        (PowerProfile::Performance, "Rendimiento", "zap.svg"),
-        (PowerProfile::Balanced, "Equilibrado", "scale.svg"),
-        (PowerProfile::PowerSaver, "Ahorro", "leaf.svg"),
+        (PowerProfile::Performance, perf_label, "zap.svg"),
+        (PowerProfile::Balanced, bal_label, "scale.svg"),
+        (PowerProfile::PowerSaver, saver_label, "leaf.svg"),
     ];
 
     let mut container = div()
@@ -205,76 +263,173 @@ fn render_power_selector(
     container
 }
 
-fn render_language_selector(
-    languages: Vec<ui::language::language_manager::LanguageItem>,
+fn render_language_select(
+    module: &SettingsModule,
+    languages: &[LanguageInfo],
     theme: &Theme,
     cx: &mut Context<SettingsModule>,
 ) -> impl IntoElement {
-    let mut container = div()
+    let current_lang = languages.iter().find(|l| l.is_current);
+    let placeholder = if cx.has_global::<AppState>() {
+        cx.global::<AppState>()
+            .language
+            .get("settings.select_language")
+    } else {
+        "Seleccionar idioma...".to_string()
+    };
+    let display_name = if let Some(lang) = current_lang {
+        lang.name.clone()
+    } else {
+        placeholder
+    };
+
+    let is_open = module.open_dropdown == Some(SettingsField::Language);
+    let is_animating = is_open && module.dropdown_anim_field == Some(SettingsField::Language);
+    let dropdown_p = if is_animating {
+        module.dropdown_anim_progress
+    } else if is_open {
+        1.0
+    } else {
+        0.0
+    };
+
+    let is_splat = module.splat_anim_field == Some(SettingsField::Language);
+    let splat_p = if is_splat {
+        module.splat_anim_progress
+    } else {
+        1.0
+    };
+    let splat_wobble = (splat_p * std::f32::consts::PI * 3.0).sin() * (1.0 - splat_p);
+    let trigger_w = if is_splat {
+        250.0 + splat_wobble * 10.0
+    } else if is_open {
+        252.0
+    } else {
+        250.0
+    };
+
+    let flash_alpha = if is_splat {
+        (1.0 - splat_p) * 0.35
+    } else {
+        0.0
+    };
+
+    let trigger_bg = if is_splat {
+        theme.accent().opacity(0.12 + flash_alpha)
+    } else if is_open {
+        theme.accent().opacity(0.14)
+    } else {
+        theme.background()
+    };
+
+    let trigger_border_color = if is_splat || is_open {
+        theme.accent()
+    } else {
+        theme.surface().opacity(0.6)
+    };
+
+    let chevron_bounce = if is_open {
+        (dropdown_p * std::f32::consts::PI * 2.0).sin() * 2.5 * (1.0 - dropdown_p)
+    } else {
+        0.0
+    };
+
+    let trigger_cell = module.language_trigger_bounds.clone();
+
+    div()
+        .id("language-select-btn")
         .flex()
         .flex_row()
         .items_center()
-        .p_1()
-        .gap(px(2.0))
-        .rounded_full()
-        .bg(theme.surface().opacity(0.35))
-        .border_1()
-        .border_color(theme.surface().opacity(0.25));
-
-    for item in languages {
-        let is_active = item.is_current;
-        let lang_code = item.code.clone();
-        let item_lang = item.language.clone();
-
-        container = container.child(
+        .justify_between()
+        .w(px(trigger_w))
+        .px_3()
+        .py_2()
+        .rounded_tl(px(if is_open { 16.0 } else { 13.0 }))
+        .rounded_tr(px(if is_open { 8.0 } else { 10.0 }))
+        .rounded_br(px(if is_open { 4.0 } else { 13.0 }))
+        .rounded_bl(px(if is_open { 14.0 } else { 10.0 }))
+        .bg(trigger_bg)
+        .border_2()
+        .border_color(trigger_border_color)
+        .hover(|s| {
+            if !is_open {
+                s.border_color(theme.accent())
+                    .bg(theme.accent().opacity(0.08))
+            } else {
+                s
+            }
+        })
+        .cursor_pointer()
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.toggle_dropdown(SettingsField::Language, cx);
+        }))
+        .child(
+            canvas(
+                move |bounds, _, _| {
+                    trigger_cell.set((
+                        bounds.origin.y.into(),
+                        (bounds.origin.y + bounds.size.height).into(),
+                    ));
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_0(),
+        )
+        .child(
             div()
-                .id(ElementId::Name(format!("sys-lang-{lang_code}").into()))
                 .flex()
                 .flex_row()
                 .items_center()
-                .px_3()
-                .py_1()
-                .rounded_full()
-                .bg(if is_active {
-                    theme.surface().opacity(0.85)
-                } else {
-                    gpui::transparent_black()
-                })
-                .hover(|s| {
-                    if !is_active {
-                        s.bg(theme.surface().opacity(0.35))
-                    } else {
-                        s
-                    }
-                })
-                .cursor_pointer()
-                .on_click(cx.listener(move |_this, _, _, cx| {
-                    if cx.has_global::<LanguageManager>() {
-                        cx.global_mut::<LanguageManager>()
-                            .set_language(item_lang.clone());
-                        cx.set_global(cx.global::<LanguageManager>().current_language.clone());
-                    }
-                    cx.notify();
-                }))
+                .gap(px(8.0))
+                .min_w_0()
+                .child(
+                    svg()
+                        .path("languages.svg")
+                        .size(px(16.0))
+                        .text_color(theme.accent()),
+                )
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .font_weight(if is_active {
-                            FontWeight::SEMIBOLD
+                        .text_size(px(12.0))
+                        .font_weight(if is_open || is_splat {
+                            FontWeight::BOLD
                         } else {
                             FontWeight::MEDIUM
                         })
-                        .text_color(if is_active {
+                        .text_color(if is_open || is_splat {
                             theme.accent()
                         } else {
-                            theme.foreground_muted()
+                            theme.foreground()
                         })
-                        .child(item.name),
-                ),
-        );
-    }
-
-    container
+                        .truncate()
+                        .child(display_name),
+                )
+                .children(if is_splat {
+                    Some(
+                        div()
+                            .w(px(6.0))
+                            .h(px(6.0))
+                            .rounded_full()
+                            .bg(theme.accent()),
+                    )
+                } else {
+                    None
+                }),
+        )
+        .child(
+            svg()
+                .path("chevron-down.svg")
+                .size(px(14.0))
+                .flex_shrink_0()
+                .text_color(if is_open {
+                    theme.accent()
+                } else {
+                    theme.foreground_muted()
+                })
+                .mt(px(chevron_bounce)),
+        )
 }
 
 fn app_to_command(app: &Application) -> String {
@@ -469,10 +624,15 @@ fn render_app_select(
     cx: &mut Context<SettingsModule>,
 ) -> impl IntoElement {
     let matched_app = find_matching_app(current_value, apps);
+    let placeholder = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.get("settings.select_app")
+    } else {
+        "Seleccionar aplicación...".to_string()
+    };
     let display_name = if let Some(app) = matched_app {
         app.name.clone()
     } else if current_value.is_empty() {
-        "Seleccionar aplicación...".to_string()
+        placeholder
     } else {
         current_value.to_string()
     };
@@ -641,6 +801,10 @@ pub fn render_dropdown_overlay(
     cx: &mut Context<SettingsModule>,
 ) -> Option<AnyElement> {
     let field = module.open_dropdown?;
+    if field == SettingsField::Language {
+        return render_language_dropdown_overlay(module, theme, cx);
+    }
+
     let current_value = match field {
         SettingsField::Terminal => module.terminal_input.as_str(),
         SettingsField::Browser => module.browser_input.as_str(),
@@ -857,6 +1021,21 @@ pub fn render_dropdown_overlay(
         theme.surface().opacity(0.5)
     };
 
+    let custom_hint = if cx.has_global::<AppState>() {
+        cx.global::<AppState>()
+            .language
+            .get("settings.custom_command_hint")
+    } else {
+        "O comando personalizado:".to_string()
+    };
+    let write_cmd_placeholder = if cx.has_global::<AppState>() {
+        cx.global::<AppState>()
+            .language
+            .get("settings.write_command")
+    } else {
+        "Escribir comando...".to_string()
+    };
+
     let custom_box = div()
         .flex()
         .flex_col()
@@ -870,7 +1049,7 @@ pub fn render_dropdown_overlay(
                 .text_size(px(10.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme.foreground_muted())
-                .child("O comando personalizado:"),
+                .child(custom_hint),
         )
         .child(
             div()
@@ -906,7 +1085,7 @@ pub fn render_dropdown_overlay(
                         })
                         .truncate()
                         .child(if current_value.is_empty() {
-                            "Escribir comando...".to_string()
+                            write_cmd_placeholder
                         } else {
                             current_value.to_string()
                         }),
@@ -934,6 +1113,226 @@ pub fn render_dropdown_overlay(
     Some(
         div()
             .id("app-dropdown-overlay-root")
+            .absolute()
+            .inset_0()
+            .child(backdrop)
+            .child(menu)
+            .into_any_element(),
+    )
+}
+
+fn render_language_dropdown_overlay(
+    module: &SettingsModule,
+    theme: &Theme,
+    cx: &mut Context<SettingsModule>,
+) -> Option<AnyElement> {
+    let languages = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.list_languages()
+    } else {
+        Vec::new()
+    };
+
+    let is_animating = module.dropdown_anim_field == Some(SettingsField::Language);
+    let dropdown_p = if is_animating {
+        module.dropdown_anim_progress
+    } else {
+        1.0
+    };
+    let dropdown_eased = splatoon_overshoot(dropdown_p);
+
+    let (measured_top, measured_bottom) = module.language_trigger_bounds.get();
+    let settings_top = module.settings_top_y.get();
+    let (local_top, local_bottom) = if measured_bottom > settings_top && settings_top > 0.0 {
+        (measured_top - settings_top, measured_bottom - settings_top)
+    } else {
+        (190.0, 228.0)
+    };
+
+    let estimated_height = (languages.len() as f32 * 34.0 + 20.0).min(220.0);
+    let space_above = local_top;
+    let space_below = 560.0 - local_bottom;
+    let open_upwards = space_below < estimated_height && space_above >= space_below;
+
+    let available_space = if open_upwards {
+        (space_above - 12.0).max(100.0)
+    } else {
+        (space_below - 12.0).max(100.0)
+    };
+    let target_max_h = 220.0f32.min(available_space);
+    let menu_max_h = (36.0 + (target_max_h - 36.0) * dropdown_eased).clamp(36.0, target_max_h);
+
+    let squash_w = (1.0 - dropdown_p) * 16.0
+        - (dropdown_p * std::f32::consts::PI).sin() * (1.0 - dropdown_p) * 10.0;
+    let menu_w = 250.0 + squash_w;
+
+    let (tl, tr, br, bl) = if open_upwards {
+        (
+            22.0 - 4.0 * (1.0 - dropdown_p),
+            16.0 + 4.0 * (1.0 - dropdown_p),
+            8.0 + 8.0 * (1.0 - dropdown_p),
+            14.0 + 4.0 * (1.0 - dropdown_p),
+        )
+    } else {
+        (
+            16.0 + 4.0 * (1.0 - dropdown_p),
+            8.0 + 8.0 * (1.0 - dropdown_p),
+            22.0 - 4.0 * (1.0 - dropdown_p),
+            16.0 + 4.0 * (1.0 - dropdown_p),
+        )
+    };
+
+    let mut menu = div()
+        .id("language-select-dropdown")
+        .absolute()
+        .right(px(40.0))
+        .flex()
+        .flex_col()
+        .w(px(menu_w))
+        .max_h(px(menu_max_h))
+        .p_1p5()
+        .gap(px(2.0))
+        .rounded_tl(px(tl))
+        .rounded_tr(px(tr))
+        .rounded_br(px(br))
+        .rounded_bl(px(bl))
+        .bg(theme.background())
+        .border_2()
+        .border_color(theme.accent())
+        .shadow_xl()
+        .overflow_scroll()
+        .on_click(cx.listener(|_this, _, _, cx| {
+            cx.stop_propagation();
+        }));
+
+    if open_upwards {
+        let menu_bottom = (560.0 - local_top) + 4.0 + 4.0 * dropdown_eased.max(0.0);
+        menu = menu.bottom(px(menu_bottom));
+    } else {
+        let menu_top = local_bottom + 4.0 + 4.0 * dropdown_eased.max(0.0);
+        menu = menu.top(px(menu_top));
+    }
+
+    for (i, lang) in languages.into_iter().enumerate() {
+        let is_selected = lang.is_current;
+        let target_name = lang
+            .path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&lang.code)
+            .to_string();
+        let lang_name = lang.name.clone();
+        let lang_code = lang.code.clone();
+
+        let item_delay = (i as f32) * 0.03;
+        let item_t = ((dropdown_p - item_delay) / (1.0 - item_delay).max(0.01)).clamp(0.0, 1.0);
+        let item_eased = splatoon_overshoot(item_t);
+        let slide_x = (1.0 - item_eased) * -12.0;
+
+        menu = menu.child(
+            div()
+                .id(ElementId::Name(format!("lang-item-{lang_code}").into()))
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .w_full()
+                .ml(px(slide_x.max(-12.0)))
+                .px_2p5()
+                .py_1p5()
+                .rounded_tl(px(12.0))
+                .rounded_tr(px(6.0))
+                .rounded_br(px(14.0))
+                .rounded_bl(px(8.0))
+                .bg(if is_selected {
+                    theme.accent().opacity(0.22)
+                } else {
+                    gpui::transparent_black()
+                })
+                .border_1()
+                .border_color(if is_selected {
+                    theme.accent().opacity(0.7)
+                } else {
+                    gpui::transparent_black()
+                })
+                .hover(|s| {
+                    if !is_selected {
+                        s.bg(theme.accent().opacity(0.24))
+                            .border_1()
+                            .border_color(theme.accent().opacity(0.5))
+                    } else {
+                        s
+                    }
+                })
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.select_language(target_name.clone(), cx);
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(8.0))
+                        .min_w_0()
+                        .children(if is_selected {
+                            Some(
+                                div()
+                                    .w(px(3.5))
+                                    .h(px(12.0))
+                                    .rounded_full()
+                                    .bg(theme.accent())
+                                    .flex_shrink_0(),
+                            )
+                        } else {
+                            None
+                        })
+                        .child(svg().path("languages.svg").size(px(16.0)).text_color(
+                            if is_selected {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            },
+                        ))
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .font_weight(if is_selected {
+                                    FontWeight::BOLD
+                                } else {
+                                    FontWeight::MEDIUM
+                                })
+                                .text_color(if is_selected {
+                                    theme.accent()
+                                } else {
+                                    theme.foreground()
+                                })
+                                .truncate()
+                                .child(lang_name),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(theme.foreground_muted())
+                        .child(lang_code),
+                ),
+        );
+    }
+
+    let backdrop = div()
+        .id("lang-select-dropdown-backdrop")
+        .absolute()
+        .inset_0()
+        .on_click(cx.listener(|this, _, _, cx| {
+            cx.stop_propagation();
+            this.open_dropdown = None;
+            this.dropdown_anim_field = None;
+            cx.notify();
+        }));
+
+    Some(
+        div()
+            .id("lang-dropdown-overlay-root")
             .absolute()
             .inset_0()
             .child(backdrop)

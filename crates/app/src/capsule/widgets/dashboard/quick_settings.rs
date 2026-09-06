@@ -83,20 +83,40 @@ fn render_wifi_pill(
         "wifi.svg"
     };
 
-    let title = if status.ethernet_connected {
-        "Ethernet"
+    let (title, connected_str, disabled_str, disconnected_str) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        let t = if status.ethernet_connected {
+            lang.get("quick_settings.ethernet")
+        } else {
+            "Wi-Fi".to_string()
+        };
+        (
+            t,
+            lang.get("dashboard.connected"),
+            lang.get("dashboard.disabled"),
+            lang.get("dashboard.disconnected"),
+        )
     } else {
-        "Wi-Fi"
+        (
+            if status.ethernet_connected {
+                "Ethernet".to_string()
+            } else {
+                "Wi-Fi".to_string()
+            },
+            "Conectado".to_string(),
+            "Desactivado".to_string(),
+            "Desconectado".to_string(),
+        )
     };
 
     let subtitle = if status.ethernet_connected {
-        "Conectado".to_string()
+        connected_str
     } else if !is_on {
-        "Desactivado".to_string()
+        disabled_str
     } else if is_connected {
         status.wifi_ssid.clone()
     } else {
-        "Desconectado".to_string()
+        disconnected_str
     };
 
     div()
@@ -200,12 +220,27 @@ fn render_bluetooth_pill(
     let is_on = status.bluetooth_enabled;
     let is_connected = !status.bluetooth_device_name.is_empty();
 
+    let (bt_title, disabled_str, enabled_str) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("dashboard.bluetooth"),
+            lang.get("dashboard.disabled"),
+            lang.get("dashboard.enabled"),
+        )
+    } else {
+        (
+            "Bluetooth".to_string(),
+            "Desactivado".to_string(),
+            "Activado".to_string(),
+        )
+    };
+
     let subtitle = if !is_on {
-        "Desactivado".to_string()
+        disabled_str
     } else if is_connected {
         status.bluetooth_device_name.clone()
     } else {
-        "Activado".to_string()
+        enabled_str
     };
 
     div()
@@ -272,7 +307,7 @@ fn render_bluetooth_pill(
                         .text_size(px(12.5))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(theme.foreground())
-                        .child("Bluetooth"),
+                        .child(bt_title),
                 )
                 .child(
                     div()
@@ -308,7 +343,21 @@ fn render_bluetooth_pill(
 
 fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyElement {
     let is_dnd = NotificationStore::global().is_dnd_enabled();
-    let subtitle = if is_dnd { "Activado" } else { "Desactivado" };
+    let (dnd_title, enabled_str, disabled_str) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("dashboard.dnd"),
+            lang.get("dashboard.enabled"),
+            lang.get("dashboard.disabled"),
+        )
+    } else {
+        (
+            "No molestar".to_string(),
+            "Activado".to_string(),
+            "Desactivado".to_string(),
+        )
+    };
+    let subtitle = if is_dnd { enabled_str } else { disabled_str };
 
     div()
         .id("peace-pill-main")
@@ -368,7 +417,7 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                         .text_size(px(12.5))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(theme.foreground())
-                        .child("No molestar"),
+                        .child(dnd_title),
                 )
                 .child(
                     div()

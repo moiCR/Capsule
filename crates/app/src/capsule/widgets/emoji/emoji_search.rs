@@ -10,6 +10,14 @@ pub fn render_emoji_search(
 ) -> impl IntoElement {
     let has_query = !query.is_empty();
 
+    let search_placeholder = if cx.has_global::<services::AppState>() {
+        cx.global::<services::AppState>()
+            .language
+            .get("emoji.search_placeholder")
+    } else {
+        "Buscar emoji...".to_string()
+    };
+
     div()
         .flex()
         .items_center()
@@ -32,7 +40,7 @@ pub fn render_emoji_search(
         } else {
             div()
                 .text_color(theme.foreground_muted().opacity(0.7))
-                .child("Buscar emoji...")
+                .child(search_placeholder)
         }))
         .children(if has_query {
             Some(

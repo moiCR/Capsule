@@ -552,7 +552,13 @@ impl Render for EmojiModule {
                         div()
                             .text_size(px(12.0))
                             .text_color(theme.foreground_muted())
-                            .child("No se encontraron emojis"),
+                            .child(if cx.has_global::<services::AppState>() {
+                                cx.global::<services::AppState>()
+                                    .language
+                                    .get("emoji.no_emojis")
+                            } else {
+                                "No se encontraron emojis".to_string()
+                            }),
                     )
             } else {
                 grid_rows

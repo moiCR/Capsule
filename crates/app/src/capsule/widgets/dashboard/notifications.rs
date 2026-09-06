@@ -11,6 +11,21 @@ pub fn render_notifications_widget(
     let notifications = NotificationStore::global().get_all_notifications();
     let is_empty = notifications.is_empty();
 
+    let (notifs_title, clear_all_text, no_notifs_text) = if cx.has_global::<services::AppState>() {
+        let lang = &cx.global::<services::AppState>().language;
+        (
+            lang.get("dashboard.notifications_title"),
+            lang.get("dashboard.clear_all"),
+            lang.get("dashboard.no_notifications"),
+        )
+    } else {
+        (
+            "Notificaciones".to_string(),
+            "Limpiar todo".to_string(),
+            "Sin notificaciones".to_string(),
+        )
+    };
+
     let clear_all_btn = if !is_empty {
         div()
             .id("clear-all-notifs")
@@ -37,7 +52,7 @@ pub fn render_notifications_widget(
                 div()
                     .text_size(px(10.5))
                     .text_color(theme.foreground_muted())
-                    .child("Limpiar todo"),
+                    .child(clear_all_text),
             )
             .into_any_element()
     } else {
@@ -54,7 +69,7 @@ pub fn render_notifications_widget(
                 div()
                     .text_size(px(12.0))
                     .text_color(theme.foreground_muted().opacity(0.7))
-                    .child("Sin notificaciones"),
+                    .child(no_notifs_text),
             )
             .into_any_element()
     } else {
@@ -154,7 +169,7 @@ pub fn render_notifications_widget(
                         .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(theme.foreground_muted())
-                        .child("Notificaciones"),
+                        .child(notifs_title),
                 )
                 .child(clear_all_btn),
         )

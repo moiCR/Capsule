@@ -27,10 +27,17 @@ pub fn render_wifi_mini_panel(
         NetworkStatus::default()
     };
 
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
+    let (no_wifi_found, wifi_networks) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("quick_settings.no_wifi_found"),
+            lang.get("quick_settings.wifi_networks"),
+        )
     } else {
-        ui::language::Language::default()
+        (
+            "No hay redes Wi-Fi encontradas".to_string(),
+            "Redes Wi-Fi".to_string(),
+        )
     };
 
     let mut ap_list = div()
@@ -54,7 +61,7 @@ pub fn render_wifi_mini_panel(
                     div()
                         .text_size(px(10.0))
                         .text_color(theme.foreground_muted())
-                        .child(lang.quick_settings.no_wifi_found),
+                        .child(no_wifi_found),
                 ),
         );
     } else {
@@ -189,7 +196,7 @@ pub fn render_wifi_mini_panel(
                                 .font_weight(FontWeight::BOLD)
                                 .text_size(px(11.5))
                                 .text_color(theme.foreground())
-                                .child(lang.quick_settings.wifi_networks),
+                                .child(wifi_networks),
                         ),
                 )
                 .child(

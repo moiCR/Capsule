@@ -33,6 +33,12 @@ pub fn render_volume_widget(
 
     let slider_tracker = tracker.clone();
 
+    let sound_label = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.get("dashboard.sound")
+    } else {
+        "Sonido".to_string()
+    };
+
     div()
         .id("sound-card-main")
         .flex()
@@ -56,7 +62,7 @@ pub fn render_volume_widget(
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_size(px(12.5))
                         .text_color(theme.foreground())
-                        .child("Sonido"),
+                        .child(sound_label),
                 )
                 .child(
                     div()

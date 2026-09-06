@@ -56,7 +56,13 @@ pub fn render_media_player_widget(
                     .text_size(px(11.5))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme.foreground_muted())
-                    .child("Sin reproducción"),
+                    .child(if cx.has_global::<services::AppState>() {
+                        cx.global::<services::AppState>()
+                            .language
+                            .get("dashboard.no_media")
+                    } else {
+                        "Sin reproducción".to_string()
+                    }),
             )
             .into_any_element();
     }

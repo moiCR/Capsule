@@ -33,8 +33,16 @@ impl VolumeModule {
 impl Render for VolumeModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        div()
-            .size_full()
-            .child(render_volume_bar(self.volume, self.is_muted, &theme))
+        let muted_label = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().language.get("volume.muted")
+        } else {
+            "Mute".to_string()
+        };
+        div().size_full().child(render_volume_bar(
+            self.volume,
+            self.is_muted,
+            muted_label,
+            &theme,
+        ))
     }
 }

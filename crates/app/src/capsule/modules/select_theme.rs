@@ -208,6 +208,21 @@ impl Render for SelectThemeModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
+        let (search_placeholder, no_themes, apply_hint) = if cx.has_global::<services::AppState>() {
+            let lang = &cx.global::<services::AppState>().language;
+            (
+                lang.get("themes.search_placeholder"),
+                lang.get("themes.no_themes"),
+                lang.get("themes.apply_hint"),
+            )
+        } else {
+            (
+                "Buscar temas...".to_string(),
+                "No se encontraron temas".to_string(),
+                "↵ Aplicar".to_string(),
+            )
+        };
+
         window.focus(&self.focus_handle, cx);
 
         let filtered = self.filtered_themes();
@@ -248,7 +263,7 @@ impl Render for SelectThemeModule {
                         div()
                             .text_size(px(13.0))
                             .text_color(theme.foreground_muted().opacity(0.5))
-                            .child("Search themes...")
+                            .child(search_placeholder)
                     }),
             )
             .child(
@@ -277,7 +292,7 @@ impl Render for SelectThemeModule {
                     .h(px(84.0))
                     .text_size(px(13.0))
                     .text_color(theme.foreground_muted())
-                    .child("No themes found"),
+                    .child(no_themes),
             );
         } else if total >= 5 {
             let active_idx = self.selected_idx % total;
@@ -327,7 +342,7 @@ impl Render for SelectThemeModule {
                     .text_size(px(11.0))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme.foreground_muted().opacity(0.6))
-                    .child("Enter to apply"),
+                    .child(apply_hint),
             );
 
         div()

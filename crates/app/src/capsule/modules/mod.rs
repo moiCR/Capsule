@@ -67,4 +67,18 @@ impl CapsuleModules {
             CapsuleMode::Settings => self.settings_view.clone().into_any_element(),
         }
     }
+
+    pub fn notify_all(&self, cx: &mut Context<Capsule>) {
+        self.idle_view.update(cx, |_, cx| cx.notify());
+        self.dashboard_view.update(cx, |_, cx| cx.notify());
+        self.notification_view.update(cx, |_, cx| cx.notify());
+        self.launcher_view.update(cx, |_, cx| cx.notify());
+        self.volume_view.update(cx, |_, cx| cx.notify());
+        self.polkit_view.update(cx, |_, cx| cx.notify());
+        self.select_theme_view.update(cx, |_, cx| cx.notify());
+        self.wallpaper_view.update(cx, |_, cx| cx.notify());
+        self.clipboard_view.update(cx, |_, cx| cx.notify());
+        self.emoji_view.update(cx, |_, cx| cx.notify());
+        self.settings_view.update(cx, |_, cx| cx.notify());
+    }
 }

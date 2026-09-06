@@ -8,10 +8,12 @@ pub fn render_search_input(
     theme: &Theme,
     cx: &mut Context<LauncherModule>,
 ) -> impl IntoElement {
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
+    let search_placeholder = if cx.has_global::<services::AppState>() {
+        cx.global::<services::AppState>()
+            .language
+            .get("launcher.search_placeholder")
     } else {
-        ui::language::Language::default()
+        "Buscar aplicaciones...".to_string()
     };
 
     let has_query = !query.is_empty();
@@ -38,7 +40,7 @@ pub fn render_search_input(
         } else {
             div()
                 .text_color(theme.foreground_muted().opacity(0.7))
-                .child(lang.launcher.search_placeholder)
+                .child(search_placeholder)
         }))
         .children(if has_query {
             Some(

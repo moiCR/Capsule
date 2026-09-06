@@ -53,18 +53,33 @@ pub fn render_calendar_mini_panel(
 
     let is_current_month = view_year == now_year && view_month == now_month;
 
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
-    } else {
-        ui::language::Language::default()
-    };
+    let default_days_short = vec![
+        "L".to_string(),
+        "M".to_string(),
+        "M".to_string(),
+        "J".to_string(),
+        "V".to_string(),
+        "S".to_string(),
+        "D".to_string(),
+    ];
 
-    let month_name = lang
-        .datetime
-        .months
-        .get((view_month as usize).saturating_sub(1))
-        .cloned()
-        .unwrap_or_default();
+    let (today_text, month_name, day_headers) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        let months = lang.get_list("datetime.months");
+        let m_name = months
+            .get((view_month as usize).saturating_sub(1))
+            .cloned()
+            .unwrap_or_default();
+        let short_list = lang.get_list("datetime.days_short");
+        let headers = if short_list.len() == 7 {
+            short_list
+        } else {
+            default_days_short
+        };
+        (lang.get("datetime.today"), m_name, headers)
+    } else {
+        ("Hoy".to_string(), String::new(), default_days_short)
+    };
 
     let days_in_month = match view_month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -138,8 +153,6 @@ pub fn render_calendar_mini_panel(
                 .into_any_element(),
         );
     }
-
-    let day_headers = ["L", "M", "M", "J", "V", "S", "D"];
 
     let mut grid = div().flex().flex_col().w_full().gap_1();
 
@@ -300,7 +313,7 @@ pub fn render_calendar_mini_panel(
                                             .text_size(px(9.5))
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(theme.accent())
-                                            .child(lang.datetime.today.clone()),
+                                            .child(today_text.clone()),
                                     ),
                             )
                         } else {

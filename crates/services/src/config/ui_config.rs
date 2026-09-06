@@ -45,6 +45,9 @@ pub struct UIConfig {
 
     #[serde(default = "default_animation_duration_ms")]
     pub animation_duration_ms: u32,
+
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 pub type UiConfig = UIConfig;
@@ -61,6 +64,7 @@ impl Default for UIConfig {
             gap: default_gap(),
             badge_round: default_badge_round(),
             animation_duration_ms: default_animation_duration_ms(),
+            language: default_language(),
         }
     }
 }
@@ -105,4 +109,8 @@ fn default_badge_round() -> f32 {
 
 fn default_animation_duration_ms() -> u32 {
     250
+}
+
+fn default_language() -> String {
+    "es.toml".to_string()
 }
