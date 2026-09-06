@@ -3,16 +3,16 @@ use services::AppState;
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
-use crate::capsule::satellites::PANEL_W;
+use crate::capsule::satellites::PANEL_MIN_W;
 
 pub fn compute_volume_panel_height(sink_count: usize) -> f32 {
-    let base = 50.0;
-    let item_h = 36.0;
-    (base + (sink_count as f32 * item_h)).clamp(100.0, 300.0)
+    let base = 65.0;
+    let item_h = 32.0;
+    (base + (sink_count as f32 * item_h)).clamp(100.0, 320.0)
 }
 
 pub fn render_volume_mini_panel(
-    anim_t: f32,
+    _anim_t: f32,
     panel_h: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -23,16 +23,29 @@ pub fn render_volume_mini_panel(
         Vec::new()
     };
 
-    let mut list_col = div().flex().flex_col().w_full().gap_1();
+    let mut list_col = div()
+        .id("volume-internal-scroll")
+        .flex()
+        .flex_col()
+        .w_full()
+        .flex_1()
+        .overflow_scroll()
+        .gap_1();
 
-    for sink in &sinks {
+    for (idx, sink) in sinks.iter().enumerate() {
         let is_def = sink.is_default;
         let sink_name = sink.name.clone();
+
+        let indicator_color = if is_def {
+            theme.accent()
+        } else {
+            gpui::hsla(0.0, 0.0, 0.0, 0.0)
+        };
 
         list_col =
             list_col.child(
                 div()
-                    .id(format!("sink-item-{}", sink.name))
+                    .id(("sink-item", idx as u32))
                     .flex()
                     .flex_row()
                     .items_center()
@@ -40,19 +53,14 @@ pub fn render_volume_mini_panel(
                     .w_full()
                     .px_2()
                     .py_1p5()
-                    .rounded_lg()
+                    .rounded(px(10.0))
                     .bg(if is_def {
-                        theme.accent().opacity(0.15)
+                        theme.surface().opacity(0.55)
                     } else {
-                        theme.surface().opacity(0.0)
+                        gpui::hsla(0.0, 0.0, 0.0, 0.0)
                     })
-                    .hover(|s| {
-                        if is_def {
-                            s
-                        } else {
-                            s.bg(theme.surface().opacity(0.5))
-                        }
-                    })
+                    .hover(|s| s.bg(theme.surface().opacity(0.4)))
+                    .active(|s| s.bg(theme.surface().opacity(0.6)))
                     .cursor_pointer()
                     .on_click(cx.listener(move |_this, _, _, cx| {
                         if cx.has_global::<AppState>() {
@@ -73,7 +81,14 @@ pub fn render_volume_mini_panel(
                             .items_center()
                             .gap_2()
                             .overflow_hidden()
-                            .child(svg().path("volume-2.svg").size(px(13.0)).text_color(
+                            .child(
+                                div()
+                                    .w(px(3.0))
+                                    .h(px(14.0))
+                                    .rounded_full()
+                                    .bg(indicator_color),
+                            )
+                            .child(svg().path("volume-2.svg").size(px(14.0)).text_color(
                                 if is_def {
                                     theme.accent()
                                 } else {
@@ -84,7 +99,7 @@ pub fn render_volume_mini_panel(
                                 div()
                                     .text_size(px(11.0))
                                     .font_weight(if is_def {
-                                        FontWeight::BOLD
+                                        FontWeight::SEMIBOLD
                                     } else {
                                         FontWeight::NORMAL
                                     })
@@ -96,6 +111,13 @@ pub fn render_volume_mini_panel(
                                     .truncate()
                                     .child(sink.description.clone()),
                             ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(9.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.accent().opacity(0.85))
+                            .child(if is_def { "Activo" } else { "" }),
                     ),
             );
     }
@@ -107,17 +129,16 @@ pub fn render_volume_mini_panel(
     };
 
     div()
-        .w(px(PANEL_W))
+        .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
-        .p_2p5()
+        .p_3()
         .gap_2()
         .rounded(px(radius))
-        .bg(theme.background())
+        .bg(theme.background().opacity(0.95))
         .border_1()
-        .border_color(theme.surface().opacity(0.6))
+        .border_color(theme.surface().opacity(0.35))
         .shadow_lg()
         .overflow_hidden()
-        .opacity(anim_t)
         .flex()
         .flex_col()
         .child(

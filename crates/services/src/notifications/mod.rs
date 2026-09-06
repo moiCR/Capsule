@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zbus::interface;
@@ -18,6 +19,7 @@ pub struct NotificationStore {
     items: Arc<Mutex<Vec<NotificationItem>>>,
     latest_notification: Arc<Mutex<Option<NotificationItem>>>,
     counter: Arc<Mutex<u32>>,
+    dnd: Arc<AtomicBool>,
 }
 
 impl NotificationStore {
@@ -26,6 +28,7 @@ impl NotificationStore {
             items: Arc::new(Mutex::new(Vec::new())),
             latest_notification: Arc::new(Mutex::new(None)),
             counter: Arc::new(Mutex::new(1)),
+            dnd: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -66,14 +69,32 @@ impl NotificationStore {
             items_guard.push(item.clone());
         }
 
-        if let Ok(mut latest_guard) = self.latest_notification.lock() {
-            *latest_guard = Some(item);
+        if !self.is_dnd_enabled() {
+            if let Ok(mut latest_guard) = self.latest_notification.lock() {
+                *latest_guard = Some(item);
+            }
         }
 
         id
     }
 
+    pub fn is_dnd_enabled(&self) -> bool {
+        self.dnd.load(Ordering::SeqCst)
+    }
+
+    pub fn set_dnd(&self, enabled: bool) {
+        self.dnd.store(enabled, Ordering::SeqCst);
+    }
+
+    pub fn toggle_dnd(&self) -> bool {
+        let prev = self.dnd.fetch_xor(true, Ordering::SeqCst);
+        !prev
+    }
+
     pub fn get_latest_active_notification(&self) -> Option<NotificationItem> {
+        if self.is_dnd_enabled() {
+            return None;
+        }
         if let Ok(guard) = self.latest_notification.lock() {
             if let Some(item) = guard.as_ref() {
                 if item.received_at.elapsed() < item.timeout {
@@ -166,5 +187,43 @@ pub async fn start_notification_server() -> anyhow::Result<()> {
     let mut interval = tokio::time::interval(Duration::from_secs(3600));
     loop {
         interval.tick().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dnd_toggle_and_suppression() {
+        let store = NotificationStore::new();
+        assert!(!store.is_dnd_enabled());
+
+        store.add_notification(
+            "TestApp".to_string(),
+            "".to_string(),
+            "Title".to_string(),
+            "Body".to_string(),
+            5000,
+        );
+        assert!(store.get_latest_active_notification().is_some());
+        assert_eq!(store.get_all_notifications().len(), 1);
+
+        store.toggle_dnd();
+        assert!(store.is_dnd_enabled());
+        assert!(store.get_latest_active_notification().is_none());
+
+        store.add_notification(
+            "TestApp2".to_string(),
+            "".to_string(),
+            "Title2".to_string(),
+            "Body2".to_string(),
+            5000,
+        );
+        assert!(store.get_latest_active_notification().is_none());
+        assert_eq!(store.get_all_notifications().len(), 2);
+
+        store.toggle_dnd();
+        assert!(!store.is_dnd_enabled());
     }
 }

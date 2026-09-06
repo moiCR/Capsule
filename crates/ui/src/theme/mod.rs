@@ -5,7 +5,7 @@ use gpui::{Hsla, Rgba, SharedString};
 use serde::{Deserialize, Serialize};
 pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Theme {
     pub mode: ThemeMode,
     #[serde(default = "default_font_family")]
@@ -24,7 +24,7 @@ fn default_font_family() -> String {
     "Geist".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ThemeMode {
     Light,
     Dark,

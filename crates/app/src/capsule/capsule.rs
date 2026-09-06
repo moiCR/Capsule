@@ -7,7 +7,7 @@ use ui::tracker::DimensionTracker;
 use crate::capsule::modules::CapsuleModules;
 
 use super::satellites::PanelManager;
-use super::{CapsuleMode, apple_island_ease};
+use super::{CapsuleMode, apple_island_morph, apple_island_spring};
 
 use super::modules::clipboard::ClipboardEvent;
 use super::modules::emoji::EmojiEvent;
@@ -36,6 +36,7 @@ pub struct Capsule {
     anim_start_progress: f32,
     animating: bool,
     anim_task: Option<Task<()>>,
+    satellite_anim_task: Option<Task<()>>,
     last_activity_time: Instant,
     inactivity_generation: u64,
     last_vol_status: Option<(u32, bool)>,
@@ -88,6 +89,7 @@ impl Capsule {
                     if capsule.mode == CapsuleMode::Dashboard {
                         capsule.panel_manager.close_all();
                         capsule.sync_panel_indices(cx);
+                        capsule.start_satellite_animation(cx);
                         capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                     }
                 }
@@ -112,6 +114,7 @@ impl Capsule {
                         max_h,
                     );
                     capsule.sync_panel_indices(cx);
+                    capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::WifiChevronClicked => {
@@ -127,6 +130,7 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::BluetoothChevronClicked => {
@@ -142,6 +146,7 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::CalendarClicked => {
@@ -152,6 +157,7 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::VolumeChevronClicked => {
@@ -172,6 +178,7 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
                 super::modules::dashboard::DashboardEvent::WallpaperRequested => {
@@ -184,6 +191,7 @@ impl Capsule {
                 super::modules::dashboard::DashboardEvent::SettingsRequested => {
                     capsule.panel_manager.close_all();
                     capsule.sync_panel_indices(cx);
+                    capsule.start_satellite_animation(cx);
                     capsule.start_transition_internal(CapsuleMode::Settings, None, cx);
                 }
             },
@@ -238,33 +246,8 @@ impl Capsule {
         cx.subscribe(
             &modules.select_theme_view,
             |capsule, _, event: &super::modules::select_theme::SelectThemeEvent, cx| match event {
-                super::modules::select_theme::SelectThemeEvent::CreateThemeRequested => {
-                    capsule.start_transition_internal(CapsuleMode::CreateTheme, None, cx);
-                }
                 super::modules::select_theme::SelectThemeEvent::ThemeSelected => {
                     capsule.start_transition_internal(CapsuleMode::Default, None, cx);
-                }
-            },
-        )
-        .detach();
-
-        cx.observe(&modules.create_theme_view, |capsule, _, cx| {
-            capsule.reset_inactivity_timer();
-            cx.notify();
-        })
-        .detach();
-
-        cx.subscribe(
-            &modules.create_theme_view,
-            |capsule, _, event: &super::modules::create_theme::CreateThemeEvent, cx| match event {
-                super::modules::create_theme::CreateThemeEvent::ThemeCreated => {
-                    capsule.modules.select_theme_view.update(cx, |st, cx| {
-                        st.refresh_themes(cx);
-                    });
-                    capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
-                }
-                super::modules::create_theme::CreateThemeEvent::Cancelled => {
-                    capsule.start_transition_internal(CapsuleMode::SelectTheme, None, cx);
                 }
             },
         )
@@ -354,6 +337,21 @@ impl Capsule {
                         }
 
                         if dimension_changed {
+                            if capsule.mode == CapsuleMode::Settings {
+                                let margin_top = if cx.has_global::<AppState>() {
+                                    let ui_cfg = &cx.global::<AppState>().config.get().ui;
+                                    if ui_cfg.capsule_style == services::CapsuleStyle::Concave {
+                                        0.0
+                                    } else {
+                                        ui_cfg.margin_top
+                                    }
+                                } else {
+                                    8.0
+                                };
+                                capsule.target_y =
+                                    ((capsule.window_height - capsule.target_height) / 2.0)
+                                        .max(margin_top);
+                            }
                             if !capsule.animating {
                                 capsule.animate_dimension_change(cx);
                             }
@@ -591,6 +589,12 @@ impl Capsule {
         };
         let initial_y = initial_margin_top;
 
+        let initial_win_h = cx
+            .displays()
+            .first()
+            .map(|d| f32::from(d.bounds().size.height))
+            .unwrap_or(1080.0);
+
         Self {
             mode: CapsuleMode::Default,
             modules,
@@ -609,10 +613,11 @@ impl Capsule {
             anim_start_h: initial_h,
             anim_start_r: r,
             anim_start_y: initial_y,
-            window_height: 1080.0,
+            window_height: initial_win_h,
             anim_start_progress: 0.0,
             animating: false,
             anim_task: None,
+            satellite_anim_task: None,
             last_activity_time: Instant::now(),
             inactivity_generation: 0,
             last_vol_status: None,
@@ -712,6 +717,49 @@ impl Capsule {
         self.last_activity_time = Instant::now();
     }
 
+    fn start_satellite_animation(&mut self, cx: &mut Context<Self>) {
+        if self.satellite_anim_task.is_some() {
+            return;
+        }
+
+        let compositor = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().compositor.clone())
+        } else {
+            None
+        };
+
+        let task = cx.spawn(async move |this, cx| {
+            loop {
+                let frame_dur = if let Some(ref comp) = compositor {
+                    comp.get_frame_duration()
+                } else {
+                    Duration::from_millis(16)
+                };
+
+                tokio::time::sleep(frame_dur).await;
+
+                let done = this
+                    .update(cx, |capsule, cx| {
+                        capsule.panel_manager.update_animations();
+                        cx.notify();
+                        !capsule.panel_manager.any_animating()
+                    })
+                    .unwrap_or(true);
+
+                if done {
+                    this.update(cx, |capsule, cx| {
+                        capsule.satellite_anim_task = None;
+                        capsule.panel_manager.update_animations();
+                        cx.notify();
+                    })
+                    .ok();
+                    break;
+                }
+            }
+        });
+        self.satellite_anim_task = Some(task);
+    }
+
     pub(crate) fn start_transition_internal(
         &mut self,
         mode: CapsuleMode,
@@ -740,10 +788,6 @@ impl Capsule {
         } else if mode == CapsuleMode::SelectTheme {
             self.modules.select_theme_view.update(cx, |st, cx| {
                 st.refresh_themes(cx);
-            });
-        } else if mode == CapsuleMode::CreateTheme {
-            self.modules.create_theme_view.update(cx, |ct, cx| {
-                ct.reset_form(cx);
             });
         }
 
@@ -796,18 +840,18 @@ impl Capsule {
             .detach();
         }
 
-        let (mut target_w, mut target_h) = mode.dimensions();
-        if mode == CapsuleMode::Default {
-            let (w, h) = self.modules.idle_view.read(cx).desired_dimensions();
-            target_w = w;
-            let _ = h;
+        let (target_w, target_h) = if mode == CapsuleMode::Default {
+            let (w, _h) = self.modules.idle_view.read(cx).desired_dimensions();
+            (w, mode.dimensions().1)
         } else {
-            let (w, h) = self.dimension_tracker.dimensions(0.0, 0.0);
-            if w > 0.0 {
-                target_w = w;
-            }
-            if h > 0.0 {
-                target_h = h;
+            mode.dimensions()
+        };
+        self.dimension_tracker.reset();
+
+        if let Some(display) = cx.displays().first() {
+            let dh: f32 = display.bounds().size.height.into();
+            if dh > 100.0 {
+                self.window_height = dh;
             }
         }
         let target_r = if cx.has_global::<AppState>() {
@@ -921,14 +965,6 @@ impl Capsule {
                     CapsuleMode::Default
                 } else {
                     CapsuleMode::SelectTheme
-                };
-                self.start_transition_internal(target, None, cx);
-            }
-            services::IpcCommand::ToggleCreateTheme => {
-                let target = if self.mode == CapsuleMode::CreateTheme {
-                    CapsuleMode::Default
-                } else {
-                    CapsuleMode::CreateTheme
                 };
                 self.start_transition_internal(target, None, cx);
             }
@@ -1046,17 +1082,21 @@ impl Capsule {
             }
 
             let t = (start_time.elapsed().as_secs_f32() / duration).min(1.0);
-            let eased = apple_island_ease(t);
+            let is_expanding =
+                self.target_width > self.anim_start_w || self.target_height > self.anim_start_h;
+            let (w_eased, h_eased) = apple_island_morph(t, is_expanding);
+            let eased = apple_island_spring(t);
 
             self.current_width =
-                self.anim_start_w + (self.target_width - self.anim_start_w) * eased;
+                (self.anim_start_w + (self.target_width - self.anim_start_w) * w_eased).max(1.0);
             self.current_height =
-                self.anim_start_h + (self.target_height - self.anim_start_h) * eased;
+                (self.anim_start_h + (self.target_height - self.anim_start_h) * h_eased).max(1.0);
             self.current_radius =
-                self.anim_start_r + (self.target_radius - self.anim_start_r) * eased;
+                (self.anim_start_r + (self.target_radius - self.anim_start_r) * eased).max(0.0);
             self.current_y = self.anim_start_y + (self.target_y - self.anim_start_y) * eased;
-            self.anim_progress =
-                self.anim_start_progress + (target_progress - self.anim_start_progress) * eased;
+            self.anim_progress = (self.anim_start_progress
+                + (target_progress - self.anim_start_progress) * eased)
+                .clamp(0.0, 1.0);
 
             if t >= 1.0 {
                 self.current_width = self.target_width;
@@ -1096,7 +1136,6 @@ impl Render for Capsule {
             || self.mode == CapsuleMode::Dashboard
             || self.mode == CapsuleMode::Polkit
             || self.mode == CapsuleMode::SelectTheme
-            || self.mode == CapsuleMode::CreateTheme
             || self.mode == CapsuleMode::Clipboard
             || self.mode == CapsuleMode::Emoji
             || self.mode == CapsuleMode::Settings;
@@ -1119,7 +1158,7 @@ impl Render for Capsule {
             .anim_start_time
             .map(|start| (start.elapsed().as_secs_f32() / anim_duration).min(1.0))
             .unwrap_or(1.0);
-        let eased = apple_island_ease(anim_t);
+        let eased = apple_island_spring(anim_t);
 
         if self.last_rendered_mode != Some(self.mode) {
             self.last_rendered_mode = Some(self.mode);
@@ -1127,7 +1166,6 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::Dashboard
                 || self.mode == CapsuleMode::Polkit
                 || self.mode == CapsuleMode::SelectTheme
-                || self.mode == CapsuleMode::CreateTheme
                 || self.mode == CapsuleMode::Wallpaper
                 || self.mode == CapsuleMode::Clipboard
                 || self.mode == CapsuleMode::Emoji
@@ -1173,7 +1211,7 @@ impl Render for Capsule {
 
         if let Some(el) = mode_element {
             let opacity = if self.animating && self.is_mode_transition {
-                eased
+                eased.clamp(0.0, 1.0)
             } else {
                 1.0
             };
@@ -1265,10 +1303,10 @@ impl Render for Capsule {
                 }
             };
 
-        let mut pill_wrapper = renderer.render(content_container.into_any_element(), &params, cx);
+        let pill_wrapper = renderer.render(content_container.into_any_element(), &params, cx);
 
-        // Satellite mini-panels: compact chips that orbit the Dashboard in dynamic lanes.
-        // Animated: they emerge from the pill center and slide into position.
+        let mut satellites_layer = div().absolute().inset_0();
+
         let has_panels =
             !self.panel_manager.left.is_empty() || !self.panel_manager.right.is_empty();
         if self.mode == CapsuleMode::Dashboard && has_panels && cx.has_global::<AppState>() {
@@ -1280,16 +1318,8 @@ impl Render for Capsule {
             self.panel_manager.prune_invalid(sni_items.len());
             self.panel_manager.update_animations();
 
-            if self.panel_manager.any_animating() {
-                let frame_ms = cx.global::<AppState>().compositor.get_frame_duration_ms();
-                let this = cx.entity().downgrade();
-                cx.spawn(async move |_this, cx| {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(frame_ms))
-                        .await;
-                    let _ = this.update(cx, |_, cx| cx.notify());
-                })
-                .detach();
+            if self.panel_manager.any_animating() && self.satellite_anim_task.is_none() {
+                self.start_satellite_animation(cx);
             }
 
             for p in self.panel_manager.left.iter_mut() {
@@ -1305,8 +1335,6 @@ impl Render for Capsule {
                 }
             }
 
-            // Left lane
-            let left_lane_x = -(PM::PANEL_W + PM::LANE_GAP);
             let left_snapshot: Vec<_> = self
                 .panel_manager
                 .left
@@ -1329,6 +1357,9 @@ impl Render for Capsule {
                     y_stack += panel_h + ui_config.gap;
                 }
 
+                let panel_w = tracker.width(0.0).max(PM::PANEL_MIN_W);
+                let left_lane_x = -(panel_w + PM::LANE_GAP);
+
                 let mini_opt = match kind {
                     PM::PanelKind::Tray(sni_idx) => {
                         if let Some(item) = sni_items.get(sni_idx) {
@@ -1388,8 +1419,10 @@ impl Render for Capsule {
 
                 if let Some(mini) = mini_opt {
                     let (off_x, off_y) = PM::PanelManager::animated_position(
+                        PM::Lane::Left,
                         dash_w,
                         dash_h,
+                        panel_w,
                         left_lane_x,
                         current_y,
                         anim_t,
@@ -1397,7 +1430,7 @@ impl Render for Capsule {
                     );
 
                     let tracked_mini = tracker.track(mini);
-                    pill_wrapper = pill_wrapper.child(
+                    satellites_layer = satellites_layer.child(
                         div()
                             .absolute()
                             .left(px(off_x))
@@ -1407,8 +1440,6 @@ impl Render for Capsule {
                 }
             }
 
-            // Right lane
-            let right_lane_x = dash_w + PM::LANE_GAP;
             let right_snapshot: Vec<_> = self
                 .panel_manager
                 .right
@@ -1431,6 +1462,9 @@ impl Render for Capsule {
                     y_stack += panel_h + ui_config.gap;
                 }
 
+                let panel_w = tracker.width(0.0).max(PM::PANEL_MIN_W);
+                let right_lane_x = dash_w + PM::LANE_GAP;
+
                 let mini_opt = match kind {
                     PM::PanelKind::Tray(sni_idx) => {
                         if let Some(item) = sni_items.get(sni_idx) {
@@ -1490,8 +1524,10 @@ impl Render for Capsule {
 
                 if let Some(mini) = mini_opt {
                     let (off_x, off_y) = PM::PanelManager::animated_position(
+                        PM::Lane::Right,
                         dash_w,
                         dash_h,
+                        panel_w,
                         right_lane_x,
                         current_y,
                         anim_t,
@@ -1499,7 +1535,7 @@ impl Render for Capsule {
                     );
 
                     let tracked_mini = tracker.track(mini);
-                    pill_wrapper = pill_wrapper.child(
+                    satellites_layer = satellites_layer.child(
                         div()
                             .absolute()
                             .left(px(off_x))
@@ -1510,14 +1546,19 @@ impl Render for Capsule {
             }
         }
 
-        // flex_container always has ONE child (pill_wrapper), so justify_center
-        // always positions the Dashboard at the center — never moves it.
+        let content_stack = div()
+            .relative()
+            .w(px(self.current_width))
+            .h(px(self.current_height))
+            .child(satellites_layer)
+            .child(pill_wrapper);
+
         let flex_container = div()
             .flex()
             .flex_row()
             .items_start()
             .justify_center()
-            .child(pill_wrapper);
+            .child(content_stack);
 
         let mut root = div()
             .id("capsule-root")

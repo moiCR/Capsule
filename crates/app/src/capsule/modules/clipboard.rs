@@ -119,7 +119,30 @@ impl ClipboardModule {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match event.keystroke.key.as_str() {
+        let key = event.keystroke.key.as_str();
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "u" => {
+                    self.update_search(String::new(), cx);
+                    return;
+                }
+                "w" => {
+                    let trimmed = self.query.trim_end();
+                    let new_q = if let Some(idx) = trimmed.rfind(' ') {
+                        trimmed[..idx].to_string()
+                    } else {
+                        String::new()
+                    };
+                    self.update_search(new_q, cx);
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+        match key {
             "down" => {
                 self.mouse_moved = false;
                 self.select_next(cx);
@@ -141,16 +164,18 @@ impl ClipboardModule {
                     self.update_search(q, cx);
                 }
             }
-            ch if ch.len() == 1
-                && !event.keystroke.modifiers.control
-                && !event.keystroke.modifiers.alt
-                && !event.keystroke.modifiers.platform =>
-            {
-                let mut q = self.query.clone();
-                q.push_str(ch);
-                self.update_search(q, cx);
+            _ => {
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+                if text.chars().count() == 1 && !ctrl && !event.keystroke.modifiers.alt {
+                    let mut q = self.query.clone();
+                    q.push_str(text);
+                    self.update_search(q, cx);
+                }
             }
-            _ => {}
         }
     }
 }
@@ -169,6 +194,81 @@ impl Render for ClipboardModule {
         let query = self.query.clone();
         let selected_index = self.selected_index;
         let is_empty = self.filtered_items.is_empty();
+        let has_query = !query.is_empty();
+
+        let header = div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .w_full()
+            .px_3()
+            .py_2()
+            .child(
+                svg()
+                    .path("search.svg")
+                    .w_4()
+                    .h_4()
+                    .text_color(theme.foreground_muted().opacity(0.8)),
+            )
+            .child(div().flex_1().text_sm().child(if has_query {
+                div()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground())
+                    .child(query.clone())
+            } else {
+                div()
+                    .text_color(theme.foreground_muted().opacity(0.7))
+                    .child(lang.clipboard.search_placeholder)
+            }))
+            .children(if has_query {
+                Some(
+                    div()
+                        .id("clear-search-btn")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .w(px(20.0))
+                        .h(px(20.0))
+                        .rounded_full()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                        .active(|s| s.opacity(0.6))
+                        .on_click(cx.listener(|this, _, _window, cx| {
+                            this.update_search(String::new(), cx);
+                        }))
+                        .child(
+                            svg()
+                                .path("close.svg")
+                                .w_3()
+                                .h_3()
+                                .text_color(theme.foreground_muted()),
+                        ),
+                )
+            } else {
+                None
+            })
+            .child(
+                div()
+                    .id("clip-clear-btn")
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .w(px(22.0))
+                    .h(px(22.0))
+                    .rounded_full()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .active(|s| s.opacity(0.6))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.clear_all(cx);
+                    }))
+                    .child(
+                        svg()
+                            .path("trash.svg")
+                            .size(px(13.0))
+                            .text_color(theme.foreground_muted()),
+                    ),
+            );
 
         let mut list_container = div()
             .id("clipboard-item-list")
@@ -177,41 +277,39 @@ impl Render for ClipboardModule {
             .flex_col()
             .flex_1()
             .overflow_scroll()
-            .gap_1p5();
+            .gap_1();
 
         for (idx, item) in self.filtered_items.iter().enumerate() {
             let is_selected = idx == selected_index;
             let item_clone = item.clone();
             let empty_text = lang.clipboard.empty_item.clone();
 
+            let indicator_color = if is_selected {
+                theme.accent()
+            } else {
+                gpui::hsla(0.0, 0.0, 0.0, 0.0)
+            };
+
+            let item_bg = if is_selected {
+                theme.surface().opacity(0.55)
+            } else {
+                gpui::hsla(0.0, 0.0, 0.0, 0.0)
+            };
+
             let row = div()
                 .id(format!("clip-item-{idx}"))
                 .flex()
                 .flex_row()
                 .items_center()
-                .justify_between()
-                .px_3()
-                .py_2()
-                .rounded_xl()
+                .w_full()
+                .gap_2p5()
+                .px_2()
+                .py(px(6.0))
+                .rounded(px(12.0))
                 .cursor_pointer()
-                .bg(if is_selected {
-                    theme.accent().opacity(0.2)
-                } else {
-                    theme.surface().opacity(0.3)
-                })
-                .border_1()
-                .border_color(if is_selected {
-                    theme.accent()
-                } else {
-                    theme.surface().opacity(0.0)
-                })
-                .hover(|s| {
-                    if !is_selected {
-                        s.bg(theme.surface().opacity(0.6))
-                    } else {
-                        s
-                    }
-                })
+                .bg(item_bg)
+                .hover(|s| s.bg(theme.surface().opacity(0.4)))
+                .active(|s| s.bg(theme.surface().opacity(0.6)))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {
                     if !this.mouse_moved {
                         this.mouse_moved = true;
@@ -227,26 +325,34 @@ impl Render for ClipboardModule {
                 }))
                 .child(
                     div()
+                        .w(px(3.0))
+                        .h(px(18.0))
+                        .rounded_full()
+                        .bg(indicator_color),
+                )
+                .child(
+                    div()
                         .flex()
                         .flex_row()
                         .items_center()
                         .gap_2p5()
+                        .flex_1()
                         .overflow_hidden()
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
                                 .text_size(px(10.0))
-                                .text_color(theme.foreground_muted())
+                                .text_color(theme.foreground_muted().opacity(0.7))
                                 .child(format!("#{}", idx + 1)),
                         )
                         .child(
                             div()
                                 .font_weight(if is_selected {
-                                    FontWeight::BOLD
+                                    FontWeight::SEMIBOLD
                                 } else {
                                     FontWeight::NORMAL
                                 })
-                                .text_size(px(12.0))
+                                .text_size(px(13.0))
                                 .text_color(if is_selected {
                                     theme.foreground()
                                 } else {
@@ -269,110 +375,25 @@ impl Render for ClipboardModule {
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .w(px(460.0))
-            .min_h(px(240.0))
-            .max_h(px(480.0))
-            .p_4()
-            .gap_3()
-            .child(
-                // Header
+            .w(px(380.0))
+            .max_h(px(360.0))
+            .p_3()
+            .gap_2()
+            .overflow_hidden()
+            .child(header)
+            .child(if is_empty {
                 div()
+                    .id("clipboard-empty-state")
                     .flex()
-                    .flex_row()
+                    .flex_1()
                     .items_center()
-                    .justify_between()
-                    .w_full()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                svg()
-                                    .path("clipboard-list.svg")
-                                    .size(px(18.0))
-                                    .text_color(theme.accent()),
-                            )
-                            .child(
-                                div()
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_size(px(13.0))
-                                    .text_color(theme.foreground())
-                                    .child(lang.clipboard.title),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("clip-clear-btn")
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .p_1p5()
-                            .rounded_full()
-                            .bg(theme.surface())
-                            .cursor_pointer()
-                            .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.clear_all(cx);
-                            }))
-                            .child(
-                                svg()
-                                    .path("trash.svg")
-                                    .size(px(13.0))
-                                    .text_color(theme.foreground_muted()),
-                            ),
-                    ),
-            )
-            .child(
-                // Search bar
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap_2()
-                    .px_3()
-                    .py_2()
-                    .rounded_xl()
-                    .bg(theme.surface().opacity(0.5))
-                    .border_1()
-                    .border_color(theme.surface().opacity(0.8))
-                    .child(
-                        svg()
-                            .path("search.svg")
-                            .size(px(14.0))
-                            .text_color(theme.foreground_muted()),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(if query.is_empty() {
-                                theme.foreground_muted()
-                            } else {
-                                theme.foreground()
-                            })
-                            .child(if query.is_empty() {
-                                lang.clipboard.search_placeholder
-                            } else {
-                                query
-                            }),
-                    ),
-            )
-            .child(
-                // List of items
-                if is_empty {
-                    div()
-                        .id("clipboard-empty-state")
-                        .flex()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(12.0))
-                        .text_color(theme.foreground_muted())
-                        .child(lang.clipboard.empty_history)
-                } else {
-                    list_container
-                },
-            )
+                    .justify_center()
+                    .py_8()
+                    .text_size(px(13.0))
+                    .text_color(theme.foreground_muted())
+                    .child(lang.clipboard.empty_history)
+            } else {
+                list_container
+            })
     }
 }

@@ -139,10 +139,10 @@ fn render_power_selector(
         .items_center()
         .p_1()
         .gap(px(2.0))
-        .rounded(px(12.0))
-        .bg(theme.background())
+        .rounded_full()
+        .bg(theme.surface().opacity(0.35))
         .border_1()
-        .border_color(theme.surface().opacity(0.6));
+        .border_color(theme.surface().opacity(0.25));
 
     for (prof, label, icon) in profiles {
         let is_active = current == prof;
@@ -155,23 +155,17 @@ fn render_power_selector(
                 .flex_row()
                 .items_center()
                 .gap(px(5.0))
-                .px_2p5()
+                .px_3()
                 .py_1()
-                .rounded(px(8.0))
+                .rounded_full()
                 .bg(if is_active {
-                    theme.accent().opacity(0.2)
-                } else {
-                    gpui::transparent_black()
-                })
-                .border_1()
-                .border_color(if is_active {
-                    theme.accent().opacity(0.5)
+                    theme.surface().opacity(0.85)
                 } else {
                     gpui::transparent_black()
                 })
                 .hover(|s| {
                     if !is_active {
-                        s.bg(theme.surface().opacity(0.4))
+                        s.bg(theme.surface().opacity(0.35))
                     } else {
                         s
                     }
@@ -194,7 +188,7 @@ fn render_power_selector(
                     div()
                         .text_size(px(11.0))
                         .font_weight(if is_active {
-                            FontWeight::BOLD
+                            FontWeight::SEMIBOLD
                         } else {
                             FontWeight::MEDIUM
                         })
@@ -222,10 +216,10 @@ fn render_language_selector(
         .items_center()
         .p_1()
         .gap(px(2.0))
-        .rounded(px(12.0))
-        .bg(theme.background())
+        .rounded_full()
+        .bg(theme.surface().opacity(0.35))
         .border_1()
-        .border_color(theme.surface().opacity(0.6));
+        .border_color(theme.surface().opacity(0.25));
 
     for item in languages {
         let is_active = item.is_current;
@@ -240,21 +234,15 @@ fn render_language_selector(
                 .items_center()
                 .px_3()
                 .py_1()
-                .rounded(px(8.0))
+                .rounded_full()
                 .bg(if is_active {
-                    theme.accent().opacity(0.2)
-                } else {
-                    gpui::transparent_black()
-                })
-                .border_1()
-                .border_color(if is_active {
-                    theme.accent().opacity(0.5)
+                    theme.surface().opacity(0.85)
                 } else {
                     gpui::transparent_black()
                 })
                 .hover(|s| {
                     if !is_active {
-                        s.bg(theme.surface().opacity(0.4))
+                        s.bg(theme.surface().opacity(0.35))
                     } else {
                         s
                     }
@@ -272,12 +260,12 @@ fn render_language_selector(
                     div()
                         .text_size(px(11.0))
                         .font_weight(if is_active {
-                            FontWeight::BOLD
+                            FontWeight::SEMIBOLD
                         } else {
                             FontWeight::MEDIUM
                         })
                         .text_color(if is_active {
-                            theme.foreground()
+                            theme.accent()
                         } else {
                             theme.foreground_muted()
                         })

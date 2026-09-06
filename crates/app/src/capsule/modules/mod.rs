@@ -3,14 +3,13 @@ use gpui::{AnyElement, AppContext, Context, Entity, IntoElement};
 use crate::capsule::Capsule;
 use crate::capsule::CapsuleMode;
 use crate::capsule::modules::{
-    clipboard::ClipboardModule, create_theme::CreateThemeModule, dashboard::DashboardModule,
-    emoji::EmojiModule, idle::IdleModule, launcher::LauncherModule,
-    notification::NotificationModule, polkit::PolkitModule, select_theme::SelectThemeModule,
-    settings::SettingsModule, volume::VolumeModule, wallpaper::WallpaperModule,
+    clipboard::ClipboardModule, dashboard::DashboardModule, emoji::EmojiModule, idle::IdleModule,
+    launcher::LauncherModule, notification::NotificationModule, polkit::PolkitModule,
+    select_theme::SelectThemeModule, settings::SettingsModule, volume::VolumeModule,
+    wallpaper::WallpaperModule,
 };
 
 pub mod clipboard;
-pub mod create_theme;
 pub mod dashboard;
 pub mod emoji;
 pub mod idle;
@@ -30,7 +29,6 @@ pub struct CapsuleModules {
     pub volume_view: Entity<VolumeModule>,
     pub polkit_view: Entity<PolkitModule>,
     pub select_theme_view: Entity<SelectThemeModule>,
-    pub create_theme_view: Entity<CreateThemeModule>,
     pub wallpaper_view: Entity<WallpaperModule>,
     pub clipboard_view: Entity<ClipboardModule>,
     pub emoji_view: Entity<EmojiModule>,
@@ -47,7 +45,6 @@ impl CapsuleModules {
             volume_view: cx.new(VolumeModule::new),
             polkit_view: cx.new(PolkitModule::new),
             select_theme_view: cx.new(SelectThemeModule::new),
-            create_theme_view: cx.new(CreateThemeModule::new),
             wallpaper_view: cx.new(WallpaperModule::new),
             clipboard_view: cx.new(ClipboardModule::new),
             emoji_view: cx.new(EmojiModule::new),
@@ -64,7 +61,6 @@ impl CapsuleModules {
             CapsuleMode::Volume => self.volume_view.clone().into_any_element(),
             CapsuleMode::Polkit => self.polkit_view.clone().into_any_element(),
             CapsuleMode::SelectTheme => self.select_theme_view.clone().into_any_element(),
-            CapsuleMode::CreateTheme => self.create_theme_view.clone().into_any_element(),
             CapsuleMode::Wallpaper => self.wallpaper_view.clone().into_any_element(),
             CapsuleMode::Clipboard => self.clipboard_view.clone().into_any_element(),
             CapsuleMode::Emoji => self.emoji_view.clone().into_any_element(),

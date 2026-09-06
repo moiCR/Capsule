@@ -1,6 +1,6 @@
 use gpui::{
-    EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
-    div, prelude::*, px, svg,
+    EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window, div,
+    prelude::*, px, svg,
 };
 use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;
@@ -247,29 +247,6 @@ impl Render for LauncherModule {
             app_list.into_any_element()
         };
 
-        let footer = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .w_full()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(12.0))
-                    .child(render_shortcut_hint(
-                        "↑↓",
-                        &lang.launcher.navigate_hint,
-                        &theme,
-                    ))
-                    .child(render_shortcut_hint("↵", &lang.launcher.open_hint, &theme)),
-            )
-            .child(render_shortcut_hint(
-                "esc",
-                &lang.launcher.close_hint,
-                &theme,
-            ));
-
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
@@ -282,42 +259,10 @@ impl Render for LauncherModule {
             .flex()
             .flex_col()
             .w(px(380.0))
-            .max_h(px(500.0))
-            .p_3p5()
-            .gap_2p5()
-            .child(render_search_input(
-                &self.query,
-                self.apps.len(),
-                &theme,
-                cx,
-            ))
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
+            .max_h(px(360.0))
+            .p_3()
+            .gap_2()
+            .child(render_search_input(&self.query, &theme, cx))
             .child(content)
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            .child(footer)
     }
-}
-
-fn render_shortcut_hint(key: &str, label: &str, theme: &Theme) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px(px(5.0))
-                .py(px(1.0))
-                .rounded(px(5.0))
-                .bg(theme.surface().opacity(0.6))
-                .text_size(px(9.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme.foreground_muted())
-                .child(key.to_string()),
-        )
-        .child(
-            div()
-                .text_size(px(10.0))
-                .text_color(theme.foreground_muted().opacity(0.7))
-                .child(label.to_string()),
-        )
 }

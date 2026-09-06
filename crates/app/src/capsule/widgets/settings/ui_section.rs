@@ -175,15 +175,16 @@ fn render_number_stepper(
         .child(
             div()
                 .id(ElementId::NamedInteger("step-down".into(), field as u64))
-                .w(px(26.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.surface().opacity(0.4))
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .w(px(24.0))
+                .h(px(24.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.5))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.bg(theme.surface()))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(14.0))
+                .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .cursor_pointer()
@@ -195,10 +196,10 @@ fn render_number_stepper(
         .child(
             div()
                 .id(ElementId::NamedInteger("step-input".into(), field as u64))
-                .w(px(90.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.background())
+                .w(px(72.0))
+                .h(px(24.0))
+                .rounded(px(6.0))
+                .bg(theme.surface().opacity(0.25))
                 .border_1()
                 .border_color(border_color)
                 .flex()
@@ -223,15 +224,16 @@ fn render_number_stepper(
         .child(
             div()
                 .id(ElementId::NamedInteger("step-up".into(), field as u64))
-                .w(px(26.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.surface().opacity(0.4))
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .w(px(24.0))
+                .h(px(24.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.5))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.bg(theme.surface()))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(14.0))
+                .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .cursor_pointer()
@@ -258,10 +260,10 @@ fn render_capsule_style_selector(
         .items_center()
         .p_1()
         .gap(px(2.0))
-        .rounded(px(12.0))
-        .bg(theme.background())
+        .rounded_full()
+        .bg(theme.surface().opacity(0.35))
         .border_1()
-        .border_color(theme.surface().opacity(0.6));
+        .border_color(theme.surface().opacity(0.25));
 
     for (style, label) in options {
         let is_active = module.capsule_style == style;
@@ -275,21 +277,15 @@ fn render_capsule_style_selector(
                 .justify_center()
                 .px_3()
                 .py_1()
-                .rounded(px(8.0))
+                .rounded_full()
                 .bg(if is_active {
-                    theme.accent().opacity(0.2)
-                } else {
-                    gpui::transparent_black()
-                })
-                .border_1()
-                .border_color(if is_active {
-                    theme.accent().opacity(0.5)
+                    theme.surface().opacity(0.85)
                 } else {
                     gpui::transparent_black()
                 })
                 .hover(|s| {
                     if !is_active {
-                        s.bg(theme.surface().opacity(0.4))
+                        s.bg(theme.surface().opacity(0.35))
                     } else {
                         s
                     }

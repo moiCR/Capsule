@@ -4,7 +4,7 @@ use services::{AppState, calendar::NavDirection};
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
-use crate::capsule::satellites::PANEL_W;
+use crate::capsule::satellites::PANEL_MIN_W;
 
 pub fn compute_calendar_panel_height() -> f32 {
     250.0
@@ -30,7 +30,7 @@ fn spawn_nav_animation(cx: &mut Context<DashboardModule>) {
 }
 
 pub fn render_calendar_mini_panel(
-    anim_t: f32,
+    _anim_t: f32,
     panel_h: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -89,8 +89,8 @@ pub fn render_calendar_mini_panel(
     for _ in 0..start_weekday {
         day_cells.push(
             div()
-                .w(px(22.0))
-                .h(px(22.0))
+                .w(px(30.0))
+                .h(px(30.0))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -102,8 +102,8 @@ pub fn render_calendar_mini_panel(
         let is_today = is_current_month && day == now_day;
         day_cells.push(
             div()
-                .w(px(22.0))
-                .h(px(22.0))
+                .w(px(30.0))
+                .h(px(30.0))
                 .rounded_full()
                 .flex()
                 .items_center()
@@ -111,11 +111,18 @@ pub fn render_calendar_mini_panel(
                 .bg(if is_today {
                     theme.accent()
                 } else {
-                    theme.surface().opacity(0.0)
+                    gpui::hsla(0.0, 0.0, 0.0, 0.0)
+                })
+                .hover(|s| {
+                    if is_today {
+                        s
+                    } else {
+                        s.bg(theme.surface().opacity(0.45))
+                    }
                 })
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(11.0))
                         .font_weight(if is_today {
                             FontWeight::BOLD
                         } else {
@@ -147,13 +154,13 @@ pub fn render_calendar_mini_panel(
     for d in day_headers {
         header_row = header_row.child(
             div()
-                .w(px(22.0))
+                .w(px(30.0))
                 .flex()
                 .items_center()
                 .justify_center()
                 .child(
                     div()
-                        .text_size(px(9.0))
+                        .text_size(px(10.0))
                         .font_weight(FontWeight::BOLD)
                         .text_color(theme.foreground_muted())
                         .child(d),
@@ -193,8 +200,8 @@ pub fn render_calendar_mini_panel(
             for _ in 0..(7 - chunk_len) {
                 row = row.child(
                     div()
-                        .w(px(22.0))
-                        .h(px(22.0))
+                        .w(px(30.0))
+                        .h(px(30.0))
                         .flex()
                         .items_center()
                         .justify_center(),
@@ -225,17 +232,16 @@ pub fn render_calendar_mini_panel(
     };
 
     div()
-        .w(px(PANEL_W))
+        .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
-        .p_2p5()
+        .p_3()
         .gap_2()
         .rounded(px(radius))
-        .bg(theme.background())
+        .bg(theme.background().opacity(0.95))
         .border_1()
-        .border_color(theme.surface().opacity(0.6))
+        .border_color(theme.surface().opacity(0.35))
         .shadow_lg()
         .overflow_hidden()
-        .opacity(anim_t)
         .flex()
         .flex_col()
         .child(
@@ -250,17 +256,17 @@ pub fn render_calendar_mini_panel(
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap_1p5()
+                        .gap_2()
                         .child(
                             svg()
                                 .path("calendar-days.svg")
-                                .size(px(14.0))
+                                .size(px(15.0))
                                 .text_color(theme.accent()),
                         )
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .text_size(px(11.5))
+                                .text_size(px(12.5))
                                 .text_color(theme.foreground())
                                 .child(format!("{month_name} {view_year}")),
                         ),
@@ -270,16 +276,17 @@ pub fn render_calendar_mini_panel(
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap_1()
+                        .gap_1p5()
                         .children(if !is_current_month {
                             Some(
                                 div()
                                     .id("cal-today-btn")
-                                    .px_1p5()
+                                    .px_2p5()
                                     .py_0p5()
-                                    .rounded_sm()
-                                    .bg(theme.surface().opacity(0.5))
-                                    .hover(|s| s.bg(theme.surface()))
+                                    .rounded_full()
+                                    .bg(theme.surface().opacity(0.6))
+                                    .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                                    .active(|s| s.bg(theme.surface()))
                                     .cursor_pointer()
                                     .on_click(cx.listener(|_this, _, _, cx| {
                                         if cx.has_global::<AppState>() {
@@ -290,8 +297,8 @@ pub fn render_calendar_mini_panel(
                                     }))
                                     .child(
                                         div()
-                                            .text_size(px(9.0))
-                                            .font_weight(FontWeight::BOLD)
+                                            .text_size(px(9.5))
+                                            .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(theme.accent())
                                             .child(lang.datetime.today.clone()),
                                     ),
@@ -305,11 +312,12 @@ pub fn render_calendar_mini_panel(
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .w(px(18.0))
-                                .h(px(18.0))
+                                .w(px(22.0))
+                                .h(px(22.0))
                                 .rounded_full()
-                                .bg(theme.surface().opacity(0.5))
-                                .hover(|s| s.bg(theme.surface()))
+                                .bg(theme.surface().opacity(0.6))
+                                .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                                .active(|s| s.bg(theme.surface()))
                                 .cursor_pointer()
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     if cx.has_global::<AppState>() {
@@ -331,11 +339,12 @@ pub fn render_calendar_mini_panel(
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .w(px(18.0))
-                                .h(px(18.0))
+                                .w(px(22.0))
+                                .h(px(22.0))
                                 .rounded_full()
-                                .bg(theme.surface().opacity(0.5))
-                                .hover(|s| s.bg(theme.surface()))
+                                .bg(theme.surface().opacity(0.6))
+                                .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                                .active(|s| s.bg(theme.surface()))
                                 .cursor_pointer()
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     if cx.has_global::<AppState>() {

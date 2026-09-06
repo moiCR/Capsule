@@ -1,4 +1,4 @@
-use gpui::{Div, IntoElement, ParentElement, Styled, canvas, div};
+use gpui::{Bounds, Div, IntoElement, ParentElement, Pixels, Styled, canvas, div};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -18,6 +18,25 @@ impl DimensionTracker {
             left: Rc::new(Cell::new(0.0)),
             right: Rc::new(Cell::new(0.0)),
         }
+    }
+
+    pub fn left(&self) -> f32 {
+        self.left.get()
+    }
+
+    pub fn track_bounds(&self, bounds: Bounds<Pixels>) {
+        self.left.set(bounds.origin.x.into());
+        self.right.set((bounds.origin.x + bounds.size.width).into());
+        self.top.set(bounds.origin.y.into());
+        self.bottom
+            .set((bounds.origin.y + bounds.size.height).into());
+    }
+
+    pub fn reset(&self) {
+        self.top.set(0.0);
+        self.bottom.set(0.0);
+        self.left.set(0.0);
+        self.right.set(0.0);
     }
 
     pub fn width(&self, horizontal_padding: f32) -> f32 {
@@ -88,5 +107,40 @@ impl DimensionTracker {
                 )
                 .h_full(),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dimension_tracker_reset() {
+        let tracker = DimensionTracker::new();
+        tracker.top.set(10.0);
+        tracker.bottom.set(50.0);
+        tracker.left.set(5.0);
+        tracker.right.set(105.0);
+        assert_eq!(tracker.dimensions(0.0, 0.0), (100.0, 40.0));
+        tracker.reset();
+        assert_eq!(tracker.dimensions(0.0, 0.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn test_dimension_tracker_track_bounds() {
+        let tracker = DimensionTracker::new();
+        tracker.track_bounds(Bounds {
+            origin: gpui::Point {
+                x: gpui::px(15.0),
+                y: gpui::px(25.0),
+            },
+            size: gpui::Size {
+                width: gpui::px(350.0),
+                height: gpui::px(45.0),
+            },
+        });
+        assert_eq!(tracker.left(), 15.0);
+        assert_eq!(tracker.width(0.0), 350.0);
+        assert_eq!(tracker.height(0.0), 45.0);
     }
 }

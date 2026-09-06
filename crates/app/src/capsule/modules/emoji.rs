@@ -336,23 +336,17 @@ impl Render for EmojiModule {
                     .items_center()
                     .justify_center()
                     .flex_1()
-                    .py(px(6.0))
-                    .rounded(px(12.0))
+                    .py(px(5.0))
+                    .rounded(px(10.0))
                     .cursor_pointer()
                     .bg(if is_active {
-                        theme.accent().opacity(0.15)
-                    } else {
-                        gpui::hsla(0.0, 0.0, 0.0, 0.0)
-                    })
-                    .border_1()
-                    .border_color(if is_active {
-                        theme.accent().opacity(0.4)
+                        theme.surface().opacity(0.55)
                     } else {
                         gpui::hsla(0.0, 0.0, 0.0, 0.0)
                     })
                     .hover(|s| {
                         if !is_active {
-                            s.bg(theme.surface().opacity(0.4))
+                            s.bg(theme.surface().opacity(0.35))
                         } else {
                             s
                         }
@@ -371,7 +365,7 @@ impl Render for EmojiModule {
                             .path(icon_path)
                             .size(px(14.0))
                             .text_color(if is_active {
-                                theme.accent()
+                                theme.foreground()
                             } else {
                                 theme.foreground_muted()
                             })
@@ -414,7 +408,7 @@ impl Render for EmojiModule {
 
             if chunk.len() < COLS {
                 for _ in 0..(COLS - chunk.len()) {
-                    row = row.child(div().w(px(56.0)).h(px(56.0)));
+                    row = row.child(div().w(px(54.0)).h(px(48.0)));
                 }
             }
 
@@ -434,7 +428,7 @@ impl Render for EmojiModule {
             .items_center()
             .justify_between()
             .w_full()
-            .h(px(36.0))
+            .h(px(32.0))
             .px_1()
             .child(if let Some((emoji, name, category)) = selected_preview {
                 div()
@@ -480,9 +474,9 @@ impl Render for EmojiModule {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .w(px(24.0))
-                            .h(px(24.0))
-                            .rounded(px(8.0))
+                            .w(px(22.0))
+                            .h(px(22.0))
+                            .rounded(px(6.0))
                             .cursor_pointer()
                             .hover(|s| s.bg(theme.surface().opacity(0.6)))
                             .active(|s| s.opacity(0.6))
@@ -509,9 +503,9 @@ impl Render for EmojiModule {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .w(px(24.0))
-                            .h(px(24.0))
-                            .rounded(px(8.0))
+                            .w(px(22.0))
+                            .h(px(22.0))
+                            .rounded(px(6.0))
                             .cursor_pointer()
                             .hover(|s| s.bg(theme.surface().opacity(0.6)))
                             .active(|s| s.opacity(0.6))
@@ -539,12 +533,11 @@ impl Render for EmojiModule {
             .flex()
             .flex_col()
             .w(px(430.0))
-            .max_h(px(480.0))
-            .p_3p5()
-            .gap_2p5()
-            .child(render_emoji_search(&query, total_items, &theme, cx))
+            .max_h(px(390.0))
+            .p_3()
+            .gap_2()
+            .child(render_emoji_search(&query, &theme, cx))
             .child(cat_strip)
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
             .child(if is_empty {
                 div()
                     .id("emoji-empty-state")
@@ -564,7 +557,6 @@ impl Render for EmojiModule {
             } else {
                 grid_rows
             })
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
             .child(footer)
     }
 }

@@ -5,7 +5,6 @@ use crate::capsule::modules::launcher::LauncherModule;
 
 pub fn render_search_input(
     query: &str,
-    apps_count: usize,
     theme: &Theme,
     cx: &mut Context<LauncherModule>,
 ) -> impl IntoElement {
@@ -20,66 +19,52 @@ pub fn render_search_input(
     div()
         .flex()
         .items_center()
-        .gap_2p5()
+        .gap_3()
         .w_full()
-        .px_3p5()
-        .py_2p5()
-        .bg(theme.surface())
-        .rounded(px(42.0))
+        .px_3()
+        .py_2()
         .child(
             svg()
                 .path("search.svg")
                 .w_4()
                 .h_4()
-                .text_color(if has_query {
-                    theme.accent()
-                } else {
-                    theme.foreground_muted()
-                }),
+                .text_color(theme.foreground_muted().opacity(0.8)),
         )
         .child(div().flex_1().text_sm().child(if has_query {
             div()
-                .font_weight(FontWeight::SEMIBOLD)
+                .font_weight(FontWeight::MEDIUM)
                 .text_color(theme.foreground())
                 .child(query.to_string())
         } else {
             div()
-                .text_color(theme.foreground_muted())
+                .text_color(theme.foreground_muted().opacity(0.7))
                 .child(lang.launcher.search_placeholder)
         }))
-        .child(if has_query {
-            div()
-                .id("clear-search-btn")
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(20.0))
-                .h(px(20.0))
-                .rounded_full()
-                .cursor_pointer()
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.opacity(0.6))
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    this.reset_search(cx);
-                }))
-                .child(
-                    svg()
-                        .path("close.svg")
-                        .w_3()
-                        .h_3()
-                        .text_color(theme.foreground_muted()),
-                )
-                .into_any_element()
+        .children(if has_query {
+            Some(
+                div()
+                    .id("clear-search-btn")
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .w(px(20.0))
+                    .h(px(20.0))
+                    .rounded_full()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                    .active(|s| s.opacity(0.6))
+                    .on_click(cx.listener(|this, _, _window, cx| {
+                        this.reset_search(cx);
+                    }))
+                    .child(
+                        svg()
+                            .path("close.svg")
+                            .w_3()
+                            .h_3()
+                            .text_color(theme.foreground_muted()),
+                    ),
+            )
         } else {
-            div()
-                .px_2()
-                .py_0p5()
-                .rounded(px(10.0))
-                .bg(theme.accent().opacity(0.1))
-                .text_size(px(10.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme.accent())
-                .child(format!("{apps_count}"))
-                .into_any_element()
+            None
         })
 }

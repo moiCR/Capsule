@@ -1,4 +1,4 @@
-## What's New in v0.3.1
+## What's New in v0.4.0
 
 ### Features & UI Improvements
 - **Capsule Style Customization (Normal & Concave)**: Added the `capsule_style` option (`Normal` and `Concave`), allowing users to choose between the classic floating rounded pill and a concave notch attached flush to the screen bezel.
@@ -8,10 +8,30 @@
 - **Dynamic Exclusive Zone**: Compositor reserved space (`exclusive_zone`) now syncs live when changing capsule styles or dimensions.
 - **UI Settings Selector**: Added an interactive style selector (`Normal` / `Cóncava`) in the Settings UI tab.
 
+- **Dynamic Island Spring Physics**: Replaced polynomial cubic transitions with an authentic mass-spring-damper physical simulation (`zeta = 0.75`) providing organic bounce and liquid squash-and-stretch geometry morphing.
+- **SelectTheme Carousel Redesign**: Redesigned theme selection into a horizontal capsule card (680x180) featuring a 5-slot looping carousel, 6-color palette preview dots per theme, real-time search filtering, position counter, and arrow key navigation.
+- **Launcher Minimalist Redesign**: Refined the application launcher to 380x360 with a borderless search input, left selection accent bar indicators, and cleaner visual presentation without dividers or keyboard shortcut footers.
+- **Clipboard Minimalist Redesign**: Aligned the clipboard manager to 380x360 matching Launcher, featuring a unified borderless search input with trash/clear history action, vertical left accent selection indicator bars, and elevated item surfaces without borders.
+- **Emoji Minimalist Redesign**: Modernized the emoji picker to 430x390 with a borderless search header, borderless pill category tabs, SelectTheme-style cell selection with 2px accent outlines, cleaner footer preview, and elimination of all 1px horizontal divider lines.
+- **Satellites Minimalist Redesign, Wider Geometry & Liquid Droplet Detach Animation**: Redesigned all satellite panels (Wi-Fi, Bluetooth, Volume, Calendar, Tray) with the unified minimalist style featuring vertical left accent indicator bars (`3x14px`, `rounded_full`), elevated item surfaces, soft container borders, 20x20 circular action buttons, and removal of divider lines. Expanded minimum satellite width to 280px with dynamic automatic content expansion (preventing text truncation in calendar months and controls) and resized calendar day cells to 30x30px. Implemented a "Liquid Droplet Detach" animation where satellites are rendered **behind** the capsule body (`z-index` lower than the capsule) and physically emerge from behind the capsule flanks. Removed fade-out/fade-in opacity transitions for solid physical occlusion, enhanced lateral mass-spring physics ($\zeta = 0.68$), added a dynamic surface tension droop arc ($y_{\text{droop}} \le 16\text{px}$) as panels pull away before settling into orbit, and integrated a continuous compositor-synced frame loop.
+- **Settings Module Minimalist Redesign**: Overhauled the Settings modal dialog with a modern borderless title, 24x24 circular close button, vertical left accent indicator bars (`3x16px`, `rounded_full`) on active tabs with elevated surface backgrounds, elevated card rows with subtle borders, 24x24 circular steppers, refined segmented pill controls, and sleek switches.
+- **Dashboard Quick Settings & Material You Redesign**: Redesigned the Dashboard module with a modern 2-column quick settings layout:
+  - **Horizontal Pill Tiles**: Wi-Fi, Bluetooth, and No molestar (Do-Not-Disturb) pill buttons (`rounded_full()`) with prominent circular icon indicators (accent background when active), real-time status/device labels ("Activado" / "Desactivado"), and direct satellite launcher chevrons.
+  - **Do Not Disturb (DND) Mode**: Integrated functional DND mode in `NotificationStore` that suppresses intrusive notification popups across the capsule when active, while keeping notifications recorded in the Dashboard history.
+  - **Compact Vertical Media Player**: Placed alongside the Wi-Fi and Bluetooth pills, featuring an elegant "Sin reproducción" empty state with centered music icon, and a rich active state with album art thumbnail, title/artist info, player switcher dots, and playback controls (previous, accent play/pause, next).
+  - **Quick Action Circles**: A dedicated row of 36x36 circular action buttons next to No molestar for Theme switcher (`palette_2.svg`), Wallpaper selector (`wallpaper.svg`), Settings modal (`settings.svg`), and Lock screen (`lock.svg`).
+  - **Sound Card with Fat Pill Slider & Dynamic Tracking**: Full-width card with header and `→` chevron to open the audio output satellite, featuring an interactive fat horizontal pill slider (`h(42px)`, `rounded_full()`) with integrated speaker mute icon and exact sub-pixel dragging dynamically measured via `DimensionTracker::track_bounds`.
+  - **Clean Notifications Section**: Streamlined notifications list with "Sin notificaciones" empty state, "Limpiar todo" action, and individual card dismissal.
+  - **Unified Header with Dynamic Auto-Expansion**: Top bar combining Calendar button (date & time), active System Tray icons (SNI), and Battery indicator chip with `min_w(490.0)` container layout, allowing the dashboard and tray to dynamically expand without truncating or compressing elements. Removed power and close buttons.
+  - **Tray Hover State Fix**: Differentiated open active tray states (`accent().opacity(0.22)` with accent border and hover) from closed states (`transparent` with subtle surface hover), preventing visual confusion on double-click.
+  - **100% Spanish Localization**: Standardized all Dashboard strings to Spanish ("No molestar", "Activado" / "Desactivado", "Sin reproducción", "Sonido", "Notificaciones", "Sin notificaciones", "Limpiar todo").
+- **Removed CreateTheme Module**: Removed interactive in-app theme creator in favor of managing custom themes directly via configuration files.
+
 ### Fixes and Minor Changes
+- **Settings Modal Dynamic Centering**: Fixed an issue where transitioning from other modules (such as Dashboard or Wallpaper) into Settings resulted in off-center vertical positioning due to residual dimension tracker state.
 - **Concave Seam Lines Fix**: Eliminated unwanted internal vertical border lines between the concave wings and the central pill body.
 - **Settings Modal Isolation**: Ensured the Settings window always renders using `NormalContainer` as a centered rounded modal dialog without wings.
-- **Top Bezel Alignment**: LayerShell surface is now permanently anchored to $y = 0.0$, eliminating the gap between the concave notch and the screen bezel.
+- **Top Bezel Alignment**: LayerShell surface is now permanently anchored to y = 0.0, eliminating the gap between the concave notch and the screen bezel.
 - **Capsule Modules Consolidation**: Unified 12 separate capsule view fields into a centralized `CapsuleModules` struct (`crates/app/src/capsule/modules/mod.rs`).
 - Fixed Ghostty reload app (the config was deleted on theme change).
 - The refresh time for the launcher service has been reduced.

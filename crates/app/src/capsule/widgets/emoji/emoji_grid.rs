@@ -1,4 +1,4 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px};
+use gpui::{Context, IntoElement, div, prelude::*, px};
 use services::EmojiItem;
 use ui::theme::Theme;
 
@@ -12,34 +12,25 @@ pub fn render_emoji_cell(
     cx: &mut Context<EmojiModule>,
 ) -> impl IntoElement {
     let item_emoji = item.emoji.clone();
-    let item_name = item.name.clone();
 
     div()
         .id(format!("emoji-{global_idx}"))
         .flex()
-        .flex_col()
         .items_center()
         .justify_center()
-        .w(px(56.0))
-        .h(px(56.0))
-        .rounded(px(16.0))
+        .w(px(54.0))
+        .h(px(48.0))
+        .rounded(px(12.0))
         .cursor_pointer()
         .bg(if is_selected {
-            theme.accent().opacity(0.15)
+            theme.surface().opacity(0.55)
         } else {
             gpui::hsla(0.0, 0.0, 0.0, 0.0)
         })
-        .border_1()
-        .border_color(if is_selected {
-            theme.accent().opacity(0.5)
-        } else {
-            gpui::hsla(0.0, 0.0, 0.0, 0.0)
-        })
-        .hover(|s| {
-            s.bg(theme.surface().opacity(0.4))
-                .border_color(theme.surface().opacity(0.3))
-        })
-        .active(|s| s.bg(theme.surface().opacity(0.5)))
+        .border(if is_selected { px(2.0) } else { px(0.0) })
+        .border_color(theme.accent())
+        .hover(|s| s.bg(theme.surface().opacity(0.4)))
+        .active(|s| s.bg(theme.surface().opacity(0.6)))
         .on_mouse_move(cx.listener(move |this, _, _, cx| {
             if !this.mouse_moved {
                 this.mouse_moved = true;
@@ -54,30 +45,5 @@ pub fn render_emoji_cell(
             this.clear_cache();
             cx.emit(EmojiEvent::Close);
         }))
-        .child(
-            div()
-                .text_size(if is_selected { px(26.0) } else { px(22.0) })
-                .child(item.emoji.clone()),
-        )
-        .child(if is_selected {
-            div()
-                .text_size(px(7.0))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(theme.accent())
-                .max_w(px(52.0))
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(truncate_name(&item_name, 10))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        })
-}
-
-fn truncate_name(name: &str, max: usize) -> String {
-    if name.len() <= max {
-        name.to_string()
-    } else {
-        format!("{}…", &name[..max.saturating_sub(1)])
-    }
+        .child(div().text_size(px(24.0)).child(item.emoji.clone()))
 }

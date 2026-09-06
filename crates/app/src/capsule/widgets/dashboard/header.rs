@@ -1,12 +1,14 @@
 use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
+use super::tray::render_tray_widget;
 use crate::capsule::modules::dashboard::{DashboardEvent, DashboardModule};
 
 #[allow(clippy::too_many_arguments)]
 pub fn render_header(
     battery_percentage: Option<i32>,
     battery_charging: bool,
+    open_panel_indices: &[usize],
     _greeting_str: &str,
     _greeting_icon: &str,
     date_str: &str,
@@ -31,11 +33,12 @@ pub fn render_header(
                 .flex()
                 .flex_row()
                 .items_center()
+                .flex_shrink_0()
                 .gap(px(3.0))
-                .px_1p5()
+                .px_2()
                 .py_1()
                 .rounded_full()
-                .bg(theme.surface())
+                .bg(theme.surface().opacity(0.45))
                 .text_color(theme.foreground())
                 .text_size(px(11.0))
                 .font_weight(FontWeight::MEDIUM)
@@ -57,6 +60,7 @@ pub fn render_header(
     };
 
     div()
+        .id("dashboard-header")
         .flex()
         .flex_row()
         .items_center()
@@ -68,13 +72,14 @@ pub fn render_header(
                 .flex()
                 .flex_row()
                 .items_center()
+                .flex_shrink_0()
                 .gap_2()
-                .overflow_hidden()
                 .cursor_pointer()
-                .px_1p5()
+                .px_2p5()
                 .py_1()
-                .rounded_md()
-                .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                .rounded_full()
+                .hover(|s| s.bg(theme.surface().opacity(0.45)))
+                .active(|s| s.bg(theme.surface().opacity(0.7)))
                 .on_click(cx.listener(|_this, _, _, cx| {
                     cx.emit(DashboardEvent::CalendarClicked);
                 }))
@@ -86,10 +91,9 @@ pub fn render_header(
                 )
                 .child(
                     div()
-                        .font_weight(FontWeight::BOLD)
-                        .text_size(px(12.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(12.5))
                         .text_color(theme.foreground())
-                        .truncate()
                         .child(date_time_text),
                 ),
         )
@@ -98,123 +102,9 @@ pub fn render_header(
                 .flex()
                 .flex_row()
                 .items_center()
-                .gap_2()
-                .children(battery_chip)
-                .child(
-                    div()
-                        .id("header-theme-btn")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(24.0))
-                        .h(px(24.0))
-                        .rounded_full()
-                        .bg(theme.surface())
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::SelectThemeRequested);
-                        }))
-                        .child(
-                            svg()
-                                .path("palette_2.svg")
-                                .size(px(13.0))
-                                .text_color(theme.accent()),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("header-wallpaper-btn")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(24.0))
-                        .h(px(24.0))
-                        .rounded_full()
-                        .bg(theme.surface())
-                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::WallpaperRequested);
-                        }))
-                        .child(
-                            svg()
-                                .path("wallpaper.svg")
-                                .size(px(13.0))
-                                .text_color(theme.accent()),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("header-settings-btn")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(24.0))
-                        .h(px(24.0))
-                        .rounded_full()
-                        .bg(theme.surface())
-                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::SettingsRequested);
-                        }))
-                        .child(
-                            svg()
-                                .path("settings.svg")
-                                .size(px(13.0))
-                                .text_color(theme.accent()),
-                        ),
-                )
-                .children(
-                    if std::env::var("CAPSULE_TEST").is_ok() || std::env::var("CAPSULE_DEV").is_ok()
-                    {
-                        Some(
-                            div()
-                                .id("header-test-any-btn")
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .px_2()
-                                .py_1()
-                                .rounded_full()
-                                .bg(theme.accent())
-                                .hover(|s| s.opacity(0.85))
-                                .cursor_pointer()
-                                .on_click(cx.listener(|_this, _, _, cx| {
-                                    crate::panel::LockScreenPanel::open_all(cx);
-                                }))
-                                .child(
-                                    div()
-                                        .font_weight(FontWeight::BOLD)
-                                        .text_size(px(11.0))
-                                        .text_color(theme.foreground())
-                                        .child("Test Any"),
-                                ),
-                        )
-                    } else {
-                        None
-                    },
-                )
-                .child(
-                    div()
-                        .id("header-close-btn")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(24.0))
-                        .h(px(24.0))
-                        .rounded_full()
-                        .bg(theme.surface())
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::CloseRequested);
-                        }))
-                        .child(
-                            svg()
-                                .path("close.svg")
-                                .size(px(12.0))
-                                .text_color(theme.foreground_muted()),
-                        ),
-                ),
+                .flex_shrink_0()
+                .gap_1p5()
+                .child(render_tray_widget(open_panel_indices, theme, cx))
+                .children(battery_chip),
         )
 }

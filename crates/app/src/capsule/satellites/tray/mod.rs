@@ -4,12 +4,12 @@ use std::path::PathBuf;
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::{DashboardEvent, DashboardModule};
-use crate::capsule::satellites::PANEL_W;
+use crate::capsule::satellites::PANEL_MIN_W;
 
 pub fn render_mini_panel(
     item: &SniItem,
     sni_idx: usize,
-    anim_t: f32,
+    _anim_t: f32,
     panel_h: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -55,8 +55,8 @@ pub fn render_mini_panel(
                     div()
                         .w_full()
                         .h(px(1.0))
-                        .my_0p5()
-                        .bg(theme.surface().opacity(0.5)),
+                        .my_1()
+                        .bg(theme.surface().opacity(0.35)),
                 );
                 continue;
             }
@@ -76,31 +76,38 @@ pub fn render_mini_panel(
                     .justify_between()
                     .w_full()
                     .px_2()
-                    .py_1()
+                    .py_1p5()
                     .rounded(px(8.0))
-                    .bg(theme.surface().opacity(0.3))
+                    .bg(gpui::hsla(0.0, 0.0, 0.0, 0.0))
                     .hover(|style| {
                         if enabled {
-                            style.bg(theme.surface())
+                            style.bg(theme.surface().opacity(0.4))
+                        } else {
+                            style
+                        }
+                    })
+                    .active(|style| {
+                        if enabled {
+                            style.bg(theme.surface().opacity(0.6))
                         } else {
                             style
                         }
                     })
                     .cursor_pointer()
                     .on_click(cx.listener(move |_, _, _, cx| {
-                        if enabled {
-                            if let Some(ref mp) = path_c {
-                                if cx.has_global::<AppState>() {
-                                    let sni = cx.global::<AppState>().sni_host.clone();
-                                    sni.trigger_menu(bus_c.clone(), mp.clone(), item_id);
-                                }
-                            }
+                        if !enabled {
+                            return;
+                        }
+                        let Some(ref mp) = path_c else { return };
+                        if cx.has_global::<AppState>() {
+                            let sni = cx.global::<AppState>().sni_host.clone();
+                            sni.trigger_menu(bus_c.clone(), mp.clone(), item_id);
                         }
                     }))
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .font_weight(FontWeight::MEDIUM)
+                            .font_weight(FontWeight::NORMAL)
                             .text_color(if enabled {
                                 theme.foreground()
                             } else {
@@ -111,8 +118,6 @@ pub fn render_mini_panel(
             );
         }
     }
-
-    let opacity = anim_t.clamp(0.0, 1.0);
 
     let title_label = if item.title.is_empty() {
         item.id.clone()
@@ -127,17 +132,16 @@ pub fn render_mini_panel(
     };
 
     div()
-        .w(px(PANEL_W))
+        .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
-        .p_2p5()
-        .gap_1p5()
+        .p_3()
+        .gap_2()
         .rounded(px(radius))
-        .bg(theme.background())
+        .bg(theme.background().opacity(0.95))
         .border_1()
-        .border_color(theme.surface().opacity(0.6))
+        .border_color(theme.surface().opacity(0.35))
         .shadow_lg()
         .overflow_hidden()
-        .opacity(opacity)
         .flex()
         .flex_col()
         .child(
@@ -157,7 +161,7 @@ pub fn render_mini_panel(
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .text_size(px(11.0))
+                                .text_size(px(11.5))
                                 .text_color(theme.foreground())
                                 .child(title_label),
                         ),
@@ -168,12 +172,13 @@ pub fn render_mini_panel(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(18.0))
-                        .h(px(18.0))
+                        .w(px(20.0))
+                        .h(px(20.0))
                         .rounded_full()
-                        .bg(theme.surface())
+                        .bg(theme.surface().opacity(0.6))
+                        .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                        .active(|s| s.bg(theme.surface()))
                         .cursor_pointer()
-                        .hover(|s| s.bg(theme.surface()))
                         .on_click(cx.listener(move |_, _, _, cx| {
                             cx.emit(DashboardEvent::TrayIconClicked(sni_idx));
                         }))
@@ -185,7 +190,6 @@ pub fn render_mini_panel(
                         ),
                 ),
         )
-        .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
         .child(menu_list)
         .into_any_element()
 }

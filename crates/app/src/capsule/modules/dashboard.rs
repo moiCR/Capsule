@@ -6,11 +6,11 @@ use gpui::{
 use services::{AppState, MediaTrack};
 use std::time::Instant;
 use ui::theme::Theme;
+use ui::tracker::DimensionTracker;
 
 use crate::capsule::widgets::dashboard::{
-    header::render_header, media_player::render_media_player_widget,
-    notifications::render_notifications_widget, quick_settings::render_quick_settings_widget,
-    tray::render_tray_widget, volume::render_volume_widget,
+    header::render_header, notifications::render_notifications_widget,
+    quick_settings::render_quick_settings_section, volume::render_volume_widget,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +39,7 @@ pub struct DashboardModule {
     pub last_user_action: Option<Instant>,
     pub open_panel_indices: Vec<usize>,
     pub is_dragging_volume: bool,
+    pub slider_tracker: DimensionTracker,
 }
 
 fn weekday_es(weekday: Weekday) -> &'static str {
@@ -138,6 +139,7 @@ impl DashboardModule {
             last_user_action: None,
             open_panel_indices: Vec::new(),
             is_dragging_volume: false,
+            slider_tracker: DimensionTracker::new(),
         }
     }
 
@@ -225,14 +227,19 @@ impl Render for DashboardModule {
             .on_mouse_move(
                 cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_dragging_volume {
-                        let win_w: f32 = window.bounds().size.width.into();
-                        let pill_x = (win_w - 440.0) / 2.0;
-                        let slider_start_x = pill_x + 92.0;
-                        let slider_width = 288.0;
+                        let slider_x = this.slider_tracker.left();
+                        let slider_w = this.slider_tracker.width(0.0);
+                        let (start_x, width) = if slider_w > 0.0 {
+                            (slider_x, slider_w)
+                        } else {
+                            let win_w: f32 = window.bounds().size.width.into();
+                            let pill_x = (win_w - 490.0) / 2.0;
+                            (pill_x + 28.0, 434.0)
+                        };
 
                         let x_val = f32::from(event.position.x);
-                        let rel_x = x_val - slider_start_x;
-                        let pct = ((rel_x / slider_width) * 100.0).clamp(0.0, 100.0) as u32;
+                        let rel_x = x_val - start_x;
+                        let pct = ((rel_x / width) * 100.0).clamp(0.0, 100.0) as u32;
 
                         if cx.has_global::<AppState>() {
                             cx.global::<AppState>().system.set_volume_fast(pct);
@@ -252,13 +259,14 @@ impl Render for DashboardModule {
             )
             .flex()
             .flex_col()
-            .w(px(490.0))
+            .min_w(px(490.0))
             .p_4()
-            .gap_3p5()
+            .gap_2p5()
             .overflow_hidden()
             .child(render_header(
                 self.battery_percentage,
                 self.battery_charging,
+                &self.open_panel_indices,
                 &self.greeting_str,
                 self.greeting_icon,
                 &self.date_str,
@@ -266,17 +274,14 @@ impl Render for DashboardModule {
                 &theme,
                 cx,
             ))
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            .child(render_quick_settings_widget(&theme, cx))
-            .child(render_volume_widget(&theme, cx))
-            .child(render_media_player_widget(
+            .child(render_quick_settings_section(
                 &active_track,
                 total_players,
                 self.selected_player_idx,
                 &theme,
                 cx,
             ))
+            .child(render_volume_widget(&self.slider_tracker, &theme, cx))
             .child(render_notifications_widget(&theme, cx))
-            .child(render_tray_widget(&self.open_panel_indices, &theme, cx))
     }
 }
