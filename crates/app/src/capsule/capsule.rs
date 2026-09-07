@@ -1,4 +1,4 @@
-use gpui::{Bounds, Context, Render, Size, Task, Window, div, point, prelude::*, px};
+guse gpui::{Bounds, Context, Render, Size, Task, Window, div, point, prelude::*, px};
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;

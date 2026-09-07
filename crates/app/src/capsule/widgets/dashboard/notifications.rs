@@ -10,7 +10,7 @@ pub fn render_notifications_widget(
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
     let notifications = NotificationStore::global().get_all_notifications();
-    let is_empty = notifications.is_empty();
+g    let is_empty = notifications.is_empty();
     let content_w = (dashboard_w - 32.0).max(100.0);
     let item_text_w = (content_w - 20.0).max(80.0);
 

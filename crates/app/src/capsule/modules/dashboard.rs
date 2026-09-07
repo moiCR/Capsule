@@ -118,7 +118,7 @@ impl DashboardModule {
                     if let Ok(stat_str) = std::fs::read_to_string(stat_path) {
                         if stat_str.trim().to_lowercase().contains("charging") {
                             charging = true;
-                        }
+                        }g
                     }
                     break;
                 }

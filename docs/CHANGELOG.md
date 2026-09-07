@@ -28,10 +28,18 @@
 - **Removed CreateTheme Module**: Removed interactive in-app theme creator in favor of managing custom themes directly via configuration files.
 
 ### Fixes and Minor Changes
+- **Dashboard Notification Items Auto-Sizing & Layout Stabilization**: Fixed an issue where long notification text caused the dashboard to open excessively stretched horizontally and jitter/shrink frame-by-frame while wrapping into multiple lines. Enforced exact width constraints (`max_w`, `min_w_0`, `overflow_hidden`) on notification cards and list items, and stabilized Dashboard module sizing with `desired_width` dynamically computed for tray icons so it opens immediately fully accommodated.
 - **Settings Modal Dynamic Centering**: Fixed an issue where transitioning from other modules (such as Dashboard or Wallpaper) into Settings resulted in off-center vertical positioning due to residual dimension tracker state.
 - **Concave Seam Lines Fix**: Eliminated unwanted internal vertical border lines between the concave wings and the central pill body.
 - **Settings Modal Isolation**: Ensured the Settings window always renders using `NormalContainer` as a centered rounded modal dialog without wings.
 - **Top Bezel Alignment**: LayerShell surface is now permanently anchored to y = 0.0, eliminating the gap between the concave notch and the screen bezel.
 - **Capsule Modules Consolidation**: Unified 12 separate capsule view fields into a centralized `CapsuleModules` struct (`crates/app/src/capsule/modules/mod.rs`).
+- **Polkit Authentication Service Overhaul & Session Fix**: Resolved the `"No session for cookie"` authentication failure on modern Linux distributions (Polkit v126+, CachyOS, Arch Linux):
+  - Replaced legacy binary execution and `sudo` fallbacks with direct asynchronous Unix socket communication via systemd's `/run/polkit/agent-helper.socket`, preserving peer credentials (`SO_PEERCRED`) with the user's session UID.
+  - Implemented line-by-line PAM conversation handling for password prompts, error feedback, and success/failure responses with seamless password retry support.
+  - Dynamically extracts the target authenticating user from Polkit's `identities` parameter (resolving target UIDs via `libc::getpwuid`).
+  - Replaced hardcoded session IDs with automatic detection via `$XDG_SESSION_ID` and `/proc/self/sessionid`.
+  - Added active cancellation propagation to automatically dismiss open authentication dialogs when Polkit Authority cancels a request or the invoking process terminates.
 - Fixed Ghostty reload app (the config was deleted on theme change).
 - The refresh time for the launcher service has been reduced.
+
