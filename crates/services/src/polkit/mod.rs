@@ -374,7 +374,7 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         interval.tick().await;
         if system_conn.is_closed() {
             break;
-g        }
+       }
     }
 
     Err(anyhow::anyhow!("System D-Bus connection closed"))

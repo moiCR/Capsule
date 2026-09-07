@@ -28,7 +28,7 @@
 - **Removed CreateTheme Module**: Removed interactive in-app theme creator in favor of managing custom themes directly via configuration files.
 
 ### Fixes and Minor Changes
-- **Dashboard Notification Items Auto-Sizing & Layout Stabilization**: Fixed an issue where long notification text caused the dashboard to open excessively stretched horizontally and jitter/shrink frame-by-frame while wrapping into multiple lines. Enforced exact width constraints (`max_w`, `min_w_0`, `overflow_hidden`) on notification cards and list items, and stabilized Dashboard module sizing with `desired_width` dynamically computed for tray icons so it opens immediately fully accommodated.
+- **Dashboard Notification Items Auto-Sizing & Scroll Stabilization**: Fixed an issue where long notification text caused the dashboard to open excessively stretched horizontally and jitter/shrink frame-by-frame while wrapping. Also resolved vertical item squishing/compression when displaying multiple notifications by enforcing `flex_shrink_0()` on each card and restoring vertical scrolling (`overflow_y_scroll()`), allowing 2 full cards to be displayed concurrently with smooth scrolling for the rest.
 - **Settings Modal Dynamic Centering**: Fixed an issue where transitioning from other modules (such as Dashboard or Wallpaper) into Settings resulted in off-center vertical positioning due to residual dimension tracker state.
 - **Concave Seam Lines Fix**: Eliminated unwanted internal vertical border lines between the concave wings and the central pill body.
 - **Settings Modal Isolation**: Ensured the Settings window always renders using `NormalContainer` as a centered rounded modal dialog without wings.
