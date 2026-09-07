@@ -5,11 +5,14 @@ use ui::theme::Theme;
 use crate::capsule::modules::dashboard::DashboardModule;
 
 pub fn render_notifications_widget(
+    dashboard_w: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
     let notifications = NotificationStore::global().get_all_notifications();
     let is_empty = notifications.is_empty();
+    let content_w = (dashboard_w - 32.0).max(100.0);
+    let item_text_w = (content_w - 20.0).max(80.0);
 
     let (notifs_title, clear_all_text, no_notifs_text) = if cx.has_global::<services::AppState>() {
         let lang = &cx.global::<services::AppState>().language;
@@ -64,6 +67,8 @@ pub fn render_notifications_widget(
             .flex()
             .items_center()
             .w_full()
+            .max_w(px(content_w))
+            .min_w_0()
             .py_2()
             .child(
                 div()
@@ -78,8 +83,11 @@ pub fn render_notifications_widget(
             .flex()
             .flex_col()
             .w_full()
+            .max_w(px(content_w))
+            .min_w_0()
             .max_h(px(130.0))
             .gap_1p5()
+            .overflow_x_hidden()
             .overflow_y_scroll();
 
         for item in notifications.iter().rev() {
@@ -94,6 +102,9 @@ pub fn render_notifications_widget(
                 .flex()
                 .flex_col()
                 .w_full()
+                .max_w(px(content_w))
+                .min_w_0()
+                .overflow_hidden()
                 .px_2p5()
                 .py_2()
                 .rounded(px(10.0))
@@ -107,16 +118,21 @@ pub fn render_notifications_widget(
                         .items_center()
                         .justify_between()
                         .w_full()
+                        .gap_2()
                         .child(
                             div()
+                                .flex_1()
+                                .min_w_0()
                                 .text_size(px(11.0))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(theme.foreground())
+                                .truncate()
                                 .child(item.app_name.clone()),
                         )
                         .child(
                             div()
                                 .id(("dismiss-notif", notif_id as usize))
+                                .flex_shrink_0()
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -139,6 +155,9 @@ pub fn render_notifications_widget(
                 )
                 .child(
                     div()
+                        .w_full()
+                        .max_w(px(item_text_w))
+                        .min_w_0()
                         .text_size(px(11.0))
                         .text_color(theme.foreground_muted())
                         .line_height(gpui::relative(1.2))
@@ -156,6 +175,8 @@ pub fn render_notifications_widget(
         .flex()
         .flex_col()
         .w_full()
+        .max_w(px(content_w))
+        .min_w_0()
         .gap_1()
         .child(
             div()

@@ -152,6 +152,18 @@ impl DashboardModule {
         }
     }
 
+    pub fn desired_width(&self, cx: &gpui::App) -> f32 {
+        let sni_count = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().sni_host.get_items().len()
+        } else {
+            0
+        };
+        let tray_w = if sni_count > 0 { sni_count as f32 * 30.0 } else { 0.0 };
+        let battery_w = if self.battery_percentage.is_some() { 55.0 } else { 0.0 };
+        let header_needed_w = 220.0 + tray_w + battery_w + 16.0 + 32.0;
+        490.0_f32.max(header_needed_w)
+    }
+
     pub fn get_selected_player(&self) -> Option<&MediaTrack> {
         self.media_players.get(self.selected_player_idx)
     }
@@ -239,11 +251,13 @@ impl Render for DashboardModule {
         self.greeting_str = greeting_str;
         self.greeting_icon = greeting_icon;
 
+        let dashboard_w = self.desired_width(cx);
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .on_mouse_move(
-                cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                cx.listener(move |this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_dragging_volume {
                         let slider_x = this.slider_tracker.left();
                         let slider_w = this.slider_tracker.width(0.0);
@@ -251,8 +265,8 @@ impl Render for DashboardModule {
                             (slider_x, slider_w)
                         } else {
                             let win_w: f32 = window.bounds().size.width.into();
-                            let pill_x = (win_w - 490.0) / 2.0;
-                            (pill_x + 28.0, 434.0)
+                            let pill_x = (win_w - dashboard_w) / 2.0;
+                            (pill_x + 28.0, dashboard_w - 56.0)
                         };
 
                         let x_val = f32::from(event.position.x);
@@ -277,7 +291,7 @@ impl Render for DashboardModule {
             )
             .flex()
             .flex_col()
-            .min_w(px(490.0))
+            .w(px(dashboard_w))
             .p_4()
             .gap_2p5()
             .overflow_hidden()
@@ -300,6 +314,6 @@ impl Render for DashboardModule {
                 cx,
             ))
             .child(render_volume_widget(&self.slider_tracker, &theme, cx))
-            .child(render_notifications_widget(&theme, cx))
+            .child(render_notifications_widget(dashboard_w, &theme, cx))
     }
 }

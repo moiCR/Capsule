@@ -279,6 +279,21 @@ impl Capsule {
                                 });
                                 capsule.start_transition_internal(CapsuleMode::Polkit, None, cx);
                             }
+
+                            while let Some(cancelled_cookie) = polkit.pop_cancelled() {
+                                let _ = capsule.modules.polkit_view.update(cx, |p, cx| {
+                                    if let Some(ref req) = p.request {
+                                        if req.cookie == cancelled_cookie {
+                                            services::log_info!(
+                                                "POLKIT",
+                                                "Polkit authority cancelled active request for cookie='{}'",
+                                                cancelled_cookie
+                                            );
+                                            p.cancel(cx);
+                                        }
+                                    }
+                                });
+                            }
                         }
 
                         let _ = capsule.modules.polkit_view.update(cx, |p, cx| {
@@ -841,6 +856,11 @@ impl Capsule {
         let (target_w, target_h) = if mode == CapsuleMode::Default {
             let (w, _h) = self.modules.idle_view.read(cx).desired_dimensions();
             (w, mode.dimensions().1)
+        } else if mode == CapsuleMode::Dashboard {
+            (
+                self.modules.dashboard_view.read(cx).desired_width(cx),
+                mode.dimensions().1,
+            )
         } else {
             mode.dimensions()
         };
