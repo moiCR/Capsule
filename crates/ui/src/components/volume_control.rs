@@ -7,11 +7,21 @@ use gpui::{
 pub struct VolumeControlBar {
     volume: u32,
     is_muted: bool,
+    muted_label: Option<gpui::SharedString>,
 }
 
 impl VolumeControlBar {
     pub fn new(volume: u32, is_muted: bool) -> Self {
-        Self { volume, is_muted }
+        Self {
+            volume,
+            is_muted,
+            muted_label: None,
+        }
+    }
+
+    pub fn with_muted_label(mut self, label: impl Into<gpui::SharedString>) -> Self {
+        self.muted_label = Some(label.into());
+        self
     }
 }
 
@@ -83,9 +93,9 @@ impl RenderOnce for VolumeControlBar {
                         theme.foreground()
                     })
                     .child(if self.is_muted {
-                        "Mute".to_string()
+                        self.muted_label.unwrap_or_else(|| "Mute".into())
                     } else {
-                        format!("{current_vol}%")
+                        format!("{current_vol}%").into()
                     }),
             )
     }

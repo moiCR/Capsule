@@ -3,7 +3,7 @@ use services::{AppState, NetworkStatus};
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::DashboardModule;
-use crate::capsule::satellites::PANEL_W;
+use crate::capsule::satellites::PANEL_MIN_W;
 
 pub fn compute_bluetooth_panel_height(status: &NetworkStatus) -> f32 {
     let base_h = 75.0;
@@ -16,7 +16,7 @@ pub fn compute_bluetooth_panel_height(status: &NetworkStatus) -> f32 {
 }
 
 pub fn render_bluetooth_mini_panel(
-    anim_t: f32,
+    _anim_t: f32,
     panel_h: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -27,10 +27,17 @@ pub fn render_bluetooth_mini_panel(
         NetworkStatus::default()
     };
 
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
+    let (no_bt_found, bt_devices) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("quick_settings.no_bt_found"),
+            lang.get("quick_settings.bt_devices"),
+        )
     } else {
-        ui::language::Language::default()
+        (
+            "No hay dispositivos Bluetooth".to_string(),
+            "Dispositivos Bluetooth".to_string(),
+        )
     };
 
     let mut dev_list = div()
@@ -54,7 +61,7 @@ pub fn render_bluetooth_mini_panel(
                     div()
                         .text_size(px(10.0))
                         .text_color(theme.foreground_muted())
-                        .child(lang.quick_settings.no_bt_found),
+                        .child(no_bt_found),
                 ),
         );
     } else {
@@ -63,6 +70,12 @@ pub fn render_bluetooth_mini_panel(
             let name = dev.name.clone();
             let is_conn = dev.is_connected;
             let mac_click = mac.clone();
+
+            let indicator_color = if is_conn {
+                theme.accent()
+            } else {
+                gpui::hsla(0.0, 0.0, 0.0, 0.0)
+            };
 
             dev_list = dev_list.child(
                 div()
@@ -74,13 +87,14 @@ pub fn render_bluetooth_mini_panel(
                     .w_full()
                     .px_2()
                     .py_1p5()
-                    .rounded(px(8.0))
+                    .rounded(px(10.0))
                     .bg(if is_conn {
-                        theme.accent().opacity(0.15)
+                        theme.surface().opacity(0.55)
                     } else {
-                        theme.surface().opacity(0.3)
+                        gpui::hsla(0.0, 0.0, 0.0, 0.0)
                     })
-                    .hover(|s| s.bg(theme.surface()))
+                    .hover(|s| s.bg(theme.surface().opacity(0.4)))
+                    .active(|s| s.bg(theme.surface().opacity(0.6)))
                     .cursor_pointer()
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if cx.has_global::<AppState>() {
@@ -95,18 +109,25 @@ pub fn render_bluetooth_mini_panel(
                             .flex_row()
                             .items_center()
                             .gap_2()
+                            .child(
+                                div()
+                                    .w(px(3.0))
+                                    .h(px(14.0))
+                                    .rounded_full()
+                                    .bg(indicator_color),
+                            )
                             .child(svg().path("bluetooth.svg").size(px(14.0)).text_color(
                                 if is_conn {
                                     theme.accent()
                                 } else {
-                                    theme.foreground()
+                                    theme.foreground_muted()
                                 },
                             ))
                             .child(
                                 div()
                                     .text_size(px(11.0))
                                     .font_weight(if is_conn {
-                                        FontWeight::BOLD
+                                        FontWeight::SEMIBOLD
                                     } else {
                                         FontWeight::NORMAL
                                     })
@@ -121,7 +142,8 @@ pub fn render_bluetooth_mini_panel(
                     .child(
                         div()
                             .text_size(px(9.0))
-                            .text_color(theme.foreground_muted())
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.accent().opacity(0.85))
                             .child(if is_conn { "Conectado" } else { "" }),
                     ),
             );
@@ -135,17 +157,16 @@ pub fn render_bluetooth_mini_panel(
     };
 
     div()
-        .w(px(PANEL_W))
+        .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
-        .p_2p5()
-        .gap_1p5()
+        .p_3()
+        .gap_2()
         .rounded(px(radius))
-        .bg(theme.background())
+        .bg(theme.background().opacity(0.95))
         .border_1()
-        .border_color(theme.surface().opacity(0.6))
+        .border_color(theme.surface().opacity(0.35))
         .shadow_lg()
         .overflow_hidden()
-        .opacity(anim_t)
         .flex()
         .flex_col()
         .child(
@@ -170,9 +191,9 @@ pub fn render_bluetooth_mini_panel(
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .text_size(px(11.0))
+                                .text_size(px(11.5))
                                 .text_color(theme.foreground())
-                                .child(lang.quick_settings.bt_devices),
+                                .child(bt_devices),
                         ),
                 )
                 .child(
@@ -181,10 +202,11 @@ pub fn render_bluetooth_mini_panel(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(18.0))
-                        .h(px(18.0))
+                        .w(px(20.0))
+                        .h(px(20.0))
                         .rounded_full()
-                        .bg(theme.surface())
+                        .bg(theme.surface().opacity(0.6))
+                        .hover(|s| s.bg(theme.surface().opacity(0.9)))
                         .cursor_pointer()
                         .on_click(cx.listener(|_this, _, _, cx| {
                             if cx.has_global::<AppState>() {

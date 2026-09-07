@@ -6,11 +6,11 @@ use gpui::{
 use services::{AppState, MediaTrack};
 use std::time::Instant;
 use ui::theme::Theme;
+use ui::tracker::DimensionTracker;
 
 use crate::capsule::widgets::dashboard::{
-    header::render_header, media_player::render_media_player_widget,
-    notifications::render_notifications_widget, quick_settings::render_quick_settings_widget,
-    tray::render_tray_widget, volume::render_volume_widget,
+    header::render_header, notifications::render_notifications_widget,
+    quick_settings::render_quick_settings_section, volume::render_volume_widget,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,51 +39,66 @@ pub struct DashboardModule {
     pub last_user_action: Option<Instant>,
     pub open_panel_indices: Vec<usize>,
     pub is_dragging_volume: bool,
+    pub slider_tracker: DimensionTracker,
 }
 
-fn weekday_es(weekday: Weekday) -> &'static str {
-    match weekday {
-        Weekday::Mon => "Lunes",
-        Weekday::Tue => "Martes",
-        Weekday::Wed => "Miércoles",
-        Weekday::Thu => "Jueves",
-        Weekday::Fri => "Viernes",
-        Weekday::Sat => "Sábado",
-        Weekday::Sun => "Domingo",
+fn format_dashboard_date(
+    now: &chrono::DateTime<Local>,
+    cx: &mut Context<DashboardModule>,
+) -> String {
+    if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        let days = lang.get_list("datetime.days");
+        let months = lang.get_list("datetime.months");
+        let weekday_idx = now.weekday().num_days_from_monday() as usize;
+        let weekday_name = days
+            .get(weekday_idx)
+            .cloned()
+            .unwrap_or_else(|| match now.weekday() {
+                Weekday::Mon => "Monday".to_string(),
+                Weekday::Tue => "Tuesday".to_string(),
+                Weekday::Wed => "Wednesday".to_string(),
+                Weekday::Thu => "Thursday".to_string(),
+                Weekday::Fri => "Friday".to_string(),
+                Weekday::Sat => "Saturday".to_string(),
+                Weekday::Sun => "Sunday".to_string(),
+            });
+        let month_idx = (now.month() as usize).saturating_sub(1);
+        let month_name = months.get(month_idx).cloned().unwrap_or_default();
+        let day_str = now.day().to_string();
+        let template = lang.get("datetime.header_date_format");
+        if template != "datetime.header_date_format" && !template.is_empty() {
+            template
+                .replace("{weekday}", &weekday_name)
+                .replace("{day}", &day_str)
+                .replace("{month}", &month_name)
+        } else if lang.current_language_code() == "en" {
+            format!("{weekday_name}, {month_name} {day_str}")
+        } else {
+            format!("{weekday_name}, {day_str} de {month_name}")
+        }
+    } else {
+        format!("{}, {} {}", now.weekday(), now.month(), now.day())
     }
 }
 
-fn month_es(month: u32) -> &'static str {
-    match month {
-        1 => "Enero",
-        2 => "Febrero",
-        3 => "Marzo",
-        4 => "Abril",
-        5 => "Mayo",
-        6 => "Junio",
-        7 => "Julio",
-        8 => "Agosto",
-        9 => "Septiembre",
-        10 => "Octubre",
-        11 => "Noviembre",
-        12 => "Diciembre",
-        _ => "",
-    }
+fn format_greeting(hour: u32, cx: &mut Context<DashboardModule>) -> (&'static str, String) {
+    let (icon, key, fallback) = match hour {
+        5..=11 => ("sun.svg", "dashboard.greeting_morning", "Buenos días"),
+        12..=18 => ("sun.svg", "dashboard.greeting_afternoon", "Buenas tardes"),
+        _ => ("moon.svg", "dashboard.greeting_evening", "Buenas noches"),
+    };
+    let text = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.get(key)
+    } else {
+        fallback.to_string()
+    };
+    (icon, text)
 }
 
 impl DashboardModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let now = Local::now();
-        let hour = now.hour();
-
-        let (greeting, icon) = match hour {
-            5..=11 => ("Buenos días", "sun.svg"),
-            12..=18 => ("Buenas tardes", "sun.svg"),
-            _ => ("Buenas noches", "moon.svg"),
-        };
-
-        let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
 
         let mut bat: Option<i32> = None;
         let mut charging = false;
@@ -122,15 +137,10 @@ impl DashboardModule {
 
         Self {
             focus_handle,
-            time_str,
-            date_str: format!(
-                "{}, {} de {}",
-                weekday_es(now.weekday()),
-                now.day(),
-                month_es(now.month())
-            ),
-            greeting_str: greeting.to_string(),
-            greeting_icon: icon,
+            time_str: String::new(),
+            date_str: String::new(),
+            greeting_str: String::new(),
+            greeting_icon: "sun.svg",
             battery_percentage: bat,
             battery_charging: charging,
             media_players: Vec::new(),
@@ -138,7 +148,20 @@ impl DashboardModule {
             last_user_action: None,
             open_panel_indices: Vec::new(),
             is_dragging_volume: false,
+            slider_tracker: DimensionTracker::new(),
         }
+    }
+
+    pub fn desired_width(&self, cx: &gpui::App) -> f32 {
+        let sni_count = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().sni_host.get_items().len()
+        } else {
+            0
+        };
+        let tray_w = if sni_count > 0 { sni_count as f32 * 30.0 } else { 0.0 };
+        let battery_w = if self.battery_percentage.is_some() { 55.0 } else { 0.0 };
+        let header_needed_w = 220.0 + tray_w + battery_w + 16.0 + 32.0;
+        490.0_f32.max(header_needed_w)
     }
 
     pub fn get_selected_player(&self) -> Option<&MediaTrack> {
@@ -219,20 +242,36 @@ impl Render for DashboardModule {
 
         let total_players = self.media_players.len();
 
+        let now = Local::now();
+        let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
+        let date_str = format_dashboard_date(&now, cx);
+        let (greeting_icon, greeting_str) = format_greeting(now.hour(), cx);
+        self.time_str = time_str;
+        self.date_str = date_str;
+        self.greeting_str = greeting_str;
+        self.greeting_icon = greeting_icon;
+
+        let dashboard_w = self.desired_width(cx);
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .on_mouse_move(
-                cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                cx.listener(move |this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_dragging_volume {
-                        let win_w: f32 = window.bounds().size.width.into();
-                        let pill_x = (win_w - 440.0) / 2.0;
-                        let slider_start_x = pill_x + 92.0;
-                        let slider_width = 288.0;
+                        let slider_x = this.slider_tracker.left();
+                        let slider_w = this.slider_tracker.width(0.0);
+                        let (start_x, width) = if slider_w > 0.0 {
+                            (slider_x, slider_w)
+                        } else {
+                            let win_w: f32 = window.bounds().size.width.into();
+                            let pill_x = (win_w - dashboard_w) / 2.0;
+                            (pill_x + 28.0, dashboard_w - 56.0)
+                        };
 
                         let x_val = f32::from(event.position.x);
-                        let rel_x = x_val - slider_start_x;
-                        let pct = ((rel_x / slider_width) * 100.0).clamp(0.0, 100.0) as u32;
+                        let rel_x = x_val - start_x;
+                        let pct = ((rel_x / width) * 100.0).clamp(0.0, 100.0) as u32;
 
                         if cx.has_global::<AppState>() {
                             cx.global::<AppState>().system.set_volume_fast(pct);
@@ -252,13 +291,14 @@ impl Render for DashboardModule {
             )
             .flex()
             .flex_col()
-            .w(px(490.0))
+            .w(px(dashboard_w))
             .p_4()
-            .gap_3p5()
+            .gap_2p5()
             .overflow_hidden()
             .child(render_header(
                 self.battery_percentage,
                 self.battery_charging,
+                &self.open_panel_indices,
                 &self.greeting_str,
                 self.greeting_icon,
                 &self.date_str,
@@ -266,17 +306,14 @@ impl Render for DashboardModule {
                 &theme,
                 cx,
             ))
-            .child(div().w_full().h(px(1.0)).bg(theme.background_alt()))
-            .child(render_quick_settings_widget(&theme, cx))
-            .child(render_volume_widget(&theme, cx))
-            .child(render_media_player_widget(
+            .child(render_quick_settings_section(
                 &active_track,
                 total_players,
                 self.selected_player_idx,
                 &theme,
                 cx,
             ))
-            .child(render_notifications_widget(&theme, cx))
-            .child(render_tray_widget(&self.open_panel_indices, &theme, cx))
+            .child(render_volume_widget(&self.slider_tracker, &theme, cx))
+            .child(render_notifications_widget(dashboard_w, &theme, cx))
     }
 }

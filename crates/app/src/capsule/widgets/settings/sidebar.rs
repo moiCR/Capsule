@@ -15,6 +15,23 @@ pub fn render_sidebar(
         36.0
     };
 
+    let (title, tab_gen, tab_ui, tab_lock) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("settings.title"),
+            lang.get("settings.tab_general"),
+            lang.get("settings.tab_appearance"),
+            lang.get("settings.tab_lockscreen"),
+        )
+    } else {
+        (
+            "Configuración".to_string(),
+            "General".to_string(),
+            "Apariencia".to_string(),
+            "Bloqueo".to_string(),
+        )
+    };
+
     div()
         .flex()
         .flex_col()
@@ -26,7 +43,7 @@ pub fn render_sidebar(
         .p_4()
         .bg(theme.background_alt())
         .border_r_1()
-        .border_color(theme.surface().opacity(0.5))
+        .border_color(theme.surface().opacity(0.25))
         .child(
             div()
                 .flex()
@@ -38,9 +55,7 @@ pub fn render_sidebar(
                         .flex_row()
                         .items_center()
                         .justify_between()
-                        .pb_2()
-                        .border_b_1()
-                        .border_color(theme.surface().opacity(0.4))
+                        .pb_1()
                         .child(
                             div()
                                 .flex()
@@ -67,17 +82,18 @@ pub fn render_sidebar(
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_size(px(14.0))
                                         .text_color(theme.foreground())
-                                        .child("Configuración"),
+                                        .child(title),
                                 ),
                         )
                         .child(
                             div()
                                 .id("close-settings-btn")
-                                .w(px(26.0))
-                                .h(px(26.0))
+                                .w(px(24.0))
+                                .h(px(24.0))
                                 .rounded_full()
-                                .bg(theme.surface().opacity(0.5))
-                                .hover(|s| s.bg(theme.accent().opacity(0.2)))
+                                .bg(theme.surface().opacity(0.45))
+                                .hover(|s| s.bg(theme.surface().opacity(0.75)))
+                                .active(|s| s.bg(theme.surface()))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -88,7 +104,7 @@ pub fn render_sidebar(
                                 .child(
                                     svg()
                                         .path("close.svg")
-                                        .size(px(13.0))
+                                        .size(px(12.0))
                                         .text_color(theme.foreground_muted()),
                                 ),
                         ),
@@ -99,17 +115,17 @@ pub fn render_sidebar(
                         .flex_col()
                         .gap(px(6.0))
                         .child(render_tab_button(
-                            SettingsTab::Defaults,
-                            "search.svg",
-                            "Aplicaciones",
-                            active_tab == SettingsTab::Defaults,
+                            SettingsTab::General,
+                            "settings.svg",
+                            tab_gen,
+                            active_tab == SettingsTab::General,
                             theme,
                             cx,
                         ))
                         .child(render_tab_button(
                             SettingsTab::UI,
                             "palette_2.svg",
-                            "Apariencia",
+                            tab_ui,
                             active_tab == SettingsTab::UI,
                             theme,
                             cx,
@@ -117,16 +133,8 @@ pub fn render_sidebar(
                         .child(render_tab_button(
                             SettingsTab::LockScreen,
                             "moon_1.svg",
-                            "Bloqueo",
+                            tab_lock,
                             active_tab == SettingsTab::LockScreen,
-                            theme,
-                            cx,
-                        ))
-                        .child(render_tab_button(
-                            SettingsTab::System,
-                            "zap.svg",
-                            "Sistema & Energía",
-                            active_tab == SettingsTab::System,
                             theme,
                             cx,
                         )),
@@ -137,13 +145,13 @@ pub fn render_sidebar(
 fn render_tab_button(
     tab: SettingsTab,
     icon: &'static str,
-    label: &'static str,
+    label: String,
     is_active: bool,
     theme: &Theme,
     cx: &mut Context<SettingsModule>,
 ) -> impl IntoElement {
     let bg = if is_active {
-        theme.accent().opacity(0.18)
+        theme.surface().opacity(0.55)
     } else {
         gpui::transparent_black()
     };
@@ -153,29 +161,43 @@ fn render_tab_button(
         theme.foreground_muted()
     };
 
+    let indicator_color = if is_active {
+        theme.accent()
+    } else {
+        gpui::hsla(0.0, 0.0, 0.0, 0.0)
+    };
+
     div()
         .id(ElementId::NamedInteger("settings-tab".into(), tab as u64))
         .flex()
         .flex_row()
         .items_center()
-        .gap(px(10.0))
+        .gap(px(8.0))
         .w_full()
-        .px_3()
+        .px_2p5()
         .py_2()
-        .rounded(px(12.0))
+        .rounded(px(10.0))
         .bg(bg)
         .hover(|s| {
             if !is_active {
-                s.bg(theme.surface().opacity(0.4))
+                s.bg(theme.surface().opacity(0.35))
                     .text_color(theme.foreground())
             } else {
                 s
             }
         })
+        .active(|s| s.bg(theme.surface().opacity(0.65)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, _, _, cx| {
             this.set_tab(tab, cx);
         }))
+        .child(
+            div()
+                .w(px(3.0))
+                .h(px(16.0))
+                .rounded_full()
+                .bg(indicator_color),
+        )
         .child(svg().path(icon).size(px(15.0)).text_color(fg))
         .child(
             div()

@@ -7,6 +7,7 @@ pub mod dbus_util;
 pub mod emoji;
 pub mod idle;
 pub mod ipc;
+pub mod language;
 pub mod launcher;
 pub mod logger;
 pub mod lyrics;
@@ -28,13 +29,15 @@ pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService};
 pub use compositor::CompositorService;
 pub use config::{
-    AppConfig, ConfigService, Defaults, LockScreenConfig, LockscreenConfig, UIConfig, UiConfig,
+    AppConfig, CapsuleStyle, ConfigService, Defaults, LockScreenConfig, LockscreenConfig, UIConfig,
+    UiConfig,
 };
 pub use emoji::{EmojiItem, EmojiService};
 pub use idle::{IdleEvent, IdleService};
 pub use ipc::{
     IpcCommand, IpcMessage, IpcSubscriber, decode_command, pop_ipc_command, push_ipc_command,
 };
+pub use language::{LangService, LanguageInfo};
 pub use launcher::{Application, LauncherService};
 pub use logger::init_logger;
 pub use lyrics::{LyricLine, LyricsService, TrackLyrics};

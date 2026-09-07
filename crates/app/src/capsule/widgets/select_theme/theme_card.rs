@@ -1,117 +1,83 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*};
+use gpui::{Context, ElementId, FontWeight, IntoElement, div, prelude::*, px};
 use ui::theme::{Theme, theme_manager::ThemeItem};
 
 use crate::capsule::modules::select_theme::SelectThemeModule;
 
 pub fn render_theme_card(
+    slot_id: ElementId,
     item: &ThemeItem,
-    current_theme: &Theme,
+    is_selected: bool,
+    target_idx: usize,
     theme: &Theme,
     cx: &mut Context<SelectThemeModule>,
 ) -> impl IntoElement {
-    let is_active = item.theme.accent_color.hex == current_theme.accent_color.hex
-        && item.theme.background_color.hex == current_theme.background_color.hex;
-
     let item_theme = item.theme.clone();
 
-    let card_bg = if is_active {
-        theme.surface()
-    } else {
-        theme.background_alt()
-    };
-
-    let active_border = if is_active {
+    let border_color = if is_selected {
         theme.accent()
     } else {
-        theme.surface().opacity(0.4)
+        theme.surface().opacity(0.2)
     };
 
-    let active_badge = if is_active {
-        div()
-            .px_2p5()
-            .py_1()
-            .rounded_full()
-            .bg(theme.accent())
-            .text_xs()
-            .font_weight(FontWeight::BOLD)
-            .text_color(theme.background())
-            .child("Activo")
+    let card_bg = if is_selected {
+        theme.surface().opacity(0.55)
     } else {
-        div()
+        theme.surface().opacity(0.2)
     };
 
-    let mode_label = match item.theme.mode {
-        ui::theme::ThemeMode::Dark => "Oscuro",
-        ui::theme::ThemeMode::Light => "Claro",
+    let name_color = if is_selected {
+        theme.foreground()
+    } else {
+        theme.foreground_muted()
     };
+
+    let dots = [
+        item.theme.red(),
+        item.theme.green(),
+        item.theme.accent(),
+        item.theme.foreground(),
+        item.theme.foreground_muted(),
+        item.theme.surface(),
+    ];
+
+    let mut dots_row = div().flex().flex_row().items_center().gap(px(5.0));
+    for dot in dots {
+        dots_row = dots_row.child(div().size(px(10.0)).rounded_full().bg(dot));
+    }
 
     div()
-        .id(format!("theme-item-{}", item.name))
+        .id(slot_id)
+        .flex_shrink_0()
+        .w(px(140.0))
+        .h(px(84.0))
         .flex()
+        .flex_col()
         .items_center()
-        .justify_between()
-        .p_3()
-        .rounded_xl()
+        .justify_center()
+        .gap(px(10.0))
+        .rounded(px(16.0))
         .bg(card_bg)
-        .border_1()
-        .border_color(active_border)
+        .border(if is_selected { px(2.0) } else { px(1.0) })
+        .border_color(border_color)
         .cursor_pointer()
+        .hover(|s| s.bg(theme.surface().opacity(0.4)))
         .on_click(cx.listener(move |this, _, _, cx| {
-            this.select_theme(item_theme.clone(), cx);
+            if is_selected {
+                this.select_theme(item_theme.clone(), cx);
+            } else {
+                this.set_selected_idx(target_idx, cx);
+            }
         }))
+        .child(dots_row)
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap_1p5()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(theme.foreground())
-                                .child(item.name.clone()),
-                        )
-                        .child(
-                            div()
-                                .px_2()
-                                .py_0p5()
-                                .rounded_md()
-                                .bg(theme.background())
-                                .text_xs()
-                                .text_color(theme.foreground_muted())
-                                .child(mode_label),
-                        ),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1p5()
-                        .child(
-                            div()
-                                .size_3p5()
-                                .rounded_full()
-                                .bg(item.theme.background())
-                                .border_1()
-                                .border_color(theme.surface()),
-                        )
-                        .child(
-                            div()
-                                .size_3p5()
-                                .rounded_full()
-                                .bg(item.theme.surface())
-                                .border_1()
-                                .border_color(theme.background()),
-                        )
-                        .child(div().size_3p5().rounded_full().bg(item.theme.accent()))
-                        .child(div().size_3p5().rounded_full().bg(item.theme.green()))
-                        .child(div().size_3p5().rounded_full().bg(item.theme.red())),
-                ),
+                .text_size(px(12.0))
+                .font_weight(if is_selected {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::MEDIUM
+                })
+                .text_color(name_color)
+                .child(item.name.clone()),
         )
-        .child(active_badge)
 }

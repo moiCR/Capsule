@@ -84,7 +84,7 @@ async fn main() {
             let async_app = async_cx.clone();
             async move {
                 while lock_rx.recv().await.is_some() {
-                    let _ = async_app.update(|cx: &mut gpui::App| {
+                    _ = async_app.update(|cx: &mut gpui::App| {
                         panel::LockScreenPanel::open_all(cx);
                     });
                 }
@@ -95,10 +95,6 @@ async fn main() {
         let theme_manager = ui::theme::theme_manager::ThemeManager::new();
         cx.set_global(theme_manager.current_theme.clone());
         cx.set_global(theme_manager);
-
-        let lang_manager = ui::language::language_manager::LanguageManager::new();
-        cx.set_global(lang_manager.current_language.clone());
-        cx.set_global(lang_manager);
 
         panel::CapsulePanel::open(cx, ipc_subscriber);
     });

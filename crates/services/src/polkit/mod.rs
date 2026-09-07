@@ -1,46 +1,66 @@
 use anyhow::{Context, Result};
-
 use std::collections::{HashMap, VecDeque};
-
 use std::os::unix::fs::PermissionsExt;
-
 use std::process::Stdio;
-
 use std::sync::{Arc, Mutex, OnceLock};
-
 use tokio::process::Command;
-
 use zbus::zvariant::{OwnedValue, Value};
-
 use zbus::{connection, interface};
+
+const POLKIT_AGENT_HELPER_SOCKET: &str = "/run/polkit/agent-helper.socket";
 
 fn is_setuid(path: &std::path::Path) -> bool {
     if let Ok(metadata) = std::fs::metadata(path) {
         let mode = metadata.permissions().mode();
-
         return (mode & 0o4000) != 0;
     }
-
     false
 }
 
-#[derive(Debug, Clone)]
+fn get_username_from_uid(uid: u32) -> Option<String> {
+    unsafe {
+        let pw = libc::getpwuid(uid as libc::uid_t);
+        if !pw.is_null() && !(*pw).pw_name.is_null() {
+            let c_str = std::ffi::CStr::from_ptr((*pw).pw_name);
+            if let Ok(s) = c_str.to_str() {
+                return Some(s.to_string());
+            }
+        }
+    }
+    None
+}
 
+fn get_current_session_id() -> Option<String> {
+    if let Ok(id) = std::env::var("XDG_SESSION_ID") {
+        let trimmed = id.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(cookie) = std::env::var("XDG_SESSION_COOKIE") {
+        let trimmed = cookie.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(content) = std::fs::read_to_string("/proc/self/sessionid") {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() && trimmed != "4294967295" {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+#[derive(Debug, Clone)]
 pub struct PolkitAuthRequest {
     pub action_id: String,
-
     pub message: String,
-
     pub icon_name: String,
-
     pub user_name: String,
-
     pub cookie: String,
-
     pub uid: u32,
-
     pub identity_kind: String,
-
     pub identity_details: HashMap<String, Value<'static>>,
 }
 
@@ -50,11 +70,15 @@ pub type PolkitPendingAuth = (
 );
 
 static POLKIT_QUEUE: OnceLock<Arc<Mutex<VecDeque<PolkitPendingAuth>>>> = OnceLock::new();
-
+static POLKIT_CANCELLED: OnceLock<Arc<Mutex<VecDeque<String>>>> = OnceLock::new();
 static POLKIT_AGENT_CONN: OnceLock<Arc<Mutex<Option<zbus::Connection>>>> = OnceLock::new();
 
 fn polkit_queue() -> &'static Arc<Mutex<VecDeque<PolkitPendingAuth>>> {
     POLKIT_QUEUE.get_or_init(|| Arc::new(Mutex::new(VecDeque::new())))
+}
+
+fn cancelled_cookies() -> &'static Arc<Mutex<VecDeque<String>>> {
+    POLKIT_CANCELLED.get_or_init(|| Arc::new(Mutex::new(VecDeque::new())))
 }
 
 fn polkit_agent_conn() -> &'static Arc<Mutex<Option<zbus::Connection>>> {
@@ -69,7 +93,6 @@ fn set_agent_connection(conn: Option<zbus::Connection>) {
 
 pub fn push_polkit_request(
     req: PolkitAuthRequest,
-
     responder: tokio::sync::oneshot::Sender<Result<(), String>>,
 ) {
     if let Ok(mut queue) = polkit_queue().lock() {
@@ -85,33 +108,47 @@ pub fn pop_polkit_request() -> Option<PolkitPendingAuth> {
     }
 }
 
+pub fn push_cancelled_cookie(cookie: &str) {
+    if let Ok(mut queue) = cancelled_cookies().lock() {
+        queue.push_back(cookie.to_string());
+    }
+}
+
+pub fn pop_cancelled_cookie() -> Option<String> {
+    if let Ok(mut queue) = cancelled_cookies().lock() {
+        queue.pop_front()
+    } else {
+        None
+    }
+}
+
 pub fn cancel_polkit_request(cookie: &str) -> bool {
     if let Ok(mut queue) = polkit_queue().lock() {
         if let Some(pos) = queue.iter().position(|(req, _)| req.cookie == cookie) {
             if let Some((_, responder)) = queue.remove(pos) {
                 let _ = responder.send(Err("Cancelled by Polkit Authority".to_string()));
-
                 return true;
             }
         }
     }
-
     false
 }
 
 #[derive(Clone, Default)]
-
 pub struct PolkitService;
 
 impl PolkitService {
     pub fn new() -> Self {
         start_polkit_agent();
-
         Self
     }
 
     pub fn pop_request(&self) -> Option<PolkitPendingAuth> {
         pop_polkit_request()
+    }
+
+    pub fn pop_cancelled(&self) -> Option<String> {
+        pop_cancelled_cookie()
     }
 
     pub async fn authenticate(&self, user_name: &str, cookie: &str, password: &str) -> bool {
@@ -122,54 +159,56 @@ impl PolkitService {
 pub struct PolkitAgentServer;
 
 #[interface(name = "org.freedesktop.PolicyKit1.AuthenticationAgent")]
-
 impl PolkitAgentServer {
     async fn begin_authentication(
         &self,
-
         action_id: String,
-
         message: String,
-
         icon_name: String,
-
         details: HashMap<String, String>,
-
         cookie: String,
-
         identities: Vec<(String, HashMap<String, Value<'_>>)>,
     ) -> zbus::fdo::Result<()> {
         let _ = details;
 
-        let user_name = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
-
-        let current_uid = unsafe {
-            unsafe extern "C" {
-
-                fn getuid() -> u32;
-
-            }
-
-            getuid()
-        };
-
+        let current_uid = unsafe { libc::getuid() as u32 };
         let mut identity_kind = "unix-user".to_string();
-
         let mut identity_details: HashMap<String, Value<'static>> = HashMap::new();
-
         identity_details.insert("uid".to_string(), Value::from(current_uid));
+
+        let mut target_user = None;
 
         if let Some(first_ident) = identities.first() {
             identity_kind = first_ident.0.clone();
-
             identity_details.clear();
-
             for (k, v) in &first_ident.1 {
                 if let Ok(owned) = OwnedValue::try_from(v.clone()) {
                     identity_details.insert(k.clone(), Value::from(owned));
                 }
             }
+
+            if let Some(name_val) = first_ident.1.get("name") {
+                if let Value::Str(s) = name_val {
+                    target_user = Some(s.as_str().to_string());
+                }
+            } else if let Some(uid_val) = first_ident.1.get("uid") {
+                let uid = match uid_val {
+                    Value::U32(u) => Some(*u),
+                    Value::U64(u) => Some(*u as u32),
+                    Value::I32(i) => Some(*i as u32),
+                    _ => None,
+                };
+                if let Some(uid) = uid {
+                    target_user = get_username_from_uid(uid);
+                }
+            }
         }
+
+        let user_name = target_user.unwrap_or_else(|| {
+            get_username_from_uid(current_uid)
+                .or_else(|| std::env::var("USER").ok())
+                .unwrap_or_else(|| "root".to_string())
+        });
 
         let req = PolkitAuthRequest {
             action_id: action_id.clone(),
@@ -184,7 +223,8 @@ impl PolkitAgentServer {
 
         crate::log_info!(
             "POLKIT",
-            "Polkit auth request received: action='{action_id}', msg='{message}', cookie='{cookie}'"
+            "Polkit auth request received: action='{action_id}', msg='{message}', user='{}', cookie='{cookie}'",
+            req.user_name
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -215,7 +255,10 @@ impl PolkitAgentServer {
             "POLKIT",
             "Polkit Authority requested CancelAuthentication for cookie='{cookie}'"
         );
-        cancel_polkit_request(&cookie);
+        let was_in_queue = cancel_polkit_request(&cookie);
+        if !was_in_queue {
+            push_cancelled_cookie(&cookie);
+        }
         Ok(())
     }
 }
@@ -263,43 +306,45 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
     set_agent_connection(Some(system_conn.clone()));
 
     let locale = std::env::var("LANG").unwrap_or_else(|_| "es_ES.UTF-8".to_string());
-
     let object_path = "/org/freedesktop/PolicyKit1/AuthenticationAgent";
 
-    let session_id = std::env::var("XDG_SESSION_ID")
-        .or_else(|_| std::env::var("XDG_SESSION_COOKIE"))
-        .unwrap_or_else(|_| "2".to_string());
+    let mut session_registered = false;
 
-    let mut session_details: HashMap<String, Value> = HashMap::new();
+    if let Some(session_id) = get_current_session_id() {
+        let mut session_details: HashMap<String, Value> = HashMap::new();
+        session_details.insert("session-id".to_string(), Value::from(session_id));
 
-    session_details.insert("session-id".to_string(), Value::from(session_id));
+        let reg_result = system_conn
+            .call_method(
+                Some("org.freedesktop.PolicyKit1"),
+                "/org/freedesktop/PolicyKit1/Authority",
+                Some("org.freedesktop.PolicyKit1.Authority"),
+                "RegisterAuthenticationAgent",
+                &(
+                    ("unix-session", session_details),
+                    locale.as_str(),
+                    object_path,
+                ),
+            )
+            .await;
 
-    let reg_result = system_conn
-        .call_method(
-            Some("org.freedesktop.PolicyKit1"),
-            "/org/freedesktop/PolicyKit1/Authority",
-            Some("org.freedesktop.PolicyKit1.Authority"),
-            "RegisterAuthenticationAgent",
-            &(
-                ("unix-session", session_details),
-                locale.as_str(),
-                object_path,
-            ),
-        )
-        .await;
+        match reg_result {
+            Ok(_) => {
+                session_registered = true;
+            }
+            Err(err) => {
+                crate::log_warn!(
+                    "POLKIT",
+                    "unix-session registration failed ({err:?}), falling back to unix-process..."
+                );
+            }
+        }
+    }
 
-    if let Err(err) = reg_result {
-        crate::log_warn!(
-            "POLKIT",
-            "unix-session registration failed ({err:?}), attempting unix-process fallback..."
-        );
-
+    if !session_registered {
         let pid = std::process::id();
-
         let mut process_details: HashMap<String, Value> = HashMap::new();
-
         process_details.insert("pid".to_string(), Value::from(pid));
-
         process_details.insert("start-time".to_string(), Value::from(0u64));
 
         system_conn
@@ -329,10 +374,95 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         interval.tick().await;
         if system_conn.is_closed() {
             break;
-        }
+       }
     }
 
     Err(anyhow::anyhow!("System D-Bus connection closed"))
+}
+
+async fn authenticate_via_socket(
+    user_name: &str,
+    cookie: &str,
+    password: &str,
+) -> Result<(), String> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let stream = tokio::net::UnixStream::connect(POLKIT_AGENT_HELPER_SOCKET)
+        .await
+        .map_err(|e| {
+            format!("No se pudo conectar al socket de Polkit ({POLKIT_AGENT_HELPER_SOCKET}): {e}")
+        })?;
+
+    let (read_half, mut write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+
+    // Polkit helper protocol:
+    // 1. send user_name\n
+    // 2. send cookie\n
+    write_half
+        .write_all(format!("{user_name}\n").as_bytes())
+        .await
+        .map_err(|e| format!("Error enviando usuario al socket de Polkit: {e}"))?;
+
+    write_half
+        .write_all(format!("{cookie}\n").as_bytes())
+        .await
+        .map_err(|e| format!("Error enviando cookie al socket de Polkit: {e}"))?;
+
+    write_half
+        .flush()
+        .await
+        .map_err(|e| format!("Error en flush inicial hacia socket de Polkit: {e}"))?;
+
+    let mut last_error_msg: Option<String> = None;
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .await
+            .map_err(|e| format!("Error leyendo respuesta del socket de Polkit: {e}"))?;
+
+        if bytes_read == 0 {
+            return Err(last_error_msg.unwrap_or_else(|| {
+                "El servicio de autenticación cerró la conexión sin confirmar el acceso."
+                    .to_string()
+            }));
+        }
+
+        let trimmed = line.trim();
+        crate::log_info!("POLKIT", "polkit-agent-helper response: '{trimmed}'");
+
+        if trimmed.starts_with("PAM_PROMPT_ECHO_OFF") || trimmed.starts_with("PAM_PROMPT_ECHO_ON") {
+            write_half
+                .write_all(format!("{password}\n").as_bytes())
+                .await
+                .map_err(|e| format!("Error enviando contraseña al socket de Polkit: {e}"))?;
+            write_half
+                .flush()
+                .await
+                .map_err(|e| format!("Error en flush de contraseña hacia socket de Polkit: {e}"))?;
+        } else if trimmed.starts_with("PAM_ERROR_MSG") {
+            let msg = trimmed.trim_start_matches("PAM_ERROR_MSG").trim();
+            if !msg.is_empty() {
+                last_error_msg = Some(msg.to_string());
+            }
+        } else if trimmed.starts_with("PAM_TEXT_INFO") {
+            let info = trimmed.trim_start_matches("PAM_TEXT_INFO").trim();
+            crate::log_info!("POLKIT", "PAM info: {info}");
+        } else if trimmed == "SUCCESS" {
+            crate::log_info!("POLKIT", "Polkit authentication SUCCESS via agent-helper.socket");
+            return Ok(());
+        } else if trimmed == "FAILURE" {
+            crate::log_warn!("POLKIT", "Polkit authentication FAILURE via agent-helper.socket");
+            return Err(last_error_msg.unwrap_or_else(|| {
+                "Contraseña incorrecta. Inténtalo de nuevo.".to_string()
+            }));
+        } else {
+            crate::log_info!("POLKIT", "Unhandled polkit helper line: '{trimmed}'");
+        }
+    }
 }
 
 async fn run_helper_process(
@@ -413,6 +543,7 @@ pub async fn authenticate_user(
     cookie: &str,
     password: &str,
 ) -> Result<(), String> {
+    let user_name = user_name.trim();
     let cookie = cookie.trim();
     let password = password.trim_end_matches(&['\r', '\n'][..]);
 
@@ -420,6 +551,27 @@ pub async fn authenticate_user(
         return Err("La contraseña no puede estar vacía.".to_string());
     }
 
+    // 1. Try modern Polkit socket activation first (/run/polkit/agent-helper.socket)
+    let socket_path = std::path::Path::new(POLKIT_AGENT_HELPER_SOCKET);
+    if socket_path.exists() {
+        crate::log_info!(
+            "POLKIT",
+            "Authenticating user '{user_name}' via {POLKIT_AGENT_HELPER_SOCKET}..."
+        );
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            authenticate_via_socket(user_name, cookie, password),
+        )
+        .await
+        {
+            Ok(res) => return res,
+            Err(_) => {
+                return Err("El servicio de autenticación tardó demasiado en responder.".to_string());
+            }
+        }
+    }
+
+    // 2. Fallback to setuid helper binary (legacy systems)
     let helper_paths = [
         "/usr/lib/polkit-1/polkit-agent-helper-1",
         "/usr/libexec/polkit-agent-helper-1",
@@ -430,71 +582,44 @@ pub async fn authenticate_user(
     let helper = helper_paths
         .iter()
         .find(|path| std::path::Path::new(path).exists())
-        .copied()
-        .ok_or_else(|| {
-            "No se encontró el ejecutable polkit-agent-helper-1 en el sistema.".to_string()
-        })?;
+        .copied();
 
-    let helper_path = std::path::Path::new(helper);
-    let has_setuid = is_setuid(helper_path);
+    if let Some(helper) = helper {
+        let helper_path = std::path::Path::new(helper);
+        if is_setuid(helper_path) {
+            crate::log_info!(
+                "POLKIT",
+                "Invoking legacy setuid helper {} for user '{}'...",
+                helper,
+                user_name
+            );
 
-    if has_setuid {
-        crate::log_info!(
-            "POLKIT",
-            "Invoking setuid helper {} for user '{}'...",
-            helper,
-            user_name
-        );
-
-        let stdin_content = format!("{cookie}\n{password}\n");
-        match run_helper_process(helper, &[user_name], &stdin_content, 15).await {
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let ok = output.status.success();
-                crate::log_info!(
-                    "POLKIT",
-                    "polkit-agent-helper-1 result: success={ok}, code={:?}, stderr='{}'",
-                    output.status.code(),
-                    stderr.trim()
-                );
-                if ok {
-                    return Ok(());
+            let stdin_content = format!("{cookie}\n{password}\n");
+            match run_helper_process(helper, &[user_name], &stdin_content, 15).await {
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let ok = output.status.success();
+                    crate::log_info!(
+                        "POLKIT",
+                        "polkit-agent-helper-1 result: success={ok}, code={:?}, stderr='{}'",
+                        output.status.code(),
+                        stderr.trim()
+                    );
+                    if ok {
+                        return Ok(());
+                    }
+                    return Err(extract_stderr_message(&stderr));
                 }
-                let msg = extract_stderr_message(&stderr);
-                Err(msg)
+                Err(err) => return Err(format!("Error en autenticación: {err}")),
             }
-            Err(err) => Err(format!("Error en autenticación: {err}")),
-        }
-    } else {
-        crate::log_info!(
-            "POLKIT",
-            "Helper {} lacks setuid bit. Running polkit-agent-helper-1 via sudo for user '{}'...",
-            helper,
-            user_name
-        );
-
-        let _ = run_helper_process("sudo", &["-k"], "", 2).await;
-
-        let stdin_sudo_helper = format!("{password}\n{cookie}\n{password}\n");
-        match run_helper_process("sudo", &["-S", helper, user_name], &stdin_sudo_helper, 15).await {
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let ok = output.status.success();
-                crate::log_info!(
-                    "POLKIT",
-                    "polkit-agent-helper-1 via sudo result: success={ok}, code={:?}, stderr='{}'",
-                    output.status.code(),
-                    stderr.trim()
-                );
-                if ok {
-                    return Ok(());
-                }
-                let msg = extract_stderr_message(&stderr);
-                Err(msg)
-            }
-            Err(err) => Err(format!("Error en autenticación: {err}")),
         }
     }
+
+    crate::log_error!(
+        "POLKIT",
+        "Neither {POLKIT_AGENT_HELPER_SOCKET} nor a setuid polkit-agent-helper-1 is available."
+    );
+    Err("No se puede autenticar: el socket de Polkit no está disponible y el binario helper no tiene permisos setuid.".to_string())
 }
 
 fn extract_stderr_message(stderr: &str) -> String {
@@ -515,3 +640,30 @@ fn extract_stderr_message(stderr: &str) -> String {
         clean.join(" ")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_username_from_uid() {
+        let current_uid = unsafe { libc::getuid() as u32 };
+        let username = get_username_from_uid(current_uid);
+        assert!(username.is_some(), "Expected username for current UID");
+    }
+
+    #[test]
+    fn test_get_current_session_id() {
+        let session_id = get_current_session_id();
+        assert!(session_id.is_some(), "Expected session ID from env or procfs");
+    }
+
+    #[test]
+    fn test_queue_and_cancellation() {
+        let cookie = "test-cookie-1234";
+        push_cancelled_cookie(cookie);
+        assert_eq!(pop_cancelled_cookie(), Some(cookie.to_string()));
+        assert_eq!(pop_cancelled_cookie(), None);
+    }
+}
+

@@ -1,4 +1,5 @@
-use gpui::{Element, ParentElement, Styled, div, px};
+use gpui::{Context, Element, ParentElement, Styled, div, px};
+use services::AppState;
 use ui::theme::Theme;
 
 pub fn render_auth_form(
@@ -6,9 +7,25 @@ pub fn render_auth_form(
     password_len: usize,
     auth_failed: bool,
     is_checking: bool,
+    cx: &Context<crate::lockscreen::LockScreen>,
 ) -> impl Element {
+    let (enter_pwd, checking_text, incorrect_text) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("lockscreen.enter_password"),
+            lang.get("lockscreen.checking"),
+            lang.get("lockscreen.incorrect_password"),
+        )
+    } else {
+        (
+            "Enter Password".to_string(),
+            "Checking...".to_string(),
+            "Incorrect password".to_string(),
+        )
+    };
+
     let masked_password = if password_len == 0 {
-        "Enter Password".to_string()
+        enter_pwd
     } else {
         "●".repeat(password_len)
     };
@@ -60,7 +77,7 @@ pub fn render_auth_form(
                             .font_family(theme.font_family())
                             .text_size(px(12.5))
                             .text_color(theme.accent())
-                            .child("Checking..."),
+                            .child(checking_text),
                     )
                 } else {
                     None
@@ -73,7 +90,7 @@ pub fn render_auth_form(
                     .font_family(theme.font_family())
                     .text_size(px(12.0))
                     .text_color(theme.red())
-                    .child("Incorrect password"),
+                    .child(incorrect_text),
             )
         } else {
             None

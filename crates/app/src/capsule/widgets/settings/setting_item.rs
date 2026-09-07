@@ -1,4 +1,4 @@
-use gpui::{AnyElement, IntoElement, ParentElement, Styled, div, px};
+use gpui::{AnyElement, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
 use ui::theme::Theme;
 
 pub fn render_setting_row(
@@ -17,9 +17,10 @@ pub fn render_setting_row(
         .px_4()
         .py_3()
         .rounded(px(cards_round))
-        .bg(theme.surface().opacity(0.35))
+        .bg(theme.surface().opacity(0.4))
         .border_1()
-        .border_color(theme.surface().opacity(0.5))
+        .border_color(theme.surface().opacity(0.25))
+        .hover(|s| s.bg(theme.surface().opacity(0.5)))
         .child(
             div()
                 .flex()
@@ -56,18 +57,18 @@ pub fn render_section_header(title: &str, subtitle: &str, theme: &Theme) -> AnyE
     div()
         .flex()
         .flex_col()
-        .gap(px(4.0))
-        .mb_4()
+        .gap(px(3.0))
+        .mb_3()
         .child(
             div()
                 .font_weight(gpui::FontWeight::BOLD)
-                .text_size(px(18.0))
+                .text_size(px(16.0))
                 .text_color(theme.foreground())
                 .child(title.to_string()),
         )
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(11.5))
                 .text_color(theme.foreground_muted())
                 .child(subtitle.to_string()),
         )

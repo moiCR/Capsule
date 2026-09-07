@@ -26,9 +26,7 @@ pub fn render_tray_widget(
         .flex_row()
         .items_center()
         .justify_center()
-        .gap_1()
-        .size_full()
-        .overflow_x_hidden();
+        .gap_1();
 
     for (idx, item) in items.iter().enumerate() {
         let item_idx = idx;
@@ -45,18 +43,31 @@ pub fn render_tray_widget(
             div()
                 .id(("tray-icon-btn", idx as u32))
                 .flex()
+                .flex_shrink_0()
                 .items_center()
                 .justify_center()
-                .w(px(24.0))
-                .h(px(24.0))
-                .rounded_sm()
+                .w(px(26.0))
+                .h(px(26.0))
+                .rounded(px(8.0))
                 .bg(if is_open {
-                    theme.accent().opacity(0.2)
+                    theme.accent().opacity(0.22)
                 } else {
-                    theme.surface().opacity(0.0)
+                    gpui::transparent_black()
+                })
+                .border_1()
+                .border_color(if is_open {
+                    theme.accent().opacity(0.5)
+                } else {
+                    gpui::transparent_black()
                 })
                 .cursor_pointer()
-                .hover(|style| style.bg(theme.surface().opacity(0.5)))
+                .hover(move |style| {
+                    if is_open {
+                        style.bg(theme.accent().opacity(0.32))
+                    } else {
+                        style.bg(theme.surface().opacity(0.45))
+                    }
+                })
                 .on_click(cx.listener(move |_, _, _, cx| {
                     cx.emit(DashboardEvent::TrayIconClicked(item_idx));
                 }))

@@ -1,8 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CapsuleStyle {
+    #[default]
+    Normal,
+    Concave,
+}
+
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UIConfig {
+    #[serde(default)]
+    pub capsule_style: CapsuleStyle,
+
     #[serde(default = "default_capsule_round", alias = "capsule_radius")]
     pub capsule_round: f32,
 
@@ -34,6 +45,9 @@ pub struct UIConfig {
 
     #[serde(default = "default_animation_duration_ms")]
     pub animation_duration_ms: u32,
+
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 pub type UiConfig = UIConfig;
@@ -41,6 +55,7 @@ pub type UiConfig = UIConfig;
 impl Default for UIConfig {
     fn default() -> Self {
         Self {
+            capsule_style: CapsuleStyle::Normal,
             capsule_round: default_capsule_round(),
             satellite_round: default_satellite_round(),
             cards_round: default_cards_round(),
@@ -49,13 +64,18 @@ impl Default for UIConfig {
             gap: default_gap(),
             badge_round: default_badge_round(),
             animation_duration_ms: default_animation_duration_ms(),
+            language: default_language(),
         }
     }
 }
 
 impl UIConfig {
     pub fn exclusive_zone(&self) -> f32 {
-        self.idle_height + self.margin_top
+        if self.capsule_style == CapsuleStyle::Concave {
+            self.idle_height
+        } else {
+            self.idle_height + self.margin_top
+        }
     }
 }
 
@@ -89,4 +109,8 @@ fn default_badge_round() -> f32 {
 
 fn default_animation_duration_ms() -> u32 {
     250
+}
+
+fn default_language() -> String {
+    "es.toml".to_string()
 }

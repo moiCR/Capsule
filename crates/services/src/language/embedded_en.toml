@@ -1,0 +1,161 @@
+name = "English"
+code = "en"
+notifications = "Notifications"
+
+[common]
+cancel = "Cancel"
+save = "Save"
+close = "Close"
+ok = "OK"
+authenticate = "Authenticate"
+
+[datetime]
+today = "Today"
+days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+days_short = ["M", "T", "W", "T", "F", "S", "S"]
+months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+header_date_format = "{weekday}, {month} {day}"
+
+[power]
+title = "POWER PLAN"
+performance = "Performance"
+balanced = "Balanced"
+power_saver = "Power Saver"
+
+[dashboard]
+greeting_morning = "Good morning"
+greeting_afternoon = "Good afternoon"
+greeting_evening = "Good evening"
+notifications_title = "Notifications"
+clear_all = "Clear all"
+no_notifications = "No notifications"
+no_media = "No media playing"
+sound = "Sound"
+volume = "Volume"
+bluetooth = "Bluetooth"
+dnd = "Do Not Disturb"
+enabled = "Enabled"
+disabled = "Disabled"
+connected = "Connected"
+disconnected = "Disconnected"
+
+[quick_settings]
+wifi_networks = "Wi-Fi Networks"
+no_wifi_found = "No Wi-Fi networks found"
+bt_devices = "Bluetooth Devices"
+no_bt_found = "No Bluetooth devices found"
+ethernet = "Ethernet"
+
+[clipboard]
+title = "CLIPBOARD"
+search_placeholder = "Search history..."
+empty_history = "No items in history"
+empty_item = "[Empty item]"
+
+[launcher]
+title = "LAUNCHER"
+search_placeholder = "Search applications..."
+no_apps = "No applications found"
+navigate_hint = "↑↓ navigate"
+open_hint = "↵ open"
+close_hint = "esc close"
+
+[themes]
+title = "THEMES"
+search_placeholder = "Search themes..."
+no_themes = "No themes found"
+apply_hint = "↵ Enter to apply"
+
+[wallpaper]
+title = "WALLPAPERS"
+no_wallpapers = "No images in ~/Wallpapers"
+
+[volume]
+title = "VOLUME"
+audio_output = "Audio Output"
+muted = "Mute"
+
+[tray]
+title = "TRAY"
+no_menu = "No menu available"
+open_app = "Open application"
+
+[polkit]
+auth_required = "Authentication Required"
+user_prefix = "User: "
+verifying = "Verifying password..."
+incorrect_password = "Incorrect password. Try again..."
+
+[emoji]
+title = "EMOJIS"
+search_placeholder = "Search emoji..."
+no_emojis = "No emojis found"
+category_all = "All"
+
+[notifications_module]
+title = "Notifications"
+default_title = "Notification"
+default_summary = "Summary"
+default_body = "Message"
+
+[lockscreen]
+enter_password = "Enter Password"
+checking = "Checking..."
+incorrect_password = "Incorrect password"
+
+[settings]
+title = "Settings"
+tab_general = "General"
+tab_appearance = "Appearance"
+tab_lockscreen = "Lock Screen"
+general_header_title = "General"
+general_header_subtitle = "General system settings, power profiles, language, and default applications."
+power_plan_title = "Power Plan"
+power_plan_subtitle = "Adjusts processor power and consumption via power-profiles-daemon."
+language_title = "Interface Language"
+language_subtitle = "Changes the active language for labels, controls, and system texts."
+default_apps_title = "Default Applications"
+default_apps_subtitle = "Configure the binaries or commands executed by Capsule for your primary tools."
+terminal_title = "Terminal"
+terminal_subtitle = "Launched with 'capsule terminal' or terminal apps."
+browser_title = "Web Browser"
+browser_subtitle = "Launched with 'capsule browser' or system links."
+editor_title = "Code / Text Editor"
+editor_subtitle = "Launched with 'capsule editor'. CLI editors run in terminal."
+custom_command_hint = "Or custom command:"
+select_app = "Select application..."
+select_language = "Select language..."
+write_command = "Type command..."
+ui_header_title = "Appearance & Dimensions"
+ui_header_subtitle = "Adjust corner radii, margins, spacing, and animation duration."
+capsule_style_title = "Capsule Style"
+capsule_style_subtitle = "Choose between normal floating capsule or concave screen-integrated capsule."
+capsule_style_normal = "Normal"
+capsule_style_concave = "Concave"
+capsule_round_title = "Capsule Radius"
+capsule_round_subtitle = "Corner curvature for main bar and modals (px)."
+satellite_round_title = "Satellite Radius"
+satellite_round_subtitle = "Corner curvature for satellite panels (wifi, bluetooth, etc)."
+cards_round_title = "Card Radius"
+cards_round_subtitle = "Corner curvature for dashboard cards and widgets."
+margin_top_title = "Top Margin"
+margin_top_subtitle = "Distance from top screen edge to the bar."
+idle_height_title = "Base Height (Idle)"
+idle_height_subtitle = "Resting height of the capsule in the top bar."
+gap_title = "Element Gap"
+gap_subtitle = "Spacing between orbital panels and modules."
+anim_duration_title = "Animation Duration (ms)"
+anim_duration_subtitle = "Total transition time. Set to 0 to disable."
+lockscreen_header_title = "Lock Screen"
+lockscreen_header_subtitle = "Configure auto-suspend, clock format, and authentication screen controls."
+idle_timeout_title = "Idle Timeout"
+idle_timeout_subtitle = "Lock after {minutes} min of inactivity (0 = disabled)."
+time_format_title = "Time Format"
+time_format_subtitle = "Chrono syntax (e.g. %H:%M for 24h, %I:%M %p for 12h)."
+date_format_title = "Date Format"
+date_format_subtitle = "Chrono syntax for date below the main clock."
+show_clock_title = "Show Clock"
+show_clock_subtitle = "Shows time and date in screen center."
+show_media_title = "Media Player"
+show_media_subtitle = "Shows MPRIS controls and lyrics on lockscreen."
+seconds_suffix = "{seconds} sec"

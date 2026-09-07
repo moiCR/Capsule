@@ -3,6 +3,7 @@ use ui::theme::Theme;
 
 use crate::capsule::modules::polkit::PolkitModule;
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_auth_dialog(
     user_name: &str,
     req_message: &str,
@@ -13,10 +14,21 @@ pub fn render_auth_dialog(
     theme: &Theme,
     cx: &mut Context<PolkitModule>,
 ) -> impl IntoElement {
-    let lang = if cx.has_global::<ui::language::Language>() {
-        cx.global::<ui::language::Language>().clone()
+    let (auth_required, user_prefix, verifying, cancel) = if cx.has_global::<services::AppState>() {
+        let lang = &cx.global::<services::AppState>().language;
+        (
+            lang.get("polkit.auth_required"),
+            lang.get("polkit.user_prefix"),
+            lang.get("polkit.verifying"),
+            lang.get("common.cancel"),
+        )
     } else {
-        ui::language::Language::default()
+        (
+            "Autenticación Requerida".to_string(),
+            "Usuario: ".to_string(),
+            "Verificando contraseña...".to_string(),
+            "Cancelar".to_string(),
+        )
     };
 
     let masked_password = "•".repeat(password.len());
@@ -51,13 +63,13 @@ pub fn render_auth_dialog(
                                 .text_sm()
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.foreground())
-                                .child(lang.polkit.auth_required),
+                                .child(auth_required),
                         )
                         .child(
                             div()
                                 .text_xs()
                                 .text_color(theme.foreground_muted())
-                                .child(format!("{}{user_name}", lang.polkit.user_prefix)),
+                                .child(format!("{user_prefix}{user_name}")),
                         ),
                 ),
         )
@@ -95,7 +107,7 @@ pub fn render_auth_dialog(
                         .child(div().flex_1().text_sm().child(if is_authenticating {
                             div()
                                 .text_color(theme.foreground_muted())
-                                .child(lang.polkit.verifying.clone())
+                                .child(verifying.clone())
                         } else if password.is_empty() {
                             div()
                                 .text_color(if is_error {
@@ -148,7 +160,7 @@ pub fn render_auth_dialog(
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(theme.foreground_muted())
-                                .child(lang.common.cancel),
+                                .child(cancel),
                         ),
                 )
                 .child(
@@ -176,7 +188,7 @@ pub fn render_auth_dialog(
                                     theme.background()
                                 })
                                 .child(if is_authenticating {
-                                    lang.polkit.verifying
+                                    verifying
                                 } else {
                                     "Autenticar".to_string()
                                 }),

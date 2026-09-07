@@ -1,0 +1,161 @@
+name = "Español"
+code = "es"
+notifications = "Notificaciones"
+
+[common]
+cancel = "Cancelar"
+save = "Guardar"
+close = "Cerrar"
+ok = "Aceptar"
+authenticate = "Autenticar"
+
+[datetime]
+today = "Hoy"
+days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+days_short = ["L", "M", "M", "J", "V", "S", "D"]
+months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+header_date_format = "{weekday}, {day} de {month}"
+
+[power]
+title = "PLAN DE ENERGÍA"
+performance = "Rendimiento"
+balanced = "Equilibrado"
+power_saver = "Ahorro"
+
+[dashboard]
+greeting_morning = "Buenos días"
+greeting_afternoon = "Buenas tardes"
+greeting_evening = "Buenas noches"
+notifications_title = "Notificaciones"
+clear_all = "Limpiar todo"
+no_notifications = "Sin notificaciones"
+no_media = "Sin reproducción"
+sound = "Sonido"
+volume = "Volumen"
+bluetooth = "Bluetooth"
+dnd = "No molestar"
+enabled = "Activado"
+disabled = "Desactivado"
+connected = "Conectado"
+disconnected = "Desconectado"
+
+[quick_settings]
+wifi_networks = "Redes Wi-Fi"
+no_wifi_found = "No hay redes Wi-Fi encontradas"
+bt_devices = "Dispositivos Bluetooth"
+no_bt_found = "No hay dispositivos Bluetooth"
+ethernet = "Ethernet"
+
+[clipboard]
+title = "PORTAPAPELES"
+search_placeholder = "Buscar en el historial..."
+empty_history = "No hay elementos en el historial"
+empty_item = "[Elemento vacío]"
+
+[launcher]
+title = "LANZADOR"
+search_placeholder = "Buscar aplicaciones..."
+no_apps = "No se encontraron aplicaciones"
+navigate_hint = "↑↓ navegar"
+open_hint = "↵ abrir"
+close_hint = "esc cerrar"
+
+[themes]
+title = "TEMAS"
+search_placeholder = "Buscar temas..."
+no_themes = "No se encontraron temas"
+apply_hint = "↵ Aplicar"
+
+[wallpaper]
+title = "FONDOS DE PANTALLA"
+no_wallpapers = "No hay imágenes en ~/Wallpapers"
+
+[volume]
+title = "VOLUMEN"
+audio_output = "Salida de audio"
+muted = "Silenciado"
+
+[tray]
+title = "BANDEJA"
+no_menu = "Sin menú disponible"
+open_app = "Abrir aplicación"
+
+[polkit]
+auth_required = "Autenticación Requerida"
+user_prefix = "Usuario: "
+verifying = "Verificando contraseña..."
+incorrect_password = "Contraseña incorrecta. Reintenta..."
+
+[emoji]
+title = "EMOJIS"
+search_placeholder = "Buscar emoji..."
+no_emojis = "No se encontraron emojis"
+category_all = "Todos"
+
+[notifications_module]
+title = "Notificaciones"
+default_title = "Notificación"
+default_summary = "Resumen"
+default_body = "Mensaje"
+
+[lockscreen]
+enter_password = "Ingresa la contraseña"
+checking = "Verificando..."
+incorrect_password = "Contraseña incorrecta"
+
+[settings]
+title = "Configuración"
+tab_general = "General"
+tab_appearance = "Apariencia"
+tab_lockscreen = "Bloqueo"
+general_header_title = "General"
+general_header_subtitle = "Configuración general del sistema, perfiles de energía, idioma y aplicaciones predeterminadas."
+power_plan_title = "Plan de Energía"
+power_plan_subtitle = "Ajusta el consumo y velocidad del procesador vía power-profiles-daemon."
+language_title = "Idioma de la Interfaz"
+language_subtitle = "Cambia el idioma activo de las etiquetas, controles y textos del sistema."
+default_apps_title = "Aplicaciones Predeterminadas"
+default_apps_subtitle = "Configura los binarios o comandos ejecutados por Capsule para tus herramientas principales."
+terminal_title = "Terminal"
+terminal_subtitle = "Lanzado con 'capsule terminal' o apps en terminal."
+browser_title = "Navegador Web"
+browser_subtitle = "Lanzado con 'capsule browser' o links del sistema."
+editor_title = "Editor de Código / Texto"
+editor_subtitle = "Lanzado con 'capsule editor'. Si es CLI, se ejecuta en terminal."
+custom_command_hint = "O comando personalizado:"
+select_app = "Seleccionar aplicación..."
+select_language = "Seleccionar idioma..."
+write_command = "Escribir comando..."
+ui_header_title = "Apariencia & Dimensiones"
+ui_header_subtitle = "Ajusta los radios, márgenes, separación de elementos y la velocidad de animación de la interfaz."
+capsule_style_title = "Estilo de Cápsula"
+capsule_style_subtitle = "Elige entre la cápsula flotante normal o la cápsula cóncava integrada a la pantalla."
+capsule_style_normal = "Normal"
+capsule_style_concave = "Cóncava"
+capsule_round_title = "Radio de la Cápsula"
+capsule_round_subtitle = "Curvatura de las esquinas de la barra principal y modales (px)."
+satellite_round_title = "Radio de Satélites"
+satellite_round_subtitle = "Curvatura de esquinas para paneles orbitales (wifi, bluetooth, etc)."
+cards_round_title = "Radio de Tarjetas"
+cards_round_subtitle = "Curvatura de esquinas para tarjetas del dashboard y widgets."
+margin_top_title = "Margen Superior"
+margin_top_subtitle = "Distancia desde el borde superior de la pantalla hasta la barra."
+idle_height_title = "Altura Base (Idle)"
+idle_height_subtitle = "Altura en reposo de la cápsula en la barra superior."
+gap_title = "Separación entre Elementos (Gap)"
+gap_subtitle = "Espaciado entre paneles orbitales y módulos."
+anim_duration_title = "Duración de Animación (ms)"
+anim_duration_subtitle = "Tiempo total de transiciones. Establece 0 para desactivar."
+lockscreen_header_title = "Pantalla de Bloqueo"
+lockscreen_header_subtitle = "Configura la suspensión automática, formato del reloj y controles en la pantalla de autenticación."
+idle_timeout_title = "Tiempo de Inactividad"
+idle_timeout_subtitle = "Bloquear tras {minutes} min sin actividad (0 = desactivado)."
+time_format_title = "Formato de Hora"
+time_format_subtitle = "Sintaxis chrono (ej: %H:%M para 24h, %I:%M %p para 12h)."
+date_format_title = "Formato de Fecha"
+date_format_subtitle = "Sintaxis chrono para la fecha bajo el reloj principal."
+show_clock_title = "Mostrar Reloj"
+show_clock_subtitle = "Muestra la hora y fecha en el centro de la pantalla."
+show_media_title = "Reproductor Multimedia"
+show_media_subtitle = "Muestra controles MPRIS y letras de canciones en el lockscreen."
+seconds_suffix = "{seconds} seg"

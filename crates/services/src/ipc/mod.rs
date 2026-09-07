@@ -14,7 +14,6 @@ pub enum IpcCommand {
     ToggleDashboard,
     ToggleNotification,
     ToggleSelectTheme,
-    ToggleCreateTheme,
     ToggleClipboard,
     ToggleEmoji,
     ShowLauncher,
@@ -50,7 +49,6 @@ impl FromStr for IpcCommand {
             "select-theme" | "toggle-select-theme" | "themes" | "theme" => {
                 Ok(IpcCommand::ToggleSelectTheme)
             }
-            "create-theme" | "toggle-create-theme" => Ok(IpcCommand::ToggleCreateTheme),
             "toggle-clipboard" | "toggle clipboard" | "clipboard" | "clip" => {
                 Ok(IpcCommand::ToggleClipboard)
             }
@@ -82,7 +80,6 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::ToggleDashboard => "toggle-dashboard".to_string(),
         IpcCommand::ToggleNotification => "toggle-notification".to_string(),
         IpcCommand::ToggleSelectTheme => "select-theme".to_string(),
-        IpcCommand::ToggleCreateTheme => "create-theme".to_string(),
         IpcCommand::ToggleClipboard => "toggle-clipboard".to_string(),
         IpcCommand::ToggleEmoji => "toggle-emoji".to_string(),
         IpcCommand::ShowLauncher => "show-launcher".to_string(),

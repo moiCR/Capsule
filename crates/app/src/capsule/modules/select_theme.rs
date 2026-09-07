@@ -1,5 +1,5 @@
 use gpui::{
-    Context, EventEmitter, FocusHandle, Focusable, FontWeight, KeyDownEvent, Render, ScrollHandle,
+    Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, KeyDownEvent, Render,
     Window, div, prelude::*, px, svg,
 };
 use ui::theme::Theme;
@@ -9,30 +9,42 @@ use crate::capsule::widgets::select_theme::theme_card::render_theme_card;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectThemeEvent {
-    CreateThemeRequested,
     ThemeSelected,
 }
 
 pub struct SelectThemeModule {
     focus_handle: FocusHandle,
-    scroll_handle: ScrollHandle,
     themes: Vec<ThemeItem>,
+    query: String,
+    pub selected_idx: usize,
 }
 
 impl SelectThemeModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let scroll_handle = ScrollHandle::new();
         let themes = Self::load_themes(cx);
+        let selected_idx = if cx.has_global::<ThemeManager>() {
+            let curr = &cx.global::<ThemeManager>().current_theme;
+            themes.iter().position(|t| &t.theme == curr).unwrap_or(0)
+        } else {
+            0
+        };
         Self {
             focus_handle,
-            scroll_handle,
             themes,
+            query: String::new(),
+            selected_idx,
         }
     }
 
     pub fn refresh_themes(&mut self, cx: &mut Context<Self>) {
         self.themes = Self::load_themes(cx);
+        if cx.has_global::<ThemeManager>() {
+            let curr = &cx.global::<ThemeManager>().current_theme;
+            if let Some(pos) = self.themes.iter().position(|t| &t.theme == curr) {
+                self.selected_idx = pos;
+            }
+        }
         cx.notify();
     }
 
@@ -44,12 +56,61 @@ impl SelectThemeModule {
         }
     }
 
+    pub fn filtered_themes(&self) -> Vec<ThemeItem> {
+        if self.query.is_empty() {
+            self.themes.clone()
+        } else {
+            let q = self.query.to_lowercase();
+            self.themes
+                .iter()
+                .filter(|t| t.name.to_lowercase().contains(&q))
+                .cloned()
+                .collect()
+        }
+    }
+
     pub fn select_theme(&mut self, theme: Theme, cx: &mut Context<Self>) {
         if cx.has_global::<ThemeManager>() {
             cx.global_mut::<ThemeManager>().set_theme(theme);
             cx.set_global(cx.global::<ThemeManager>().current_theme.clone());
         }
         cx.emit(SelectThemeEvent::ThemeSelected);
+    }
+
+    pub fn set_selected_idx(&mut self, idx: usize, cx: &mut Context<Self>) {
+        self.selected_idx = idx;
+        cx.notify();
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_themes();
+        if !filtered.is_empty() {
+            let total = filtered.len();
+            self.selected_idx = if self.selected_idx == 0 {
+                total - 1
+            } else {
+                self.selected_idx - 1
+            };
+            cx.notify();
+        }
+    }
+
+    pub fn select_next(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_themes();
+        if !filtered.is_empty() {
+            let total = filtered.len();
+            self.selected_idx = (self.selected_idx + 1) % total;
+            cx.notify();
+        }
+    }
+
+    pub fn apply_selected(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_themes();
+        if !filtered.is_empty() {
+            let idx = self.selected_idx.min(filtered.len() - 1);
+            let theme = filtered[idx].theme.clone();
+            self.select_theme(theme, cx);
+        }
     }
 
     fn handle_key_down(
@@ -59,8 +120,78 @@ impl SelectThemeModule {
         cx: &mut Context<Self>,
     ) {
         let key = event.keystroke.key.as_str();
-        if key == "escape" {
-            cx.emit(SelectThemeEvent::ThemeSelected);
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "u" => {
+                    self.query.clear();
+                    self.selected_idx = 0;
+                    cx.notify();
+                    return;
+                }
+                "w" => {
+                    let trimmed = self.query.trim_end();
+                    let new_q = if let Some(idx) = trimmed.rfind(' ') {
+                        trimmed[..idx].to_string()
+                    } else {
+                        String::new()
+                    };
+                    self.query = new_q;
+                    self.selected_idx = 0;
+                    cx.notify();
+                    return;
+                }
+                "v" => {
+                    if let Some(item) = cx.read_from_clipboard() {
+                        if let Some(text) = item.text() {
+                            let clean_text: String =
+                                text.chars().filter(|c| !c.is_control()).collect();
+                            if !clean_text.is_empty() {
+                                self.query.push_str(&clean_text);
+                                self.selected_idx = 0;
+                                cx.notify();
+                            }
+                        }
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+        match key {
+            "escape" => {
+                cx.emit(SelectThemeEvent::ThemeSelected);
+            }
+            "left" => {
+                self.select_prev(cx);
+            }
+            "right" => {
+                self.select_next(cx);
+            }
+            "enter" => {
+                self.apply_selected(cx);
+            }
+            "backspace" => {
+                if !self.query.is_empty() {
+                    self.query.pop();
+                    self.selected_idx = 0;
+                    cx.notify();
+                }
+            }
+            _ => {
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+                if text.chars().count() == 1 && !ctrl {
+                    self.query.push_str(text);
+                    self.selected_idx = 0;
+                    cx.notify();
+                }
+            }
         }
     }
 }
@@ -76,15 +207,33 @@ impl Focusable for SelectThemeModule {
 impl Render for SelectThemeModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        let current_theme = theme.clone();
+
+        let (search_placeholder, no_themes, apply_hint) = if cx.has_global::<services::AppState>() {
+            let lang = &cx.global::<services::AppState>().language;
+            (
+                lang.get("themes.search_placeholder"),
+                lang.get("themes.no_themes"),
+                lang.get("themes.apply_hint"),
+            )
+        } else {
+            (
+                "Buscar temas...".to_string(),
+                "No se encontraron temas".to_string(),
+                "↵ Aplicar".to_string(),
+            )
+        };
 
         window.focus(&self.focus_handle, cx);
 
-        let lang = if cx.has_global::<ui::language::Language>() {
-            cx.global::<ui::language::Language>().clone()
+        let filtered = self.filtered_themes();
+        let total = filtered.len();
+        let current_pos = if total == 0 {
+            0
         } else {
-            ui::language::Language::default()
+            (self.selected_idx % total) + 1
         };
+
+        let has_query = !self.query.is_empty();
 
         let header = div()
             .flex()
@@ -95,70 +244,120 @@ impl Render for SelectThemeModule {
             .child(
                 div()
                     .flex()
+                    .flex_row()
                     .items_center()
-                    .gap_2()
+                    .gap_2p5()
                     .child(
                         svg()
-                            .path("palette_2.svg")
-                            .size(px(16.0))
-                            .text_color(theme.accent()),
+                            .path("search.svg")
+                            .size(px(14.0))
+                            .text_color(theme.foreground_muted().opacity(0.8)),
                     )
-                    .child(
+                    .child(if has_query {
                         div()
-                            .font_weight(FontWeight::BOLD)
-                            .text_size(px(14.0))
+                            .text_size(px(13.0))
+                            .font_weight(FontWeight::MEDIUM)
                             .text_color(theme.foreground())
-                            .child(lang.themes.select_title),
-                    ),
+                            .child(self.query.clone())
+                    } else {
+                        div()
+                            .text_size(px(13.0))
+                            .text_color(theme.foreground_muted().opacity(0.5))
+                            .child(search_placeholder)
+                    }),
             )
             .child(
                 div()
-                    .id("create-theme-btn")
-                    .cursor_pointer()
-                    .px_3()
-                    .py_1p5()
-                    .rounded_full()
-                    .bg(theme.accent())
-                    .on_click(cx.listener(|_this, _, _, cx| {
-                        cx.emit(SelectThemeEvent::CreateThemeRequested);
-                    }))
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(theme.background())
-                            .child(lang.themes.create_button),
-                    ),
+                    .text_size(px(12.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted().opacity(0.8))
+                    .child(format!("{}/{}", current_pos, total)),
             );
 
-        let divider = div().w_full().h(px(1.0)).bg(theme.background_alt());
-
-        let mut theme_cards = div()
-            .id("select-theme-list")
-            .track_scroll(&self.scroll_handle)
+        let mut carousel_row = div()
             .flex()
-            .flex_col()
-            .gap_2p5()
+            .flex_row()
+            .items_center()
+            .justify_center()
             .w_full()
-            .max_h(px(380.0))
-            .overflow_scroll();
+            .gap(px(12.0))
+            .overflow_hidden();
 
-        for item in &self.themes {
-            let card = render_theme_card(item, &current_theme, &theme, cx);
-            theme_cards = theme_cards.child(card);
+        if total == 0 {
+            carousel_row = carousel_row.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .h(px(84.0))
+                    .text_size(px(13.0))
+                    .text_color(theme.foreground_muted())
+                    .child(no_themes),
+            );
+        } else if total >= 5 {
+            let active_idx = self.selected_idx % total;
+            for offset in -2i32..=2i32 {
+                let idx = (active_idx as i32 + offset).rem_euclid(total as i32) as usize;
+                let slot_key = match offset {
+                    -2 => "slot-prev2",
+                    -1 => "slot-prev1",
+                    0 => "slot-center",
+                    1 => "slot-next1",
+                    2 => "slot-next2",
+                    _ => "slot-other",
+                };
+                let card = render_theme_card(
+                    ElementId::from(slot_key),
+                    &filtered[idx],
+                    offset == 0,
+                    idx,
+                    &theme,
+                    cx,
+                );
+                carousel_row = carousel_row.child(card);
+            }
+        } else {
+            let active_idx = self.selected_idx % total;
+            for (i, item) in filtered.iter().enumerate() {
+                let card = render_theme_card(
+                    ElementId::NamedInteger("theme-card".into(), i as u64),
+                    item,
+                    i == active_idx,
+                    i,
+                    &theme,
+                    cx,
+                );
+                carousel_row = carousel_row.child(card);
+            }
         }
+
+        let footer = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_end()
+            .w_full()
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted().opacity(0.6))
+                    .child(apply_hint),
+            );
 
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .w(px(348.0))
-            .p_4()
-            .gap_3p5()
+            .justify_between()
+            .w(px(680.0))
+            .h(px(180.0))
+            .px(px(24.0))
+            .py(px(16.0))
             .overflow_hidden()
             .child(header)
-            .child(divider)
-            .child(theme_cards)
+            .child(carousel_row)
+            .child(footer)
     }
 }

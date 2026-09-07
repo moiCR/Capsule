@@ -17,26 +17,71 @@ pub fn render_lockscreen_section(
         16.0
     };
 
+    let (
+        header_title,
+        header_sub,
+        idle_title,
+        idle_sub,
+        time_title,
+        time_sub,
+        date_title,
+        date_sub,
+        clock_title,
+        clock_sub,
+        media_title,
+        media_sub,
+    ) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("settings.lockscreen_header_title"),
+            lang.get("settings.lockscreen_header_subtitle"),
+            lang.get("settings.idle_timeout_title"),
+            lang.get_with(
+                "settings.idle_timeout_subtitle",
+                &[("minutes", &idle_mins.to_string())],
+            ),
+            lang.get("settings.time_format_title"),
+            lang.get("settings.time_format_subtitle"),
+            lang.get("settings.date_format_title"),
+            lang.get("settings.date_format_subtitle"),
+            lang.get("settings.show_clock_title"),
+            lang.get("settings.show_clock_subtitle"),
+            lang.get("settings.show_media_title"),
+            lang.get("settings.show_media_subtitle"),
+        )
+    } else {
+        (
+            "Pantalla de Bloqueo".to_string(),
+            "Configura la suspensión automática, formato del reloj y controles en la pantalla de autenticación.".to_string(),
+            "Tiempo de Inactividad".to_string(),
+            format!("Bloquear tras {idle_mins} min sin actividad (0 = desactivado)."),
+            "Formato de Hora".to_string(),
+            "Sintaxis chrono (ej: %H:%M para 24h, %I:%M %p para 12h).".to_string(),
+            "Formato de Fecha".to_string(),
+            "Sintaxis chrono para la fecha bajo el reloj principal.".to_string(),
+            "Mostrar Reloj".to_string(),
+            "Muestra la hora y fecha en el centro de la pantalla.".to_string(),
+            "Reproductor Multimedia".to_string(),
+            "Muestra controles MPRIS y letras de canciones en el lockscreen.".to_string(),
+        )
+    };
+
     div()
         .flex()
         .flex_col()
         .gap(px(12.0))
         .w_full()
-        .child(render_section_header(
-            "Pantalla de Bloqueo",
-            "Configura la suspensión automática, formato del reloj y controles en la pantalla de autenticación.",
-            theme,
-        ))
+        .child(render_section_header(&header_title, &header_sub, theme))
         .child(render_setting_row(
-            "Tiempo de Inactividad",
-            &format!("Bloquear tras {idle_mins} min sin actividad (0 = desactivado)."),
+            &idle_title,
+            &idle_sub,
             render_timeout_stepper(module, theme, cx),
             cards_round,
             theme,
         ))
         .child(render_setting_row(
-            "Formato de Hora",
-            "Sintaxis chrono (ej: %H:%M para 24h, %I:%M %p para 12h).",
+            &time_title,
+            &time_sub,
             render_text_input(
                 SettingsField::TimeFormat,
                 &module.time_format_input,
@@ -49,8 +94,8 @@ pub fn render_lockscreen_section(
             theme,
         ))
         .child(render_setting_row(
-            "Formato de Fecha",
-            "Sintaxis chrono para la fecha bajo el reloj principal.",
+            &date_title,
+            &date_sub,
             render_text_input(
                 SettingsField::DateFormat,
                 &module.date_format_input,
@@ -63,8 +108,8 @@ pub fn render_lockscreen_section(
             theme,
         ))
         .child(render_setting_row(
-            "Mostrar Reloj",
-            "Muestra la hora y fecha en el centro de la pantalla.",
+            &clock_title,
+            &clock_sub,
             render_toggle(
                 "toggle-show-clock",
                 module.show_clock,
@@ -77,8 +122,8 @@ pub fn render_lockscreen_section(
             theme,
         ))
         .child(render_setting_row(
-            "Reproductor Multimedia",
-            "Muestra controles MPRIS y letras de canciones en el lockscreen.",
+            &media_title,
+            &media_sub,
             render_toggle(
                 "toggle-show-media",
                 module.show_media_player,
@@ -102,6 +147,15 @@ fn render_timeout_stepper(
     let val_up = current_secs + 300;
     let val_down = current_secs.saturating_sub(300);
 
+    let secs_label = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().language.get_with(
+            "settings.seconds_suffix",
+            &[("seconds", &current_secs.to_string())],
+        )
+    } else {
+        format!("{current_secs} seg")
+    };
+
     div()
         .flex()
         .flex_row()
@@ -110,15 +164,16 @@ fn render_timeout_stepper(
         .child(
             div()
                 .id("lock-timeout-down")
-                .w(px(26.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.surface().opacity(0.4))
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .w(px(24.0))
+                .h(px(24.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.5))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.bg(theme.surface()))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(14.0))
+                .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .cursor_pointer()
@@ -129,12 +184,12 @@ fn render_timeout_stepper(
         )
         .child(
             div()
-                .w(px(90.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.background())
+                .w(px(72.0))
+                .h(px(24.0))
+                .rounded(px(6.0))
+                .bg(theme.surface().opacity(0.25))
                 .border_1()
-                .border_color(theme.surface().opacity(0.6))
+                .border_color(theme.surface().opacity(0.2))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -143,21 +198,22 @@ fn render_timeout_stepper(
                         .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.foreground())
-                        .child(format!("{} seg", current_secs)),
+                        .child(secs_label),
                 ),
         )
         .child(
             div()
                 .id("lock-timeout-up")
-                .w(px(26.0))
-                .h(px(26.0))
-                .rounded(px(8.0))
-                .bg(theme.surface().opacity(0.4))
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .w(px(24.0))
+                .h(px(24.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.5))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.bg(theme.surface()))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(14.0))
+                .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .cursor_pointer()
@@ -262,17 +318,17 @@ fn render_toggle(
 
     div()
         .id(id)
-        .w(px(38.0))
-        .h(px(22.0))
+        .w(px(34.0))
+        .h(px(18.0))
         .rounded_full()
         .bg(bg)
-        .p(px(2.5))
+        .p(px(2.0))
         .cursor_pointer()
         .on_click(on_click)
         .child(
             div()
-                .w(px(17.0))
-                .h(px(17.0))
+                .w(px(14.0))
+                .h(px(14.0))
                 .rounded_full()
                 .bg(gpui::white())
                 .ml(if is_on { px(16.0) } else { px(0.0) }),
