@@ -1,9 +1,11 @@
 pub mod defaults;
 pub mod lock_screen_config;
+pub mod mpris_config;
 pub mod ui_config;
 
 pub use defaults::Defaults;
 pub use lock_screen_config::{LockScreenConfig, LockscreenConfig};
+pub use mpris_config::MprisConfig;
 pub use ui_config::{CapsuleStyle, UIConfig, UiConfig};
 
 use arc_swap::ArcSwap;
@@ -24,6 +26,10 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub ui: UIConfig,
+
+    #[serde(default)]
+    #[serde(alias = "music")]
+    pub mpris: MprisConfig,
 }
 
 impl AppConfig {

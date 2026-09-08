@@ -357,6 +357,7 @@ impl Render for EmojiModule {
                     }))
                     .child(if use_emoji_label {
                         div()
+                            .font_family("Noto Color Emoji")
                             .text_size(px(14.0))
                             .child(label.to_string())
                             .into_any_element()
@@ -437,7 +438,12 @@ impl Render for EmojiModule {
                     .gap_2()
                     .flex_1()
                     .overflow_hidden()
-                    .child(div().text_size(px(18.0)).child(emoji))
+                    .child(
+                        div()
+                            .font_family("Noto Color Emoji")
+                            .text_size(px(18.0))
+                            .child(emoji),
+                    )
                     .child(
                         div()
                             .flex()

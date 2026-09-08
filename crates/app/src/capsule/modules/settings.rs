@@ -36,6 +36,7 @@ pub enum SettingsField {
     TimeFormat = 11,
     DateFormat = 12,
     Language = 13,
+    MusicPlayer = 14,
 }
 
 pub enum SettingsEvent {
@@ -50,6 +51,9 @@ pub struct SettingsModule {
     pub terminal_input: String,
     pub browser_input: String,
     pub editor_input: String,
+
+    pub music_players: Vec<String>,
+    pub music_player_input: String,
 
     pub capsule_round_input: String,
     pub satellite_round_input: String,
@@ -96,6 +100,8 @@ impl SettingsModule {
             terminal_input: String::new(),
             browser_input: String::new(),
             editor_input: String::new(),
+            music_players: Vec::new(),
+            music_player_input: String::new(),
             capsule_round_input: String::new(),
             satellite_round_input: String::new(),
             cards_round_input: String::new(),
@@ -140,6 +146,9 @@ impl SettingsModule {
         self.browser_input = cfg.defaults.browser.clone();
         self.editor_input = cfg.defaults.editor.clone();
 
+        self.music_players = cfg.mpris.players.clone();
+        self.music_player_input.clear();
+
         self.capsule_round_input = format!("{:.0}", cfg.ui.capsule_round);
         self.satellite_round_input = format!("{:.0}", cfg.ui.satellite_round);
         self.cards_round_input = format!("{:.0}", cfg.ui.cards_round);
@@ -153,6 +162,31 @@ impl SettingsModule {
         self.date_format_input = cfg.lockscreen.date_format.clone();
         self.show_clock = cfg.lockscreen.show_clock;
         self.show_media_player = cfg.lockscreen.show_media_player;
+    }
+
+    pub fn add_music_player(&mut self, player: String, cx: &mut Context<Self>) {
+        let clean = player.trim().to_string();
+        if clean.is_empty() {
+            return;
+        }
+        if !self
+            .music_players
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(&clean))
+        {
+            self.music_players.push(clean);
+            self.music_player_input.clear();
+            self.save_to_app_config(cx);
+            cx.notify();
+        }
+    }
+
+    pub fn remove_music_player(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index < self.music_players.len() {
+            self.music_players.remove(index);
+            self.save_to_app_config(cx);
+            cx.notify();
+        }
     }
 
     pub fn set_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
@@ -382,12 +416,14 @@ impl SettingsModule {
         let date_format = self.date_format_input.clone();
         let show_clock = self.show_clock;
         let show_media_player = self.show_media_player;
+        let music_players = self.music_players.clone();
 
         let _ = cx.global::<AppState>().config.update(|cfg| {
             cfg.ui.capsule_style = capsule_style;
             cfg.defaults.terminal = terminal;
             cfg.defaults.browser = browser;
             cfg.defaults.editor = editor;
+            cfg.mpris.players = music_players;
 
             cfg.ui.capsule_round = capsule_round;
             cfg.ui.satellite_round = satellite_round;
@@ -474,6 +510,10 @@ impl SettingsModule {
 
         match key {
             "enter" => {
+                if self.active_field == Some(SettingsField::MusicPlayer) {
+                    let text = self.music_player_input.clone();
+                    self.add_music_player(text, cx);
+                }
                 self.active_field = None;
                 self.save_to_app_config(cx);
                 cx.notify();
@@ -503,6 +543,7 @@ impl SettingsModule {
             SettingsField::Terminal => &mut self.terminal_input,
             SettingsField::Browser => &mut self.browser_input,
             SettingsField::Editor => &mut self.editor_input,
+            SettingsField::MusicPlayer => &mut self.music_player_input,
             SettingsField::CapsuleRound => &mut self.capsule_round_input,
             SettingsField::SatelliteRound => &mut self.satellite_round_input,
             SettingsField::CardsRound => &mut self.cards_round_input,
@@ -523,6 +564,7 @@ impl SettingsModule {
             SettingsField::Terminal => &mut self.terminal_input,
             SettingsField::Browser => &mut self.browser_input,
             SettingsField::Editor => &mut self.editor_input,
+            SettingsField::MusicPlayer => &mut self.music_player_input,
             SettingsField::CapsuleRound => &mut self.capsule_round_input,
             SettingsField::SatelliteRound => &mut self.satellite_round_input,
             SettingsField::CardsRound => &mut self.cards_round_input,

@@ -158,8 +158,16 @@ impl DashboardModule {
         } else {
             0
         };
-        let tray_w = if sni_count > 0 { sni_count as f32 * 30.0 } else { 0.0 };
-        let battery_w = if self.battery_percentage.is_some() { 55.0 } else { 0.0 };
+        let tray_w = if sni_count > 0 {
+            sni_count as f32 * 30.0
+        } else {
+            0.0
+        };
+        let battery_w = if self.battery_percentage.is_some() {
+            55.0
+        } else {
+            0.0
+        };
         let header_needed_w = 220.0 + tray_w + battery_w + 16.0 + 32.0;
         490.0_f32.max(header_needed_w)
     }

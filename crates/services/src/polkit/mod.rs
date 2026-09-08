@@ -374,7 +374,7 @@ async fn register_agent(server: PolkitAgentServer) -> Result<()> {
         interval.tick().await;
         if system_conn.is_closed() {
             break;
-       }
+        }
     }
 
     Err(anyhow::anyhow!("System D-Bus connection closed"))
@@ -452,13 +452,18 @@ async fn authenticate_via_socket(
             let info = trimmed.trim_start_matches("PAM_TEXT_INFO").trim();
             crate::log_info!("POLKIT", "PAM info: {info}");
         } else if trimmed == "SUCCESS" {
-            crate::log_info!("POLKIT", "Polkit authentication SUCCESS via agent-helper.socket");
+            crate::log_info!(
+                "POLKIT",
+                "Polkit authentication SUCCESS via agent-helper.socket"
+            );
             return Ok(());
         } else if trimmed == "FAILURE" {
-            crate::log_warn!("POLKIT", "Polkit authentication FAILURE via agent-helper.socket");
-            return Err(last_error_msg.unwrap_or_else(|| {
-                "Contraseña incorrecta. Inténtalo de nuevo.".to_string()
-            }));
+            crate::log_warn!(
+                "POLKIT",
+                "Polkit authentication FAILURE via agent-helper.socket"
+            );
+            return Err(last_error_msg
+                .unwrap_or_else(|| "Contraseña incorrecta. Inténtalo de nuevo.".to_string()));
         } else {
             crate::log_info!("POLKIT", "Unhandled polkit helper line: '{trimmed}'");
         }
@@ -566,7 +571,9 @@ pub async fn authenticate_user(
         {
             Ok(res) => return res,
             Err(_) => {
-                return Err("El servicio de autenticación tardó demasiado en responder.".to_string());
+                return Err(
+                    "El servicio de autenticación tardó demasiado en responder.".to_string()
+                );
             }
         }
     }
@@ -655,7 +662,10 @@ mod tests {
     #[test]
     fn test_get_current_session_id() {
         let session_id = get_current_session_id();
-        assert!(session_id.is_some(), "Expected session ID from env or procfs");
+        assert!(
+            session_id.is_some(),
+            "Expected session ID from env or procfs"
+        );
     }
 
     #[test]
@@ -666,4 +676,3 @@ mod tests {
         assert_eq!(pop_cancelled_cookie(), None);
     }
 }
-

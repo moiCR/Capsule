@@ -47,9 +47,9 @@ impl AppState {
         let language = LangService::new(&config.get().ui.language);
 
         Self {
-            config,
+            config: config.clone(),
             launcher: LauncherService::new(),
-            mpris: MprisService::new(),
+            mpris: MprisService::new(config),
             system: SystemService::new(),
             lyrics: LyricsService::new(),
             compositor,

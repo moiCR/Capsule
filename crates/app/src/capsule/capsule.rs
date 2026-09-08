@@ -149,6 +149,7 @@ impl Capsule {
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
+
                 super::modules::dashboard::DashboardEvent::CalendarClicked => {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let panel_h = super::satellites::calendar::compute_calendar_panel_height();
@@ -160,6 +161,7 @@ impl Capsule {
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
+
                 super::modules::dashboard::DashboardEvent::VolumeChevronClicked => {
                     let max_h = CapsuleMode::Dashboard.dimensions().1;
                     let sink_count = if cx.has_global::<AppState>() {

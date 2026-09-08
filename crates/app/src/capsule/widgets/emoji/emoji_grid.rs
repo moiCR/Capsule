@@ -45,5 +45,10 @@ pub fn render_emoji_cell(
             this.clear_cache();
             cx.emit(EmojiEvent::Close);
         }))
-        .child(div().text_size(px(24.0)).child(item.emoji.clone()))
+        .child(
+            div()
+                .font_family("Noto Color Emoji")
+                .text_size(px(24.0))
+                .child(item.emoji.clone()),
+        )
 }

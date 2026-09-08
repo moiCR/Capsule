@@ -53,6 +53,11 @@ pub fn render_general_section(
         browser_sub,
         editor_title,
         editor_sub,
+        music_title,
+        music_sub,
+        music_placeholder,
+        music_add,
+        music_empty,
     ) = if cx.has_global::<AppState>() {
         let lang = &cx.global::<AppState>().language;
         (
@@ -70,6 +75,11 @@ pub fn render_general_section(
             lang.get("settings.browser_subtitle"),
             lang.get("settings.editor_title"),
             lang.get("settings.editor_subtitle"),
+            lang.get("settings.music_players_title"),
+            lang.get("settings.music_players_subtitle"),
+            lang.get("settings.music_players_placeholder"),
+            lang.get("settings.music_players_add"),
+            lang.get("settings.music_players_empty"),
         )
     } else {
         (
@@ -87,6 +97,11 @@ pub fn render_general_section(
             "Lanzado con 'capsule browser' o links del sistema.".to_string(),
             "Editor de Código / Texto".to_string(),
             "Lanzado con 'capsule editor'. Si es CLI, se ejecuta en terminal.".to_string(),
+            "Reproductores de Música (MPRIS)".to_string(),
+            "Servicios MPRIS permitidos para control multimedia (ej. Spotify, Fastpotify).".to_string(),
+            "Nombre de la app (ej. Fastpotify)...".to_string(),
+            "Añadir".to_string(),
+            "No hay reproductores configurados.".to_string(),
         )
     };
 
@@ -163,6 +178,264 @@ pub fn render_general_section(
             cards_round,
             theme,
         ))
+        .child(render_music_players_card(
+            module,
+            &music_title,
+            &music_sub,
+            &music_placeholder,
+            &music_add,
+            &music_empty,
+            cards_round,
+            theme,
+            cx,
+        ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_music_players_card(
+    module: &SettingsModule,
+    title: &str,
+    subtitle: &str,
+    placeholder: &str,
+    add_label: &str,
+    empty_label: &str,
+    cards_round: f32,
+    theme: &Theme,
+    cx: &mut Context<SettingsModule>,
+) -> impl IntoElement {
+    let mut chips_row = div()
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .items_center()
+        .gap(px(6.0));
+
+    if module.music_players.is_empty() {
+        chips_row = chips_row.child(
+            div()
+                .text_size(px(11.0))
+                .text_color(theme.foreground_muted())
+                .child(empty_label.to_string()),
+        );
+    } else {
+        for (idx, player) in module.music_players.iter().enumerate() {
+            let is_spotify = player.to_lowercase().contains("spotify");
+            let icon_svg = if is_spotify {
+                "spotify.svg"
+            } else {
+                "music.svg"
+            };
+            let player_name = player.clone();
+
+            chips_row = chips_row.child(
+                div()
+                    .id(ElementId::NamedInteger(
+                        "music-player-chip".into(),
+                        idx as u64,
+                    ))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(6.0))
+                    .px_2p5()
+                    .py_1()
+                    .rounded_full()
+                    .bg(theme.surface().opacity(0.7))
+                    .border_1()
+                    .border_color(theme.surface().opacity(0.35))
+                    .child(
+                        svg()
+                            .path(icon_svg)
+                            .size(px(12.0))
+                            .text_color(theme.accent()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.foreground())
+                            .child(player_name),
+                    )
+                    .child(
+                        div()
+                            .id(ElementId::NamedInteger(
+                                "remove-music-player".into(),
+                                idx as u64,
+                            ))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(14.0))
+                            .h(px(14.0))
+                            .rounded_full()
+                            .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.remove_music_player(idx, cx);
+                            }))
+                            .child(
+                                svg()
+                                    .path("close.svg")
+                                    .size(px(8.0))
+                                    .text_color(theme.foreground_muted()),
+                            ),
+                    ),
+            );
+        }
+    }
+
+    let is_input_active = module.active_field == Some(SettingsField::MusicPlayer);
+    let border_color = if is_input_active {
+        theme.accent()
+    } else {
+        theme.surface().opacity(0.5)
+    };
+
+    let current_val = &module.music_player_input;
+    let input_field = div()
+        .id("music-player-input-box")
+        .flex()
+        .flex_row()
+        .items_center()
+        .w(px(220.0))
+        .px_3()
+        .py_1p5()
+        .rounded(px(24.0))
+        .bg(theme.background())
+        .border_1()
+        .border_color(border_color)
+        .cursor_text()
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.set_active_field(Some(SettingsField::MusicPlayer), cx);
+        }))
+        .child(
+            div()
+                .text_size(px(11.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if current_val.is_empty() {
+                    theme.foreground_muted()
+                } else {
+                    theme.foreground()
+                })
+                .truncate()
+                .child(if is_input_active {
+                    format!("{current_val}|")
+                } else if current_val.is_empty() {
+                    placeholder.to_string()
+                } else {
+                    current_val.clone()
+                }),
+        );
+
+    let add_btn = div()
+        .id("music-player-add-btn")
+        .flex()
+        .items_center()
+        .justify_center()
+        .px_3()
+        .py_1p5()
+        .rounded(px(24.0))
+        .bg(theme.accent())
+        .hover(|s| s.opacity(0.9))
+        .active(|s| s.opacity(0.75))
+        .cursor_pointer()
+        .on_click(cx.listener(|this, _, _, cx| {
+            let input = this.music_player_input.clone();
+            this.add_music_player(input, cx);
+            this.set_active_field(None, cx);
+        }))
+        .child(
+            div()
+                .text_size(px(11.0))
+                .font_weight(FontWeight::BOLD)
+                .text_color(theme.background())
+                .child(format!("+ {add_label}")),
+        );
+
+    let common_suggestions = ["Spotify", "Fastpotify"];
+    let mut suggestions_row = div().flex().flex_row().items_center().gap(px(6.0));
+    for sugg in common_suggestions {
+        if !module
+            .music_players
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(sugg))
+        {
+            let sugg_str = sugg.to_string();
+            suggestions_row = suggestions_row.child(
+                div()
+                    .id(ElementId::Name(format!("sugg-player-{sugg}").into()))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(4.0))
+                    .px_2p5()
+                    .py_1()
+                    .rounded_full()
+                    .bg(theme.surface().opacity(0.3))
+                    .border_1()
+                    .border_color(theme.surface().opacity(0.2))
+                    .hover(|s| {
+                        s.bg(theme.accent().opacity(0.15))
+                            .border_color(theme.accent().opacity(0.4))
+                    })
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.add_music_player(sugg_str.clone(), cx);
+                    }))
+                    .child(
+                        div()
+                            .text_size(px(10.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.accent())
+                            .child(format!("+ {sugg}")),
+                    ),
+            );
+        }
+    }
+
+    let input_actions = div()
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .items_center()
+        .gap(px(8.0))
+        .child(input_field)
+        .child(add_btn)
+        .child(suggestions_row);
+
+    div()
+        .id("music-players-card")
+        .flex()
+        .flex_col()
+        .w_full()
+        .px_4()
+        .py_3p5()
+        .rounded(px(cards_round))
+        .bg(theme.surface().opacity(0.4))
+        .border_1()
+        .border_color(theme.surface().opacity(0.25))
+        .gap(px(10.0))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.0))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(13.0))
+                        .text_color(theme.foreground())
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.0))
+                        .text_color(theme.foreground_muted())
+                        .child(subtitle.to_string()),
+                ),
+        )
+        .child(chips_row)
+        .child(input_actions)
 }
 
 fn render_power_selector(

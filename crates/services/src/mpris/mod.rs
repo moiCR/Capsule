@@ -1,5 +1,6 @@
 pub mod dbus;
 
+use crate::ConfigService;
 use arc_swap::ArcSwap;
 use dbus::MediaPlayer2PlayerProxy;
 use sha2::{Digest, Sha256};
@@ -37,12 +38,12 @@ pub struct MprisService {
 }
 
 impl MprisService {
-    pub fn new() -> Self {
+    pub fn new(config: ConfigService) -> Self {
         let players = Arc::new(ArcSwap::from_pointee(Vec::new()));
         let players_clone = players.clone();
 
         tokio::spawn(async move {
-            run_mpris_listener(players_clone).await;
+            run_mpris_listener(players_clone, config).await;
         });
 
         Self { players }
@@ -58,7 +59,9 @@ impl MprisService {
     }
 
     pub async fn fetch_all_players() -> Vec<MediaTrack> {
-        poll_all_players_dbus().await
+        let config = ConfigService::new();
+        let allowed = config.get().mpris.players.clone();
+        poll_all_players_dbus(&allowed).await
     }
 
     pub async fn play_pause_bus(bus_name: &str) -> bool {
@@ -75,11 +78,14 @@ impl MprisService {
 }
 
 async fn run_playerctl_fallback(requested_bus: &str, method: &str) -> bool {
-    let clean_player = if requested_bus.to_lowercase().contains("spotify") {
-        "spotify"
-    } else {
-        "player"
-    };
+    let raw_player = requested_bus
+        .strip_prefix("org.mpris.MediaPlayer2.")
+        .unwrap_or(requested_bus)
+        .split('.')
+        .next()
+        .unwrap_or(requested_bus);
+
+    let clean_player = raw_player.trim();
     let action = match method {
         "PlayPause" => "play-pause",
         "Next" => "next",
@@ -94,11 +100,14 @@ async fn run_playerctl_fallback(requested_bus: &str, method: &str) -> bool {
         action
     );
 
-    let cmd_fut = tokio::process::Command::new("playerctl")
-        .args(["-p", clean_player, action])
-        .status();
+    let mut cmd = tokio::process::Command::new("playerctl");
+    if !clean_player.is_empty() && clean_player != "player" {
+        cmd.args(["-p", clean_player, action]);
+    } else {
+        cmd.arg(action);
+    }
 
-    match tokio::time::timeout(Duration::from_millis(300), cmd_fut).await {
+    match tokio::time::timeout(Duration::from_millis(300), cmd.status()).await {
         Ok(Ok(st)) => {
             crate::log_info!("MPRIS", "playerctl completed with status: {:?}", st);
             st.success()
@@ -147,7 +156,7 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
             return true;
         }
 
-        if target != "org.mpris.MediaPlayer2.spotify" {
+        if target.to_lowercase().contains("spotify") && target != "org.mpris.MediaPlayer2.spotify" {
             let spot_fut = conn.call_method(
                 Some("org.mpris.MediaPlayer2.spotify"),
                 "/org/mpris/MediaPlayer2",
@@ -170,13 +179,14 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
 
 impl Default for MprisService {
     fn default() -> Self {
-        Self::new()
+        Self::new(ConfigService::new())
     }
 }
 
-async fn run_mpris_listener(players: Arc<ArcSwap<Vec<MediaTrack>>>) {
+async fn run_mpris_listener(players: Arc<ArcSwap<Vec<MediaTrack>>>, config: ConfigService) {
     loop {
-        let current_players = poll_all_players_dbus().await;
+        let allowed = config.get().mpris.players.clone();
+        let current_players = poll_all_players_dbus(&allowed).await;
         players.store(Arc::new(current_players));
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
@@ -235,6 +245,7 @@ async fn poll_single_player(connection: &Connection, mpris_name: String) -> Opti
 
         match raw_name.to_lowercase().as_str() {
             "spotify" => "Spotify".to_string(),
+            "fastpotify" => "Fastpotify".to_string(),
             "firefox" => "Firefox".to_string(),
             "chromium" => "Chromium".to_string(),
             "chrome" => "Chrome".to_string(),
@@ -276,7 +287,26 @@ async fn poll_single_player(connection: &Connection, mpris_name: String) -> Opti
     })
 }
 
-async fn poll_all_players_dbus() -> Vec<MediaTrack> {
+fn is_allowed_player(dbus_name: &str, allowed: &[String]) -> bool {
+    let lower_bus = dbus_name.to_lowercase();
+    let clean_id = lower_bus
+        .strip_prefix("org.mpris.mediaplayer2.")
+        .unwrap_or(&lower_bus);
+
+    allowed.iter().any(|allowed_item| {
+        let item_lower = allowed_item.trim().to_lowercase();
+        if item_lower.is_empty() {
+            return false;
+        }
+        let clean_item = item_lower
+            .strip_prefix("org.mpris.mediaplayer2.")
+            .unwrap_or(&item_lower);
+
+        clean_id.contains(clean_item) || lower_bus.contains(&item_lower)
+    })
+}
+
+async fn poll_all_players_dbus(allowed_players: &[String]) -> Vec<MediaTrack> {
     let connection = match get_session_conn().await {
         Some(conn) => conn,
         None => return Vec::new(),
@@ -310,7 +340,7 @@ async fn poll_all_players_dbus() -> Vec<MediaTrack> {
             let n = name.to_lowercase();
             n.starts_with("org.mpris.mediaplayer2.")
                 && !n.ends_with(".playerctld")
-                && n.contains("spotify")
+                && is_allowed_player(&n, allowed_players)
         })
         .collect();
 
@@ -413,5 +443,35 @@ fn extract_i64(v: &Value<'static>) -> Option<i64> {
             .downcast_ref::<i64>()
             .ok()
             .or_else(|| v.downcast_ref::<u64>().ok().map(|u| u as i64)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_allowed_player() {
+        let allowed = vec!["spotify".to_string(), "fastpotify".to_string()];
+        assert!(is_allowed_player(
+            "org.mpris.MediaPlayer2.spotify",
+            &allowed
+        ));
+        assert!(is_allowed_player(
+            "org.mpris.MediaPlayer2.spotify.instance_1",
+            &allowed
+        ));
+        assert!(is_allowed_player(
+            "org.mpris.MediaPlayer2.Fastpotify",
+            &allowed
+        ));
+        assert!(!is_allowed_player(
+            "org.mpris.MediaPlayer2.firefox.instance_1",
+            &allowed
+        ));
+        assert!(!is_allowed_player(
+            "org.mpris.MediaPlayer2.chromium",
+            &allowed
+        ));
     }
 }
