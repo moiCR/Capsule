@@ -51,6 +51,7 @@ title = "PORTAPAPELES"
 search_placeholder = "Buscar en el historial..."
 empty_history = "No hay elementos en el historial"
 empty_item = "[Elemento vacío]"
+image_item = "Imagen"
 
 [launcher]
 title = "LANZADOR"

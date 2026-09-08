@@ -1,11 +1,13 @@
 use gpui::{
     Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, KeyDownEvent, Render,
-    Window, div, prelude::*, px, svg,
+    Task, Window, div, prelude::*, px, svg,
 };
+use services::AppState;
+use std::time::{Duration, Instant};
 use ui::theme::Theme;
 use ui::theme::theme_manager::{ThemeItem, ThemeManager};
 
-use crate::capsule::widgets::select_theme::theme_card::render_theme_card;
+use crate::capsule::widgets::select_theme::theme_card::{get_theme_card_props, render_theme_card};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectThemeEvent {
@@ -17,6 +19,14 @@ pub struct SelectThemeModule {
     themes: Vec<ThemeItem>,
     query: String,
     pub selected_idx: usize,
+    pub anim_progress: f32,
+    pub anim_direction: f32,
+    pub is_animating: bool,
+    pub anim_task: Option<Task<()>>,
+}
+
+fn ease_out_cubic(t: f32) -> f32 {
+    1.0 - (1.0 - t).powi(3)
 }
 
 impl SelectThemeModule {
@@ -34,11 +44,19 @@ impl SelectThemeModule {
             themes,
             query: String::new(),
             selected_idx,
+            anim_progress: 1.0,
+            anim_direction: 0.0,
+            is_animating: false,
+            anim_task: None,
         }
     }
 
     pub fn refresh_themes(&mut self, cx: &mut Context<Self>) {
         self.themes = Self::load_themes(cx);
+        self.anim_progress = 1.0;
+        self.anim_direction = 0.0;
+        self.is_animating = false;
+        self.anim_task = None;
         if cx.has_global::<ThemeManager>() {
             let curr = &cx.global::<ThemeManager>().current_theme;
             if let Some(pos) = self.themes.iter().position(|t| &t.theme == curr) {
@@ -77,30 +95,77 @@ impl SelectThemeModule {
         cx.emit(SelectThemeEvent::ThemeSelected);
     }
 
-    pub fn set_selected_idx(&mut self, idx: usize, cx: &mut Context<Self>) {
-        self.selected_idx = idx;
-        cx.notify();
+    pub fn navigate(&mut self, dir: f32, new_idx: usize, cx: &mut Context<Self>) {
+        let filtered = self.filtered_themes();
+        if filtered.is_empty() {
+            return;
+        }
+        let total = filtered.len();
+        self.selected_idx = new_idx % total;
+        self.anim_direction = dir;
+        self.anim_progress = 0.0;
+        self.is_animating = true;
+        self.anim_task = None;
+
+        let compositor = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().compositor.clone())
+        } else {
+            None
+        };
+
+        let anim_task = cx.spawn(async move |this, cx| {
+            let duration_ms = 220.0;
+            let start = Instant::now();
+            loop {
+                let frame_dur = if let Some(ref comp) = compositor {
+                    comp.get_frame_duration()
+                } else {
+                    Duration::from_millis(16)
+                };
+
+                cx.background_executor().timer(frame_dur).await;
+
+                let finished = this
+                    .update(cx, |module: &mut Self, cx| {
+                        let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+                        let p = (elapsed / duration_ms).min(1.0);
+                        module.anim_progress = p;
+                        if p >= 1.0 {
+                            module.is_animating = false;
+                        }
+                        cx.notify();
+                        p >= 1.0
+                    })
+                    .unwrap_or(true);
+
+                if finished {
+                    break;
+                }
+            }
+        });
+
+        self.anim_task = Some(anim_task);
     }
 
     pub fn select_prev(&mut self, cx: &mut Context<Self>) {
         let filtered = self.filtered_themes();
-        if !filtered.is_empty() {
+        if filtered.len() > 1 {
             let total = filtered.len();
-            self.selected_idx = if self.selected_idx == 0 {
+            let next_idx = if self.selected_idx == 0 {
                 total - 1
             } else {
                 self.selected_idx - 1
             };
-            cx.notify();
+            self.navigate(-1.0, next_idx, cx);
         }
     }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) {
         let filtered = self.filtered_themes();
-        if !filtered.is_empty() {
+        if filtered.len() > 1 {
             let total = filtered.len();
-            self.selected_idx = (self.selected_idx + 1) % total;
-            cx.notify();
+            let next_idx = (self.selected_idx + 1) % total;
+            self.navigate(1.0, next_idx, cx);
         }
     }
 
@@ -127,6 +192,10 @@ impl SelectThemeModule {
                 "u" => {
                     self.query.clear();
                     self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
                     cx.notify();
                     return;
                 }
@@ -139,19 +208,26 @@ impl SelectThemeModule {
                     };
                     self.query = new_q;
                     self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
                     cx.notify();
                     return;
                 }
                 "v" => {
-                    if let Some(item) = cx.read_from_clipboard() {
-                        if let Some(text) = item.text() {
-                            let clean_text: String =
-                                text.chars().filter(|c| !c.is_control()).collect();
-                            if !clean_text.is_empty() {
-                                self.query.push_str(&clean_text);
-                                self.selected_idx = 0;
-                                cx.notify();
-                            }
+                    if let Some(item) = cx.read_from_clipboard()
+                        && let Some(text) = item.text()
+                    {
+                        let clean_text: String = text.chars().filter(|c| !c.is_control()).collect();
+                        if !clean_text.is_empty() {
+                            self.query.push_str(&clean_text);
+                            self.selected_idx = 0;
+                            self.anim_progress = 1.0;
+                            self.anim_direction = 0.0;
+                            self.is_animating = false;
+                            self.anim_task = None;
+                            cx.notify();
                         }
                     }
                     return;
@@ -177,6 +253,10 @@ impl SelectThemeModule {
                 if !self.query.is_empty() {
                     self.query.pop();
                     self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
                     cx.notify();
                 }
             }
@@ -189,6 +269,10 @@ impl SelectThemeModule {
                 if text.chars().count() == 1 && !ctrl {
                     self.query.push_str(text);
                     self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
                     cx.notify();
                 }
             }
@@ -227,6 +311,9 @@ impl Render for SelectThemeModule {
 
         let filtered = self.filtered_themes();
         let total = filtered.len();
+        if total > 0 && self.selected_idx >= total {
+            self.selected_idx = 0;
+        }
         let current_pos = if total == 0 {
             0
         } else {
@@ -280,8 +367,8 @@ impl Render for SelectThemeModule {
             .items_center()
             .justify_center()
             .w_full()
-            .gap(px(12.0))
-            .overflow_hidden();
+            .gap(px(10.0))
+            .h(px(104.0));
 
         if total == 0 {
             carousel_row = carousel_row.child(
@@ -294,10 +381,36 @@ impl Render for SelectThemeModule {
                     .text_color(theme.foreground_muted())
                     .child(no_themes),
             );
-        } else if total >= 5 {
-            let active_idx = self.selected_idx % total;
+        } else if total == 1 {
+            let item = &filtered[0];
+            let props = get_theme_card_props(0.0);
+            let card = render_theme_card(
+                ElementId::from("slot-center"),
+                item,
+                0,
+                0,
+                &props,
+                &theme,
+                cx,
+            );
+            carousel_row = carousel_row.child(card);
+        } else {
+            let eased = if self.is_animating {
+                ease_out_cubic(self.anim_progress)
+            } else {
+                1.0
+            };
+
+            let shift = (1.0 - eased) * self.anim_direction;
+
             for offset in -2i32..=2i32 {
-                let idx = (active_idx as i32 + offset).rem_euclid(total as i32) as usize;
+                let idx = (self.selected_idx as i32 + offset).rem_euclid(total as i32) as usize;
+                let item = &filtered[idx];
+
+                let vis_pos = offset as f32 + shift;
+                let abs_pos = vis_pos.abs();
+                let props = get_theme_card_props(abs_pos);
+
                 let slot_key = match offset {
                     -2 => "slot-prev2",
                     -1 => "slot-prev1",
@@ -306,24 +419,13 @@ impl Render for SelectThemeModule {
                     2 => "slot-next2",
                     _ => "slot-other",
                 };
+
                 let card = render_theme_card(
                     ElementId::from(slot_key),
-                    &filtered[idx],
-                    offset == 0,
-                    idx,
-                    &theme,
-                    cx,
-                );
-                carousel_row = carousel_row.child(card);
-            }
-        } else {
-            let active_idx = self.selected_idx % total;
-            for (i, item) in filtered.iter().enumerate() {
-                let card = render_theme_card(
-                    ElementId::NamedInteger("theme-card".into(), i as u64),
                     item,
-                    i == active_idx,
-                    i,
+                    idx,
+                    offset,
+                    &props,
                     &theme,
                     cx,
                 );

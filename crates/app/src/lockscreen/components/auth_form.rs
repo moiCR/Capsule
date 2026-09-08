@@ -1,4 +1,4 @@
-use gpui::{Context, Element, ParentElement, Styled, div, px};
+use gpui::{Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px, svg};
 use services::AppState;
 use ui::theme::Theme;
 
@@ -7,8 +7,8 @@ pub fn render_auth_form(
     password_len: usize,
     auth_failed: bool,
     is_checking: bool,
-    cx: &Context<crate::lockscreen::LockScreen>,
-) -> impl Element {
+    cx: &mut Context<crate::lockscreen::LockScreen>,
+) -> impl IntoElement {
     let (enter_pwd, checking_text, incorrect_text) = if cx.has_global::<AppState>() {
         let lang = &cx.global::<AppState>().language;
         (
@@ -18,22 +18,61 @@ pub fn render_auth_form(
         )
     } else {
         (
-            "Enter Password".to_string(),
-            "Checking...".to_string(),
-            "Incorrect password".to_string(),
+            "Ingresa la contraseña".to_string(),
+            "Verificando...".to_string(),
+            "Contraseña incorrecta".to_string(),
         )
-    };
-
-    let masked_password = if password_len == 0 {
-        enter_pwd
-    } else {
-        "●".repeat(password_len)
     };
 
     let border_color = if auth_failed {
         theme.red()
     } else {
-        theme.surface()
+        theme.surface().opacity(0.6)
+    };
+
+    let icon_color = if auth_failed {
+        theme.red()
+    } else {
+        theme.foreground_muted().opacity(0.7)
+    };
+
+    let masked_password = "●".repeat(password_len);
+
+    let right_element = if is_checking {
+        div()
+            .font_family(theme.font_family())
+            .text_size(px(11.5))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(theme.accent())
+            .flex_shrink_0()
+            .child(checking_text)
+            .into_any_element()
+    } else if password_len > 0 {
+        div()
+            .id("lockscreen-submit-btn")
+            .w(px(26.0))
+            .h(px(26.0))
+            .rounded_full()
+            .bg(theme.accent())
+            .hover(|s| s.opacity(0.85))
+            .active(|s| s.opacity(0.65))
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.submit_password(cx);
+            }))
+            .child(
+                svg()
+                    .path("chevron-right.svg")
+                    .size(px(14.0))
+                    .text_color(theme.background()),
+            )
+            .into_any_element()
+    } else {
+        div().w(px(14.0)).flex_shrink_0().into_any_element()
     };
 
     div()
@@ -41,54 +80,52 @@ pub fn render_auth_form(
         .flex_col()
         .items_center()
         .gap(px(6.0))
-        .w(px(280.0))
-        // Password Input Container
+        .w_full()
         .child(
             div()
                 .w_full()
-                .h(px(46.0))
-                .px(px(16.0))
-                .rounded(px(16.0))
-                .bg(theme.surface().opacity(0.5))
+                .h(px(42.0))
+                .px(px(14.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.45))
                 .border_1()
                 .border_color(border_color)
-                .shadow_md()
-                .relative()
                 .flex()
+                .flex_row()
                 .items_center()
-                .justify_center()
+                .gap(px(10.0))
+                .child(
+                    svg()
+                        .path("lock.svg")
+                        .size(px(14.0))
+                        .text_color(icon_color)
+                        .flex_shrink_0(),
+                )
                 .child(
                     div()
-                        .font_family(theme.font_family())
-                        .text_size(px(15.0))
+                        .flex_1()
                         .text_center()
-                        .text_color(if password_len == 0 {
-                            theme.foreground_muted()
+                        .font_family(theme.font_family())
+                        .child(if password_len == 0 {
+                            div()
+                                .text_size(px(12.5))
+                                .text_color(theme.foreground_muted().opacity(0.6))
+                                .child(enter_pwd)
                         } else {
-                            theme.foreground()
-                        })
-                        .child(masked_password),
+                            div()
+                                .text_size(px(14.0))
+                                .text_color(theme.foreground())
+                                .child(masked_password)
+                        }),
                 )
-                .children(if is_checking {
-                    Some(
-                        div()
-                            .absolute()
-                            .right(px(16.0))
-                            .font_family(theme.font_family())
-                            .text_size(px(12.5))
-                            .text_color(theme.accent())
-                            .child(checking_text),
-                    )
-                } else {
-                    None
-                }),
+                .child(right_element),
         )
-        // Error Message
         .children(if auth_failed {
             Some(
                 div()
                     .font_family(theme.font_family())
-                    .text_size(px(12.0))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::MEDIUM)
                     .text_color(theme.red())
                     .child(incorrect_text),
             )

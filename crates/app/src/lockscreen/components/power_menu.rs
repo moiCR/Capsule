@@ -8,25 +8,22 @@ pub fn render_power_menu(theme: &Theme) -> impl Element {
         .flex()
         .flex_row()
         .items_center()
+        .justify_center()
         .gap(px(10.0))
-        .p(px(6.0))
-        .rounded_full()
-        .bg(theme.surface().opacity(0.4))
-        .border_1()
-        .border_color(theme.surface().opacity(0.6))
-        .shadow_md()
-        // Suspend (moon_1.svg)
         .child(
             div()
                 .id("power-suspend")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .w(px(32.0))
+                .h(px(32.0))
                 .rounded_full()
-                .bg(theme.surface())
-                .hover(|s| s.bg(theme.accent().opacity(0.3)))
+                .bg(theme.surface().opacity(0.45))
+                .border_1()
+                .border_color(theme.surface().opacity(0.25))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.opacity(0.6))
                 .cursor_pointer()
                 .on_click(|_, _, _| {
                     let _ = std::process::Command::new("systemctl")
@@ -35,23 +32,25 @@ pub fn render_power_menu(theme: &Theme) -> impl Element {
                 })
                 .child(
                     svg()
-                        .path("moon_1.svg")
-                        .size(px(18.0))
-                        .text_color(theme.foreground()),
+                        .path("moon.svg")
+                        .size(px(14.0))
+                        .text_color(theme.foreground_muted()),
                 ),
         )
-        // Reboot (rotate-ccw.svg)
         .child(
             div()
                 .id("power-reboot")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .w(px(32.0))
+                .h(px(32.0))
                 .rounded_full()
-                .bg(theme.surface())
-                .hover(|s| s.bg(theme.accent().opacity(0.3)))
+                .bg(theme.surface().opacity(0.45))
+                .border_1()
+                .border_color(theme.surface().opacity(0.25))
+                .hover(|s| s.bg(theme.surface().opacity(0.8)))
+                .active(|s| s.opacity(0.6))
                 .cursor_pointer()
                 .on_click(|_, _, _| {
                     let _ = std::process::Command::new("systemctl")
@@ -61,22 +60,27 @@ pub fn render_power_menu(theme: &Theme) -> impl Element {
                 .child(
                     svg()
                         .path("rotate-ccw.svg")
-                        .size(px(18.0))
-                        .text_color(theme.foreground()),
+                        .size(px(14.0))
+                        .text_color(theme.foreground_muted()),
                 ),
         )
-        // Power Off (power.svg)
         .child(
             div()
                 .id("power-shutdown")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .w(px(32.0))
+                .h(px(32.0))
                 .rounded_full()
-                .bg(theme.red().opacity(0.8))
-                .hover(|s| s.bg(theme.red()))
+                .bg(theme.surface().opacity(0.45))
+                .border_1()
+                .border_color(theme.surface().opacity(0.25))
+                .hover(|s| {
+                    s.bg(theme.red().opacity(0.25))
+                        .border_color(theme.red().opacity(0.5))
+                })
+                .active(|s| s.opacity(0.6))
                 .cursor_pointer()
                 .on_click(|_, _, _| {
                     let _ = std::process::Command::new("systemctl")
@@ -86,8 +90,8 @@ pub fn render_power_menu(theme: &Theme) -> impl Element {
                 .child(
                     svg()
                         .path("power.svg")
-                        .size(px(18.0))
-                        .text_color(theme.foreground()),
+                        .size(px(14.0))
+                        .text_color(theme.foreground_muted()),
                 ),
         )
 }

@@ -51,6 +51,7 @@ title = "CLIPBOARD"
 search_placeholder = "Search history..."
 empty_history = "No items in history"
 empty_item = "[Empty item]"
+image_item = "Image"
 
 [launcher]
 title = "LAUNCHER"

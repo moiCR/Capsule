@@ -1,16 +1,22 @@
-use gpui::{EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, Window, div, prelude::*};
+use gpui::{
+    EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, Window, div, prelude::*, px,
+};
 use services::{PolkitAuthRequest, authenticate_user};
+use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use ui::theme::Theme;
 
-use crate::capsule::widgets::polkit::auth_dialog::render_auth_dialog;
+use crate::capsule::widgets::polkit::{
+    auth_dialog::{render_auth_footer, render_auth_header, render_auth_message},
+    password_input::render_password_input,
+};
 
 pub enum PolkitEvent {
     Authenticated,
     Cancelled,
 }
 
-use std::sync::{Arc, Mutex};
+type PolkitPendingResult = Arc<Mutex<Option<Result<(), String>>>>;
 
 pub struct PolkitModule {
     pub request: Option<PolkitAuthRequest>,
@@ -20,7 +26,7 @@ pub struct PolkitModule {
     pub is_authenticating: bool,
     pub focus_handle: FocusHandle,
     pub responder: Option<oneshot::Sender<Result<(), String>>>,
-    pub pending_result: Option<Arc<Mutex<Option<Result<(), String>>>>>,
+    pub pending_result: Option<PolkitPendingResult>,
 }
 
 impl EventEmitter<PolkitEvent> for PolkitModule {}
@@ -163,16 +169,15 @@ impl PolkitModule {
         if ctrl {
             match key {
                 "v" => {
-                    if let Some(item) = cx.read_from_clipboard() {
-                        if let Some(text) = item.text() {
-                            let clean_text: String =
-                                text.chars().filter(|c| !c.is_control()).collect();
-                            if !clean_text.is_empty() {
-                                self.password.push_str(&clean_text);
-                                self.is_error = false;
-                                self.error_msg = None;
-                                cx.notify();
-                            }
+                    if let Some(item) = cx.read_from_clipboard()
+                        && let Some(text) = item.text()
+                    {
+                        let clean_text: String = text.chars().filter(|c| !c.is_control()).collect();
+                        if !clean_text.is_empty() {
+                            self.password.push_str(&clean_text);
+                            self.is_error = false;
+                            self.error_msg = None;
+                            cx.notify();
                         }
                     }
                     return;
@@ -251,6 +256,29 @@ impl Render for PolkitModule {
 
         window.focus(&self.focus_handle, cx);
 
+        let (title, placeholder, default_err) = if cx.has_global::<services::AppState>() {
+            let lang = &cx.global::<services::AppState>().language;
+            (
+                lang.get("polkit.auth_required"),
+                if self.is_authenticating {
+                    lang.get("polkit.verifying")
+                } else {
+                    "Escribe tu contraseña...".to_string()
+                },
+                lang.get("polkit.incorrect_password"),
+            )
+        } else {
+            (
+                "Autenticación Requerida".to_string(),
+                if self.is_authenticating {
+                    "Verificando contraseña...".to_string()
+                } else {
+                    "Escribe tu contraseña...".to_string()
+                },
+                "Contraseña incorrecta. Reintenta...".to_string(),
+            )
+        };
+
         let req_message = self
             .request
             .as_ref()
@@ -263,16 +291,33 @@ impl Render for PolkitModule {
             .map(|r| r.user_name.as_str())
             .unwrap_or("usuario");
 
+        let err_text = self.error_msg.as_deref().unwrap_or(&default_err);
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
-            .child(render_auth_dialog(
-                user_name,
-                req_message,
+            .flex()
+            .flex_col()
+            .justify_between()
+            .w(px(380.0))
+            .h(px(190.0))
+            .p_3()
+            .overflow_hidden()
+            .child(render_auth_header(user_name, &title, &theme, cx))
+            .child(render_auth_message(req_message, &theme))
+            .child(render_password_input(
                 &self.password,
                 self.is_error,
-                self.error_msg.clone(),
                 self.is_authenticating,
+                &placeholder,
+                err_text,
+                &theme,
+                cx,
+            ))
+            .child(render_auth_footer(
+                !self.password.is_empty(),
+                self.is_authenticating,
+                if self.is_error { Some(err_text) } else { None },
                 &theme,
                 cx,
             ))

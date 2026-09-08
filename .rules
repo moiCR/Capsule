@@ -87,6 +87,4 @@ crates/
 
 
 ## Capsule UI guidelines
-- Capsule rounded = 42px
-- Widget badges rounded = 24px
-- Buttons: Icons only - rounded full - Text Buttons - rounded 24px
+- Use the config settings

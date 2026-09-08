@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
@@ -8,6 +9,75 @@ pub struct ClipboardItem {
     pub id: String,
     pub preview: String,
     pub is_image: bool,
+    pub image_path: Option<PathBuf>,
+}
+
+fn parse_image_preview(raw: &str) -> String {
+    let inner = raw
+        .strip_prefix("[[ binary data")
+        .unwrap_or(raw)
+        .trim_end_matches(']')
+        .trim();
+
+    let tokens: Vec<&str> = inner.split_whitespace().collect();
+    let mut size_part = String::new();
+    let mut format_part = String::new();
+    let mut dimensions_part = String::new();
+
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = tokens[index];
+        if (token.chars().all(|c| c.is_ascii_digit() || c == '.')
+            || token.chars().any(|c| c.is_ascii_digit()))
+            && index + 1 < tokens.len()
+        {
+            let next = tokens[index + 1];
+            if next.ends_with('B') || next == "bytes" {
+                size_part = format!("{token} {next}");
+                index += 2;
+                continue;
+            }
+        }
+        if token.contains('x')
+            && token.chars().all(|c| c.is_ascii_digit() || c == 'x')
+            && !token.starts_with('x')
+            && !token.ends_with('x')
+        {
+            dimensions_part = token.replace('x', "×");
+            index += 1;
+            continue;
+        }
+        if matches!(
+            token.to_lowercase().as_str(),
+            "png" | "jpeg" | "jpg" | "webp" | "gif" | "bmp" | "svg"
+        ) {
+            format_part = token.to_uppercase();
+            index += 1;
+            continue;
+        }
+        index += 1;
+    }
+
+    let mut parts = Vec::new();
+    if !format_part.is_empty() {
+        parts.push(format_part);
+    }
+    if !dimensions_part.is_empty() {
+        parts.push(dimensions_part);
+    }
+    if !size_part.is_empty() {
+        parts.push(size_part);
+    }
+
+    if parts.is_empty() {
+        if !inner.is_empty() {
+            inner.to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        parts.join(" • ")
+    }
 }
 
 #[derive(Clone)]
@@ -37,7 +107,6 @@ impl ClipboardService {
         service
     }
 
-    /// Spawns cliphist watch daemon processes if not already active.
     fn ensure_watch_daemon(&self) {
         tokio::spawn(async {
             let is_running = Command::new("pgrep")
@@ -109,15 +178,49 @@ impl ClipboardService {
                     }
 
                     if let Some((id, rest)) = line.split_once('\t') {
-                        let is_image = rest.contains("[[ binary data")
-                            || rest.contains("image/")
-                            || rest.contains("PNG")
-                            || rest.contains("JPEG");
+                        let id_trimmed = id.trim();
+                        let rest_trimmed = rest.trim();
+                        let is_image = rest_trimmed.starts_with("[[ binary data")
+                            || rest_trimmed.contains("[[ binary data");
+
+                        let (preview, image_path) = if is_image {
+                            let clean_preview = parse_image_preview(rest_trimmed);
+                            let cache_dir = PathBuf::from("/tmp/capsule_clipboard");
+                            let _ = std::fs::create_dir_all(&cache_dir);
+                            let file_path = cache_dir.join(format!("{id_trimmed}.png"));
+
+                            let is_cached = file_path.exists()
+                                && file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+                            if !is_cached {
+                                if let Ok(out) = Command::new("cliphist")
+                                    .args(["decode", id_trimmed])
+                                    .output()
+                                {
+                                    if out.status.success() && !out.stdout.is_empty() {
+                                        let _ = std::fs::write(&file_path, &out.stdout);
+                                    }
+                                }
+                            }
+
+                            let resolved_path = if file_path.exists()
+                                && file_path.metadata().map(|m| m.len() > 0).unwrap_or(false)
+                            {
+                                Some(file_path)
+                            } else {
+                                None
+                            };
+
+                            (clean_preview, resolved_path)
+                        } else {
+                            (rest_trimmed.to_string(), None)
+                        };
 
                         items.push(ClipboardItem {
-                            id: id.trim().to_string(),
-                            preview: rest.trim().to_string(),
+                            id: id_trimmed.to_string(),
+                            preview,
                             is_image,
+                            image_path,
                         });
                     }
                 }
@@ -128,7 +231,6 @@ impl ClipboardService {
             }
         }
 
-        // Fallback to internal in-memory history
         if let Ok(guard) = self.fallback_history.lock() {
             return guard
                 .iter()
@@ -137,6 +239,7 @@ impl ClipboardService {
                     id: idx.to_string(),
                     preview: text.clone(),
                     is_image: false,
+                    image_path: None,
                 })
                 .collect();
         }
@@ -170,6 +273,42 @@ impl ClipboardService {
         }
         let _ = Command::new("cliphist").arg("wipe").status();
         let _ = Command::new("wl-copy").arg("-c").status();
+        let _ = std::fs::remove_dir_all("/tmp/capsule_clipboard");
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_image_preview() {
+        assert_eq!(
+            parse_image_preview("[[ binary data 37 KiB png 563x773 ]]"),
+            "PNG • 563×773 • 37 KiB"
+        );
+        assert_eq!(
+            parse_image_preview("[[ binary data 1.2 MiB jpeg 1920x1080 ]]"),
+            "JPEG • 1920×1080 • 1.2 MiB"
+        );
+        assert_eq!(parse_image_preview("[[ binary data 500 B ]]"), "500 B");
+        assert_eq!(parse_image_preview("[[ binary data ]]"), "");
+    }
+
+    #[test]
+    fn test_fetch_history_with_real_cliphist() {
+        let service = ClipboardService {
+            fallback_history: Arc::new(Mutex::new(VecDeque::new())),
+        };
+        let items = service.fetch_history();
+        for item in &items {
+            if item.is_image {
+                assert!(!item.preview.contains("[[ binary data"));
+                if let Some(ref path) = item.image_path {
+                    assert!(path.exists());
+                }
+            }
+        }
     }
 }

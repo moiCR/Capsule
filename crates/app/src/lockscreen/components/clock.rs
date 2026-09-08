@@ -12,11 +12,12 @@ pub fn render_clock(theme: &Theme, config: &LockScreenConfig) -> impl Element {
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(2.0))
         .child(
             div()
                 .font_family(theme.font_family())
-                .text_size(px(72.0))
+                .text_size(px(46.0))
+                .line_height(px(48.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .child(time_str),
@@ -24,7 +25,7 @@ pub fn render_clock(theme: &Theme, config: &LockScreenConfig) -> impl Element {
         .child(
             div()
                 .font_family(theme.font_family())
-                .text_size(px(20.0))
+                .text_size(px(12.5))
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(theme.foreground_muted())
                 .child(date_str),

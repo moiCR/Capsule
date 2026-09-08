@@ -130,10 +130,24 @@ fn render_wifi_pill(
         .px_1p5()
         .py_1()
         .rounded_full()
-        .bg(theme.surface().opacity(0.45))
+        .bg(if is_on {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.45)
+        })
         .border_1()
-        .border_color(theme.surface().opacity(0.25))
-        .hover(|s| s.bg(theme.surface().opacity(0.55)))
+        .border_color(if is_on {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.25)
+        })
+        .hover(|s| {
+            if is_on {
+                s.opacity(0.92)
+            } else {
+                s.bg(theme.surface().opacity(0.55))
+            }
+        })
         .child(
             div()
                 .id("wifi-pill-toggle")
@@ -143,11 +157,6 @@ fn render_wifi_pill(
                 .w(px(38.0))
                 .h(px(38.0))
                 .rounded_full()
-                .bg(if is_on {
-                    theme.accent()
-                } else {
-                    theme.surface().opacity(0.6)
-                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     if cx.has_global::<AppState>() {
@@ -177,13 +186,21 @@ fn render_wifi_pill(
                     div()
                         .text_size(px(12.5))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme.foreground())
+                        .text_color(if is_on {
+                            theme.background()
+                        } else {
+                            theme.foreground()
+                        })
                         .child(title),
                 )
                 .child(
                     div()
                         .text_size(px(10.5))
-                        .text_color(theme.foreground_muted())
+                        .text_color(if is_on {
+                            theme.background().opacity(0.75)
+                        } else {
+                            theme.foreground_muted()
+                        })
                         .truncate()
                         .child(subtitle),
                 ),
@@ -197,7 +214,13 @@ fn render_wifi_pill(
                 .w(px(26.0))
                 .h(px(26.0))
                 .rounded_full()
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .hover(|s| {
+                    if is_on {
+                        s.bg(theme.background().opacity(0.15))
+                    } else {
+                        s.bg(theme.surface().opacity(0.7))
+                    }
+                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(DashboardEvent::WifiChevronClicked);
@@ -206,7 +229,11 @@ fn render_wifi_pill(
                     svg()
                         .path("chevron-right.svg")
                         .size(px(14.0))
-                        .text_color(theme.foreground_muted()),
+                        .text_color(if is_on {
+                            theme.background().opacity(0.8)
+                        } else {
+                            theme.foreground_muted()
+                        }),
                 ),
         )
         .into_any_element()
@@ -254,10 +281,24 @@ fn render_bluetooth_pill(
         .px_1p5()
         .py_1()
         .rounded_full()
-        .bg(theme.surface().opacity(0.45))
+        .bg(if is_on {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.45)
+        })
         .border_1()
-        .border_color(theme.surface().opacity(0.25))
-        .hover(|s| s.bg(theme.surface().opacity(0.55)))
+        .border_color(if is_on {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.25)
+        })
+        .hover(|s| {
+            if is_on {
+                s.opacity(0.92)
+            } else {
+                s.bg(theme.surface().opacity(0.55))
+            }
+        })
         .child(
             div()
                 .id("bt-pill-toggle")
@@ -267,11 +308,6 @@ fn render_bluetooth_pill(
                 .w(px(38.0))
                 .h(px(38.0))
                 .rounded_full()
-                .bg(if is_on {
-                    theme.accent()
-                } else {
-                    theme.surface().opacity(0.6)
-                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     if cx.has_global::<AppState>() {
@@ -306,13 +342,21 @@ fn render_bluetooth_pill(
                     div()
                         .text_size(px(12.5))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme.foreground())
+                        .text_color(if is_on {
+                            theme.background()
+                        } else {
+                            theme.foreground()
+                        })
                         .child(bt_title),
                 )
                 .child(
                     div()
                         .text_size(px(10.5))
-                        .text_color(theme.foreground_muted())
+                        .text_color(if is_on {
+                            theme.background().opacity(0.75)
+                        } else {
+                            theme.foreground_muted()
+                        })
                         .truncate()
                         .child(subtitle),
                 ),
@@ -326,7 +370,13 @@ fn render_bluetooth_pill(
                 .w(px(26.0))
                 .h(px(26.0))
                 .rounded_full()
-                .hover(|s| s.bg(theme.surface().opacity(0.7)))
+                .hover(|s| {
+                    if is_on {
+                        s.bg(theme.background().opacity(0.15))
+                    } else {
+                        s.bg(theme.surface().opacity(0.7))
+                    }
+                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(DashboardEvent::BluetoothChevronClicked);
@@ -335,7 +385,11 @@ fn render_bluetooth_pill(
                     svg()
                         .path("chevron-right.svg")
                         .size(px(14.0))
-                        .text_color(theme.foreground_muted()),
+                        .text_color(if is_on {
+                            theme.background().opacity(0.8)
+                        } else {
+                            theme.foreground_muted()
+                        }),
                 ),
         )
         .into_any_element()
@@ -370,10 +424,24 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
         .px_1p5()
         .py_1()
         .rounded_full()
-        .bg(theme.surface().opacity(0.45))
+        .bg(if is_dnd {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.45)
+        })
         .border_1()
-        .border_color(theme.surface().opacity(0.25))
-        .hover(|s| s.bg(theme.surface().opacity(0.55)))
+        .border_color(if is_dnd {
+            theme.accent()
+        } else {
+            theme.surface().opacity(0.25)
+        })
+        .hover(|s| {
+            if is_dnd {
+                s.opacity(0.92)
+            } else {
+                s.bg(theme.surface().opacity(0.55))
+            }
+        })
         .cursor_pointer()
         .on_click(cx.listener(|_, _, _, cx| {
             NotificationStore::global().toggle_dnd();
@@ -388,11 +456,6 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                 .w(px(38.0))
                 .h(px(38.0))
                 .rounded_full()
-                .bg(if is_dnd {
-                    theme.accent()
-                } else {
-                    theme.surface().opacity(0.6)
-                })
                 .child(
                     svg()
                         .path("minus-circle.svg")
@@ -416,13 +479,21 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                     div()
                         .text_size(px(12.5))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme.foreground())
+                        .text_color(if is_dnd {
+                            theme.background()
+                        } else {
+                            theme.foreground()
+                        })
                         .child(dnd_title),
                 )
                 .child(
                     div()
                         .text_size(px(10.5))
-                        .text_color(theme.foreground_muted())
+                        .text_color(if is_dnd {
+                            theme.background().opacity(0.75)
+                        } else {
+                            theme.foreground_muted()
+                        })
                         .truncate()
                         .child(subtitle),
                 ),

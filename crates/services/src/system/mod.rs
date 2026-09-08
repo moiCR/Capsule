@@ -27,6 +27,7 @@ pub struct SystemService {
     target_volume: Arc<AtomicU32>,
     volume_pending: Arc<AtomicBool>,
     volume_notify: Arc<tokio::sync::Notify>,
+    audio_changed: Arc<tokio::sync::Notify>,
 }
 
 impl SystemService {
@@ -36,6 +37,7 @@ impl SystemService {
             target_volume: Arc::new(AtomicU32::new(50)),
             volume_pending: Arc::new(AtomicBool::new(false)),
             volume_notify: Arc::new(tokio::sync::Notify::new()),
+            audio_changed: Arc::new(tokio::sync::Notify::new()),
         };
 
         let service_clone = service.clone();
@@ -56,11 +58,13 @@ impl SystemService {
         (**self.status.load()).clone()
     }
 
+    pub fn audio_changed(&self) -> Arc<tokio::sync::Notify> {
+        self.audio_changed.clone()
+    }
+
     async fn run_volume_worker(&self) {
         loop {
-            // Wait until a volume change is signaled instead of polling at 25Hz
             self.volume_notify.notified().await;
-            // Small debounce to coalesce rapid slider movements
             tokio::time::sleep(std::time::Duration::from_millis(30)).await;
 
             if self.volume_pending.swap(false, Ordering::SeqCst) {
@@ -94,6 +98,19 @@ impl SystemService {
         self.target_volume.store(percent, Ordering::SeqCst);
         self.volume_pending.store(true, Ordering::SeqCst);
         self.volume_notify.notify_one();
+        self.audio_changed.notify_waiters();
+    }
+
+    pub async fn refresh_audio(&self) -> Result<()> {
+        let (volume, is_muted) = Self::fetch_audio_status().await.unwrap_or((50, false));
+        let mut current = (**self.status.load()).clone();
+        if current.volume != volume || current.is_muted != is_muted {
+            current.volume = volume;
+            current.is_muted = is_muted;
+            self.status.store(Arc::new(current));
+            self.audio_changed.notify_waiters();
+        }
+        Ok(())
     }
 
     pub async fn refresh(&self) -> Result<()> {
@@ -109,6 +126,7 @@ impl SystemService {
         };
 
         self.status.store(Arc::new(new_status));
+        self.audio_changed.notify_waiters();
 
         Ok(())
     }
@@ -122,7 +140,9 @@ impl SystemService {
             if let Some(stdout) = child.stdout.take() {
                 let mut reader = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    if line.contains("sink") || line.contains("server") {
+                    if line.contains("sink") {
+                        let _ = self.refresh_audio().await;
+                    } else if line.contains("server") {
                         let _ = self.refresh().await;
                     }
                 }

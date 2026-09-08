@@ -3,7 +3,7 @@ use ui::components::volume_control::VolumeControlBar;
 use ui::theme::Theme;
 
 pub fn render_volume_bar(
-    volume: u32,
+    volume: f32,
     is_muted: bool,
     muted_label: impl Into<SharedString>,
     _theme: &Theme,

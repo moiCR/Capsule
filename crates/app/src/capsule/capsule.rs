@@ -335,7 +335,7 @@ impl Capsule {
                         }
 
                         let (m_w, m_h) = match capsule.mode {
-                            CapsuleMode::Default => (0.0, 0.0),
+                            CapsuleMode::Default | CapsuleMode::Volume => (0.0, 0.0),
                             _ => capsule.dimension_tracker.dimensions(0.0, 0.0),
                         };
 
@@ -413,14 +413,30 @@ impl Capsule {
         )
         .detach();
 
+        let notify = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().system.audio_changed())
+        } else {
+            None
+        };
+
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(1000))
-                    .await;
+                if let Some(ref n) = notify {
+                    tokio::select! {
+                        _ = n.notified() => {},
+                        _ = cx.background_executor().timer(Duration::from_millis(50)) => {},
+                    }
+                } else {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(50))
+                        .await;
+                }
 
                 let state = this
                     .update(cx, |_, cx| {
+                        if !cx.has_global::<AppState>() {
+                            return (50, false);
+                        }
                         let sys = cx.global::<AppState>().system.get_status();
                         (sys.volume, sys.is_muted)
                     })
@@ -440,14 +456,17 @@ impl Capsule {
                                     vol_mod.update_status(vol, muted, cx);
                                 });
 
-                                if capsule.mode == CapsuleMode::Default
-                                    || capsule.mode == CapsuleMode::Volume
-                                {
+                                if capsule.mode == CapsuleMode::Default {
                                     capsule.start_transition_internal(
                                         CapsuleMode::Volume,
                                         None,
                                         cx,
                                     );
+                                }
+
+                                if capsule.mode == CapsuleMode::Volume
+                                    || capsule.mode == CapsuleMode::Default
+                                {
                                     capsule.volume_timer_gen += 1;
                                     let current_gen = capsule.volume_timer_gen;
 
@@ -1237,7 +1256,18 @@ impl Render for Capsule {
             };
             let tracked_content = self.dimension_tracker.track(el);
 
-            content_container = content_container.child(
+            let wrapper = if self.mode == CapsuleMode::Volume {
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .opacity(opacity)
+                    .child(tracked_content)
+            } else {
                 div()
                     .absolute()
                     .top_0()
@@ -1247,8 +1277,10 @@ impl Render for Capsule {
                     .items_center()
                     .justify_center()
                     .opacity(opacity)
-                    .child(tracked_content),
-            );
+                    .child(tracked_content)
+            };
+
+            content_container = content_container.child(wrapper);
         } else {
             let default_opacity = (1.0 - self.anim_progress).clamp(0.0, 1.0);
             let hover_opacity = (self.anim_progress).clamp(0.0, 1.0);
