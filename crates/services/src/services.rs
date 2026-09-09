@@ -27,7 +27,7 @@ pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccess
 
 pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService};
-pub use compositor::CompositorService;
+pub use compositor::{CompositorService, WorkspaceInfo};
 pub use config::{
     AppConfig, CapsuleStyle, ConfigService, Defaults, LockScreenConfig, LockscreenConfig,
     MprisConfig, UIConfig, UiConfig,

@@ -3,26 +3,64 @@ pub mod kinetic;
 pub mod niri;
 
 use arc_swap::ArcSwap;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInfo {
+    pub id: i64,
+    pub num: i32,
+    pub name: String,
+    pub is_special: bool,
+    pub special_name: Option<String>,
+}
+
+impl Default for WorkspaceInfo {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            num: 1,
+            name: "1".to_string(),
+            is_special: false,
+            special_name: None,
+        }
+    }
+}
 
 pub trait Compositor: Send + Sync {
     fn get_refresh_rate(&self) -> f64;
+    fn get_workspace(&self) -> Option<WorkspaceInfo>;
 }
 
 #[derive(Clone)]
 pub struct CompositorService {
     refresh_rate: Arc<ArcSwap<f64>>,
+    current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
+    workspace_tx: broadcast::Sender<WorkspaceInfo>,
 }
 
 impl CompositorService {
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
-        let service = Self { refresh_rate };
+        let current_workspace = Arc::new(ArcSwap::from_pointee(WorkspaceInfo::default()));
+        let (workspace_tx, _) = broadcast::channel(32);
+
+        let service = Self {
+            refresh_rate,
+            current_workspace,
+            workspace_tx,
+        };
 
         let service_clone = service.clone();
         tokio::spawn(async move {
             service_clone.run_polling_loop().await;
+        });
+
+        let service_workspace = service.clone();
+        tokio::spawn(async move {
+            service_workspace.run_workspace_events_loop().await;
         });
 
         service
@@ -43,8 +81,48 @@ impl CompositorService {
         (1000.0 / rate).round().max(1.0) as u64
     }
 
+    pub fn get_workspace(&self) -> WorkspaceInfo {
+        (**self.current_workspace.load()).clone()
+    }
+
+    pub fn on_change_workspace(&self) -> broadcast::Receiver<WorkspaceInfo> {
+        self.workspace_tx.subscribe()
+    }
+
+    async fn run_workspace_events_loop(&self) {
+        let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+        let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
+
+        let initial = tokio::task::spawn_blocking(move || {
+            if use_hyprland {
+                hyprland::Hyprland::new().get_workspace()
+            } else if use_niri {
+                niri::Niri::new().get_workspace()
+            } else {
+                kinetic::KineticWE::new().get_workspace()
+            }
+        })
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(ws) = initial {
+            self.current_workspace.store(Arc::new(ws));
+        }
+
+        if use_hyprland {
+            hyprland::run_events_listener(
+                self.current_workspace.clone(),
+                self.workspace_tx.clone(),
+            )
+            .await;
+        } else if use_niri {
+            niri::run_events_listener(self.current_workspace.clone(), self.workspace_tx.clone())
+                .await;
+        }
+    }
+
     async fn run_polling_loop(&self) {
-        // Determine backend once, up front.
         let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
         let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
 
@@ -86,5 +164,31 @@ impl CompositorService {
 impl Default for CompositorService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_compositor_service_workspace_methods() {
+        let service = CompositorService::new();
+        let mut rx = service.on_change_workspace();
+
+        let initial_ws = service.get_workspace();
+        assert!(initial_ws.num >= 1);
+
+        let test_ws = WorkspaceInfo {
+            id: 42,
+            num: 42,
+            name: "42".to_string(),
+            is_special: false,
+            special_name: None,
+        };
+
+        let _ = service.workspace_tx.send(test_ws.clone());
+        let received = rx.recv().await;
+        assert_eq!(received.ok(), Some(test_ws));
     }
 }

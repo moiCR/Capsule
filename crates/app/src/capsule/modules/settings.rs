@@ -9,8 +9,7 @@ use std::time::{Duration, Instant};
 use ui::theme::Theme;
 
 use crate::capsule::widgets::settings::{
-    render_dropdown_overlay, render_general_section, render_lockscreen_section, render_sidebar,
-    render_ui_section,
+    render_general_section, render_lockscreen_section, render_sidebar, render_ui_section,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -72,18 +71,15 @@ pub struct SettingsModule {
     pub dropdown_anim_field: Option<SettingsField>,
     pub dropdown_anim_progress: f32,
     pub dropdown_anim_task: Option<Task<()>>,
-    pub splat_anim_field: Option<SettingsField>,
-    pub splat_anim_progress: f32,
-    pub splat_anim_task: Option<Task<()>>,
 
+    pub settings_bounds: Rc<Cell<(f32, f32)>>,
+    pub language_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub terminal_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub browser_trigger_bounds: Rc<Cell<(f32, f32)>>,
     pub editor_trigger_bounds: Rc<Cell<(f32, f32)>>,
-    pub language_trigger_bounds: Rc<Cell<(f32, f32)>>,
-    pub settings_top_y: Rc<Cell<f32>>,
 
     focus_handle: FocusHandle,
-    scroll_handle: ScrollHandle,
+    pub scroll_handle: ScrollHandle,
 }
 
 impl EventEmitter<SettingsEvent> for SettingsModule {}
@@ -118,14 +114,11 @@ impl SettingsModule {
             dropdown_anim_field: None,
             dropdown_anim_progress: 1.0,
             dropdown_anim_task: None,
-            splat_anim_field: None,
-            splat_anim_progress: 1.0,
-            splat_anim_task: None,
+            settings_bounds: Rc::new(Cell::new((0.0, 560.0))),
+            language_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             terminal_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             browser_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
             editor_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
-            language_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
-            settings_top_y: Rc::new(Cell::new(0.0)),
             focus_handle,
             scroll_handle,
         };
@@ -195,8 +188,6 @@ impl SettingsModule {
         self.open_dropdown = None;
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
-        self.splat_anim_field = None;
-        self.splat_anim_task = None;
         self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
@@ -225,7 +216,7 @@ impl SettingsModule {
         let start = Instant::now();
 
         let anim_task = cx.spawn(async move |this, cx| {
-            let duration_ms = 220.0;
+            let duration_ms = 180.0;
             loop {
                 let frame_dur = if let Some(ref comp) = compositor {
                     comp.get_frame_duration()
@@ -270,7 +261,6 @@ impl SettingsModule {
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
         self.active_field = None;
-        self.start_splat_anim(field, cx);
         self.save_to_app_config(cx);
         cx.notify();
     }
@@ -285,51 +275,7 @@ impl SettingsModule {
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
         self.active_field = None;
-        self.start_splat_anim(SettingsField::Language, cx);
         cx.notify();
-    }
-
-    fn start_splat_anim(&mut self, field: SettingsField, cx: &mut Context<Self>) {
-        let compositor = if cx.has_global::<AppState>() {
-            Some(cx.global::<AppState>().compositor.clone())
-        } else {
-            None
-        };
-        self.splat_anim_field = Some(field);
-        self.splat_anim_progress = 0.0;
-        let start = Instant::now();
-
-        let anim_task = cx.spawn(async move |this, cx| {
-            let duration_ms = 220.0;
-            loop {
-                let frame_dur = if let Some(ref comp) = compositor {
-                    comp.get_frame_duration()
-                } else {
-                    Duration::from_millis(16)
-                };
-
-                cx.background_executor().timer(frame_dur).await;
-
-                let finished = this
-                    .update(cx, |module: &mut Self, cx| {
-                        let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-                        let p = (elapsed / duration_ms).min(1.0);
-                        module.splat_anim_progress = p;
-                        if p >= 1.0 {
-                            module.splat_anim_field = None;
-                        }
-                        cx.notify();
-                        p >= 1.0
-                    })
-                    .unwrap_or(true);
-
-                if finished {
-                    break;
-                }
-            }
-        });
-
-        self.splat_anim_task = Some(anim_task);
     }
 
     pub fn set_active_field(&mut self, field: Option<SettingsField>, cx: &mut Context<Self>) {
@@ -446,8 +392,6 @@ impl SettingsModule {
         self.open_dropdown = None;
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
-        self.splat_anim_field = None;
-        self.splat_anim_task = None;
         self.set_tab(SettingsTab::General, cx);
         cx.emit(SettingsEvent::Close);
     }
@@ -594,19 +538,13 @@ impl Render for SettingsModule {
             }
         };
 
-        let dropdown_overlay = if self.active_tab == SettingsTab::General {
-            render_dropdown_overlay(self, &theme, cx)
-        } else {
-            None
-        };
-
         let capsule_radius = if cx.has_global::<AppState>() {
             cx.global::<AppState>().config.get().ui.capsule_round
         } else {
             36.0
         };
 
-        let settings_top_cell = self.settings_top_y.clone();
+        let modal_bounds_cell = self.settings_bounds.clone();
 
         div()
             .relative()
@@ -621,12 +559,18 @@ impl Render for SettingsModule {
             .child(
                 canvas(
                     move |bounds, _, _| {
-                        settings_top_cell.set(bounds.origin.y.into());
+                        let top: f32 = bounds.origin.y.into();
+                        let height: f32 = if bounds.size.height > px(0.0) {
+                            bounds.size.height.into()
+                        } else {
+                            560.0
+                        };
+                        modal_bounds_cell.set((top, top + height));
                     },
                     |_, _, _, _| {},
                 )
-                .absolute()
-                .size_0(),
+                .inset_0()
+                .absolute(),
             )
             .child(render_sidebar(self.active_tab, &theme, cx))
             .child(
@@ -641,6 +585,5 @@ impl Render for SettingsModule {
                     .overflow_scroll()
                     .child(content_view),
             )
-            .children(dropdown_overlay)
     }
 }

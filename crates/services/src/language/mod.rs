@@ -364,6 +364,8 @@ impl LangService {
                         || current_target == file_stem
                         || current_target == code
                         || current_code == code
+                        || current_target.eq_ignore_ascii_case(&name)
+                        || current_target.eq_ignore_ascii_case(&code)
                         || Path::new(&current_target) == path;
 
                     items.push(LanguageInfo {
@@ -416,6 +418,13 @@ impl LangService {
     }
 
     fn resolve_path(target: &str) -> PathBuf {
+        let clean = target.trim().to_lowercase();
+        if clean == "english" || clean == "en" || clean == "en.toml" {
+            return Self::languages_dir().join("en.toml");
+        }
+        if clean == "español" || clean == "espanol" || clean == "es" || clean == "es.toml" {
+            return Self::languages_dir().join("es.toml");
+        }
         if target.contains('/') {
             PathBuf::from(target)
         } else {
@@ -433,16 +442,25 @@ impl LangService {
         let disk_content = fs::read_to_string(&path).ok();
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(target);
 
-        let is_en = target == "en"
-            || target == "en.toml"
-            || stem == "en"
-            || stem.starts_with("en_")
-            || stem.starts_with("en-");
-        let is_es = target == "es"
-            || target == "es.toml"
-            || stem == "es"
-            || stem.starts_with("es_")
-            || stem.starts_with("es-");
+        let target_clean = target.trim().to_lowercase();
+        let stem_clean = stem.trim().to_lowercase();
+
+        let is_en = target_clean == "en"
+            || target_clean == "en.toml"
+            || target_clean == "english"
+            || stem_clean == "en"
+            || stem_clean == "english"
+            || stem_clean.starts_with("en_")
+            || stem_clean.starts_with("en-");
+        let is_es = target_clean == "es"
+            || target_clean == "es.toml"
+            || target_clean == "español"
+            || target_clean == "espanol"
+            || stem_clean == "es"
+            || stem_clean == "español"
+            || stem_clean == "espanol"
+            || stem_clean.starts_with("es_")
+            || stem_clean.starts_with("es-");
 
         let mut base = if is_en {
             LanguageBundle::parse(EMBEDDED_EN)
@@ -452,7 +470,17 @@ impl LangService {
             LanguageBundle::parse(EMBEDDED_ES)
         };
 
-        if let Some(content) = disk_content {
+        let resolved_disk = if disk_content.is_some() {
+            disk_content
+        } else if is_en {
+            fs::read_to_string(Self::languages_dir().join("en.toml")).ok()
+        } else if is_es {
+            fs::read_to_string(Self::languages_dir().join("es.toml")).ok()
+        } else {
+            None
+        };
+
+        if let Some(content) = resolved_disk {
             let disk_bundle = LanguageBundle::parse(&content);
             if disk_bundle.code == "en" && !is_en {
                 base = LanguageBundle::parse(EMBEDDED_EN);
@@ -542,5 +570,29 @@ mod tests {
         assert_eq!(es_count, 1);
         let active_count = list.iter().filter(|l| l.is_current).count();
         assert_eq!(active_count, 1);
+    }
+
+    #[test]
+    fn test_set_language_by_target_and_name() {
+        let service = LangService::new("es");
+        assert_eq!(service.get("settings.title"), "Configuración");
+
+        assert!(service.set_language("en.toml").is_ok());
+        assert_eq!(service.get("settings.title"), "Settings");
+
+        assert!(service.set_language("es.toml").is_ok());
+        assert_eq!(service.get("settings.title"), "Configuración");
+
+        assert!(service.set_language("English").is_ok());
+        assert_eq!(service.get("settings.title"), "Settings");
+
+        assert!(service.set_language("Español").is_ok());
+        assert_eq!(service.get("settings.title"), "Configuración");
+    }
+
+    #[test]
+    fn test_english_by_name_initialization() {
+        let service = LangService::new("English");
+        assert_eq!(service.get("settings.title"), "Settings");
     }
 }
