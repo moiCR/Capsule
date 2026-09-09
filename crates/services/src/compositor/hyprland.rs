@@ -1,7 +1,6 @@
 use crate::compositor::{Compositor, WorkspaceInfo};
 use arc_swap::ArcSwap;
 use hyprland::data::{Monitors, Workspace};
-use hyprland::event_listener::EventListener;
 use hyprland::shared::{HyprData, HyprDataActive, WorkspaceType};
 use std::panic::catch_unwind;
 use std::sync::Arc;
@@ -48,17 +47,6 @@ fn is_command_socket_available() -> bool {
         return false;
     }
     std::path::Path::new(&format!("/tmp/hypr/{sig}/.socket.sock")).exists()
-}
-
-fn is_listener_socket_available() -> bool {
-    ensure_socket_link();
-    let Ok(sig) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") else {
-        return false;
-    };
-    if sig.is_empty() {
-        return false;
-    }
-    std::path::Path::new(&format!("/tmp/hypr/{sig}/.socket2.sock")).exists()
 }
 
 #[derive(Default)]
@@ -130,10 +118,17 @@ impl Compositor for Hyprland {
 
         let res = catch_unwind(|| {
             if let Ok(monitors) = Monitors::get() {
+                let mut fallback_rate = 0.0;
                 for monitor in monitors {
                     if monitor.focused && monitor.refresh_rate > 0.0 {
                         return monitor.refresh_rate as f64;
                     }
+                    if fallback_rate <= 0.0 && monitor.refresh_rate > 0.0 {
+                        fallback_rate = monitor.refresh_rate as f64;
+                    }
+                }
+                if fallback_rate > 0.0 {
+                    return fallback_rate;
                 }
             }
             60.0
@@ -158,47 +153,55 @@ pub async fn run_events_listener(
     current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
     tx: broadcast::Sender<WorkspaceInfo>,
 ) {
-    tokio::task::spawn_blocking(move || {
-        loop {
-            if !is_listener_socket_available() {
-                std::thread::sleep(Duration::from_secs(2));
-                continue;
+    let signature = match std::env::var("HYPRLAND_INSTANCE_SIGNATURE") {
+        Ok(s) if !s.is_empty() => s,
+        _ => return,
+    };
+
+    let socket_path = match std::env::var("XDG_RUNTIME_DIR") {
+        Ok(runtime_dir) => format!("{runtime_dir}/hypr/{signature}/.socket2.sock"),
+        Err(_) => format!("/tmp/hypr/{signature}/.socket2.sock"),
+    };
+
+    loop {
+        let Ok(stream) = tokio::net::UnixStream::connect(&socket_path).await else {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            continue;
+        };
+
+        use tokio::io::AsyncBufReadExt;
+        let mut reader = tokio::io::BufReader::new(stream).lines();
+
+        while let Ok(Some(line)) = reader.next_line().await {
+            let is_workspace_event = line.starts_with("workspace>>")
+                || line.starts_with("workspacev2>>")
+                || line.starts_with("focusedmon>>")
+                || line.starts_with("focusedmonv2>>")
+                || line.starts_with("activespecial>>")
+                || line.starts_with("createworkspace>>")
+                || line.starts_with("createworkspacev2>>")
+                || line.starts_with("destroyworkspace>>")
+                || line.starts_with("destroyworkspacev2>>")
+                || line.starts_with("renameworkspace>>");
+
+            if is_workspace_event {
+                let maybe_ws = tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
+                    .await
+                    .ok()
+                    .flatten();
+
+                if let Some(ws) = maybe_ws {
+                    let prev = current_workspace.load();
+                    if **prev != ws {
+                        current_workspace.store(Arc::new(ws.clone()));
+                        let _ = tx.send(ws);
+                    }
+                }
             }
-
-            let res = catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut listener = EventListener::new();
-
-                let ws_change = current_workspace.clone();
-                let tx_change = tx.clone();
-                listener.add_workspace_change_handler(move |ws_type| {
-                    let base_num = ws_change.load().num;
-                    let ws = Hyprland::from_workspace_type(&ws_type, base_num);
-                    let prev = ws_change.load();
-                    if **prev != ws {
-                        ws_change.store(Arc::new(ws.clone()));
-                        let _ = tx_change.send(ws);
-                    }
-                });
-
-                let ws_mon = current_workspace.clone();
-                let tx_mon = tx.clone();
-                listener.add_active_monitor_change_handler(move |data| {
-                    let base_num = ws_mon.load().num;
-                    let ws = Hyprland::from_workspace_type(&data.workspace, base_num);
-                    let prev = ws_mon.load();
-                    if **prev != ws {
-                        ws_mon.store(Arc::new(ws.clone()));
-                        let _ = tx_mon.send(ws);
-                    }
-                });
-
-                let _ = listener.start_listener();
-            }));
-
-            let _ = res;
-            std::thread::sleep(Duration::from_secs(2));
         }
-    });
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
 }
 
 #[cfg(test)]

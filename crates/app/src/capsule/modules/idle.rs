@@ -3,8 +3,9 @@ use gpui::{
     Context, Entity, EventEmitter, FontWeight, IntoElement, Render, Task, Window, div, prelude::*,
     px,
 };
-use services::{AppState, LyricsService};
+use services::{AppState, LyricsService, WorkspaceInfo};
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 use ui::theme::Theme;
 
 use crate::capsule::widgets::idle::visualizer::Visualizer;
@@ -17,6 +18,22 @@ pub enum IdleEvent {
 fn ease_out_cubic(t: f32) -> f32 {
     let p = 1.0 - t.clamp(0.0, 1.0);
     1.0 - p * p * p
+}
+
+fn format_workspace(info: &WorkspaceInfo) -> String {
+    if info.is_special {
+        if let Some(ref special) = info.special_name {
+            format!("Workspace {special}")
+        } else {
+            format!("Workspace {}", info.name)
+        }
+    } else if info.num > 0 {
+        format!("Workspace {}", info.num)
+    } else if !info.name.is_empty() {
+        format!("Workspace {}", info.name)
+    } else {
+        "Workspace 1".to_string()
+    }
 }
 
 fn calc_text_width(text: &str) -> f32 {
@@ -46,6 +63,9 @@ fn calc_text_width(text: &str) -> f32 {
 pub struct IdleModule {
     audio_active: bool,
     time_str: String,
+    workspace_str: String,
+    workspace_visible: bool,
+    workspace_timer_task: Option<Task<()>>,
     current_track_id: Option<String>,
     track_toast_text: Option<String>,
     track_toast_timer: Option<Instant>,
@@ -70,21 +90,69 @@ impl IdleModule {
 
         let lyrics_service = cx.global::<AppState>().lyrics.clone();
         let mpris_service = cx.global::<AppState>().mpris.clone();
+        let compositor = cx.global::<AppState>().compositor.clone();
 
+        let initial_ws = compositor.get_workspace();
+        let initial_ws_str = format_workspace(&initial_ws);
+
+        let compositor_for_time = compositor.clone();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
                 let now = Local::now();
                 let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
+                let ws = compositor_for_time.get_workspace();
+                let ws_str = format_workspace(&ws);
 
                 let res = this.update(cx, |this: &mut Self, cx| {
+                    let mut changed = false;
                     if this.time_str != time_str {
                         this.time_str = time_str;
+                        changed = true;
+                    }
+                    if this.workspace_str != ws_str {
+                        this.workspace_str = ws_str;
+                        this.trigger_workspace_display(cx);
+                    } else if changed {
                         cx.notify();
                     }
                 });
                 if res.is_err() {
                     break;
+                }
+            }
+        })
+        .detach();
+
+        let compositor_for_events = compositor.clone();
+        cx.spawn(async move |this, cx| {
+            let mut rx = compositor_for_events.on_change_workspace();
+            loop {
+                match rx.recv().await {
+                    Ok(ws) => {
+                        let ws_str = format_workspace(&ws);
+                        let res = this.update(cx, |this: &mut Self, cx| {
+                            this.workspace_str = ws_str;
+                            this.trigger_workspace_display(cx);
+                        });
+                        if res.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        let ws = compositor_for_events.get_workspace();
+                        let ws_str = format_workspace(&ws);
+                        let res = this.update(cx, |this: &mut Self, cx| {
+                            if this.workspace_str != ws_str {
+                                this.workspace_str = ws_str;
+                                this.trigger_workspace_display(cx);
+                            }
+                        });
+                        if res.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
         })
@@ -231,6 +299,9 @@ impl IdleModule {
         Self {
             audio_active: false,
             time_str: format!("{:02}:{:02}", now.hour(), now.minute()),
+            workspace_str: initial_ws_str,
+            workspace_visible: false,
+            workspace_timer_task: None,
             current_track_id: None,
             track_toast_text: None,
             track_toast_timer: None,
@@ -242,6 +313,39 @@ impl IdleModule {
             visualizer,
             lyrics_service,
         }
+    }
+
+    fn trigger_workspace_display(&mut self, cx: &mut Context<Self>) {
+        let old_text = self.get_active_display_text();
+        self.workspace_visible = true;
+
+        if !self.audio_active {
+            self.prev_lyric_line = old_text;
+            self.lyric_anim_progress = 0.0;
+            self.lyric_anim_start = Some(Instant::now());
+            self.start_anim_task(cx);
+        }
+
+        let task = cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            let _ = this.update(cx, |this: &mut Self, cx| {
+                if this.workspace_visible {
+                    let old_text = this.get_active_display_text();
+                    this.workspace_visible = false;
+                    this.workspace_timer_task = None;
+
+                    if !this.audio_active {
+                        this.prev_lyric_line = old_text;
+                        this.lyric_anim_progress = 0.0;
+                        this.lyric_anim_start = Some(Instant::now());
+                        this.start_anim_task(cx);
+                    }
+                    cx.notify();
+                }
+            });
+        });
+        self.workspace_timer_task = Some(task);
+        cx.notify();
     }
 
     fn start_anim_task(&mut self, cx: &mut Context<Self>) {
@@ -279,9 +383,17 @@ impl IdleModule {
         self.lyric_anim_task = Some(anim_task);
     }
 
+    fn idle_display_text(&self) -> String {
+        if self.workspace_visible && !self.workspace_str.is_empty() {
+            format!("{} • {}", self.time_str, self.workspace_str)
+        } else {
+            self.time_str.clone()
+        }
+    }
+
     fn get_active_display_text(&self) -> Option<String> {
         if !self.audio_active {
-            return Some(self.time_str.clone());
+            return Some(self.idle_display_text());
         }
         if let Some(toast) = &self.track_toast_text {
             Some(toast.clone())
@@ -289,10 +401,10 @@ impl IdleModule {
             if !line.is_empty() {
                 Some(line.clone())
             } else {
-                Some(self.time_str.clone())
+                Some(self.idle_display_text())
             }
         } else {
-            Some(self.time_str.clone())
+            Some(self.idle_display_text())
         }
     }
 
@@ -309,7 +421,7 @@ impl IdleModule {
 
         let curr_text = self
             .get_active_display_text()
-            .unwrap_or_else(|| self.time_str.clone());
+            .unwrap_or_else(|| self.idle_display_text());
         let curr_w = (calc_text_width(&curr_text) + extra_spacing).max(min_w);
 
         if let Some(prev_text) = &self.prev_lyric_line {
@@ -335,7 +447,7 @@ impl Render for IdleModule {
 
         let curr_text = self
             .get_active_display_text()
-            .unwrap_or_else(|| self.time_str.clone());
+            .unwrap_or_else(|| self.idle_display_text());
 
         let mut row = div()
             .id("idle-row")

@@ -44,7 +44,15 @@ pub struct CompositorService {
 impl CompositorService {
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
-        let current_workspace = Arc::new(ArcSwap::from_pointee(WorkspaceInfo::default()));
+        let initial_ws = if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+            hyprland::Hyprland::new().get_workspace()
+        } else if std::env::var("NIRI_SOCKET").is_ok() {
+            niri::Niri::new().get_workspace()
+        } else {
+            kinetic::KineticWE::new().get_workspace()
+        }
+        .unwrap_or_default();
+        let current_workspace = Arc::new(ArcSwap::from_pointee(initial_ws));
         let (workspace_tx, _) = broadcast::channel(32);
 
         let service = Self {
@@ -107,7 +115,11 @@ impl CompositorService {
         .flatten();
 
         if let Some(ws) = initial {
-            self.current_workspace.store(Arc::new(ws));
+            let prev = self.current_workspace.load();
+            if **prev != ws {
+                self.current_workspace.store(Arc::new(ws.clone()));
+                let _ = self.workspace_tx.send(ws);
+            }
         }
 
         if use_hyprland {
@@ -190,5 +202,18 @@ mod tests {
         let _ = service.workspace_tx.send(test_ws.clone());
         let received = rx.recv().await;
         assert_eq!(received.ok(), Some(test_ws));
+    }
+
+    #[tokio::test]
+    async fn test_compositor_service_refresh_rate() {
+        let service = CompositorService::new();
+        let rate = service.get_refresh_rate();
+        assert!(rate >= 30.0);
+
+        let dur = service.get_frame_duration();
+        assert!(dur.as_micros() > 0);
+
+        let ms = service.get_frame_duration_ms();
+        assert!(ms >= 1);
     }
 }
