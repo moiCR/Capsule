@@ -49,5 +49,5 @@ pub use polkit::{
     start_polkit_agent,
 };
 pub use power::{PowerProfile, PowerService};
-pub use system::{SystemService, SystemStatus};
+pub use system::{AudioSink, AudioSource, SystemService, SystemStatus};
 pub use tray::{SniHostService, SniItem, TrayAction, TrayService};

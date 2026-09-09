@@ -80,7 +80,7 @@ impl UIConfig {
 }
 
 fn default_capsule_round() -> f32 {
-    42.0
+    24.0
 }
 
 fn default_satellite_round() -> f32 {

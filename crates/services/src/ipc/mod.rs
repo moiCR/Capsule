@@ -29,6 +29,7 @@ pub enum IpcCommand {
     Terminal,
     Browser,
     Editor,
+    FileManager,
     ToggleSettings,
     ShowSettings,
 }
@@ -66,6 +67,9 @@ impl FromStr for IpcCommand {
             "terminal" | "term" | "launch-terminal" => Ok(IpcCommand::Terminal),
             "browser" | "web" | "launch-browser" => Ok(IpcCommand::Browser),
             "editor" | "edit" | "launch-editor" => Ok(IpcCommand::Editor),
+            "filemanager" | "file-manager" | "files" | "launch-filemanager" | "launch-files" => {
+                Ok(IpcCommand::FileManager)
+            }
             "settings" | "config" | "configuration" | "preferences" | "toggle-settings"
             | "toggle settings" => Ok(IpcCommand::ToggleSettings),
             "show-settings" | "show settings" => Ok(IpcCommand::ShowSettings),
@@ -95,6 +99,7 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::Terminal => "terminal".to_string(),
         IpcCommand::Browser => "browser".to_string(),
         IpcCommand::Editor => "editor".to_string(),
+        IpcCommand::FileManager => "file-manager".to_string(),
         IpcCommand::ToggleSettings => "settings".to_string(),
         IpcCommand::ShowSettings => "show-settings".to_string(),
     }

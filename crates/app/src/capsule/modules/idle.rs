@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use ui::theme::Theme;
 
-use crate::capsule::widgets::idle::visualizer::Visualizer;
+use crate::capsule::widgets::idle::{FlipClock, visualizer::Visualizer};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IdleEvent {
@@ -77,6 +77,8 @@ pub struct IdleModule {
     visualizer: Entity<Visualizer>,
     #[allow(dead_code)]
     lyrics_service: LyricsService,
+    flip_clock: FlipClock,
+    flip_anim_task: Option<Task<()>>,
 }
 
 impl IdleModule {
@@ -91,6 +93,7 @@ impl IdleModule {
         let lyrics_service = cx.global::<AppState>().lyrics.clone();
         let mpris_service = cx.global::<AppState>().mpris.clone();
         let compositor = cx.global::<AppState>().compositor.clone();
+        let config_service = cx.global::<AppState>().config.clone();
 
         let initial_ws = compositor.get_workspace();
         let initial_ws_str = format_workspace(&initial_ws);
@@ -107,7 +110,11 @@ impl IdleModule {
                 let res = this.update(cx, |this: &mut Self, cx| {
                     let mut changed = false;
                     if this.time_str != time_str {
-                        this.time_str = time_str;
+                        this.time_str = time_str.clone();
+                        let started = this.flip_clock.update_time(&time_str);
+                        if started {
+                            this.start_flip_clock_anim(cx);
+                        }
                         changed = true;
                     }
                     if this.workspace_str != ws_str {
@@ -160,6 +167,7 @@ impl IdleModule {
 
         let lyrics_service_clone = lyrics_service.clone();
         let mpris_service_clone = mpris_service.clone();
+        let config_service_clone = config_service.clone();
         cx.spawn(async move |this, cx| {
             let mut last_track_key = String::new();
             let mut last_pos_micros: u64 = 0;
@@ -168,6 +176,7 @@ impl IdleModule {
             loop {
                 let players = mpris_service_clone.get_all_players();
                 let active_track = players.iter().find(|p| p.is_playing && p.has_media);
+                let show_lyrics = config_service_clone.get().mpris.show_lyrics;
 
                 let mut lyric_line = None;
                 let mut new_track_id = None;
@@ -194,25 +203,26 @@ impl IdleModule {
                         last_pos_time = Instant::now();
                     }
 
-                    // Estimate current playback position using real-time clock interpolation
                     let estimated_pos_micros = raw_pos + last_pos_time.elapsed().as_micros() as u64;
 
-                    if let Some(cached_opt) =
-                        lyrics_service_clone.get_cached_lyrics(&track.title, &track.artist)
-                    {
-                        if let Some(lyrics) = cached_opt {
-                            let pos_duration = Duration::from_micros(estimated_pos_micros);
-                            if let Some(line) = lyrics.get_current_line(pos_duration) {
-                                lyric_line = Some(line.to_string());
+                    if show_lyrics {
+                        if let Some(cached_opt) =
+                            lyrics_service_clone.get_cached_lyrics(&track.title, &track.artist)
+                        {
+                            if let Some(lyrics) = cached_opt {
+                                let pos_duration = Duration::from_micros(estimated_pos_micros);
+                                if let Some(line) = lyrics.get_current_line(pos_duration) {
+                                    lyric_line = Some(line.to_string());
+                                }
                             }
+                        } else {
+                            lyrics_service_clone.fetch_lyrics_in_background(
+                                track.title.clone(),
+                                track.artist.clone(),
+                                album.map(|s| s.to_string()),
+                                duration_secs,
+                            );
                         }
-                    } else {
-                        lyrics_service_clone.fetch_lyrics_in_background(
-                            track.title.clone(),
-                            track.artist.clone(),
-                            album.map(|s| s.to_string()),
-                            duration_secs,
-                        );
                     }
 
                     let toast = if track.artist.is_empty() || track.artist == "No media playing" {
@@ -255,16 +265,16 @@ impl IdleModule {
                         changed = true;
                     }
 
-                    if let Some(timer) = this.track_toast_timer {
-                        if timer.elapsed() >= Duration::from_millis(1000) {
-                            this.prev_lyric_line = this.track_toast_text.clone();
-                            this.lyric_anim_progress = 0.0;
-                            this.lyric_anim_start = Some(Instant::now());
-                            this.start_anim_task(cx);
-                            this.track_toast_text = None;
-                            this.track_toast_timer = None;
-                            changed = true;
-                        }
+                    if let Some(timer) = this.track_toast_timer
+                        && timer.elapsed() >= Duration::from_millis(1000)
+                    {
+                        this.prev_lyric_line = this.track_toast_text.clone();
+                        this.lyric_anim_progress = 0.0;
+                        this.lyric_anim_start = Some(Instant::now());
+                        this.start_anim_task(cx);
+                        this.track_toast_text = None;
+                        this.track_toast_timer = None;
+                        changed = true;
                     }
 
                     // Update lyric line
@@ -296,9 +306,11 @@ impl IdleModule {
         .detach();
 
         let now = Local::now();
+        let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
+        let flip_clock = FlipClock::new(&time_str);
         Self {
             audio_active: false,
-            time_str: format!("{:02}:{:02}", now.hour(), now.minute()),
+            time_str,
             workspace_str: initial_ws_str,
             workspace_visible: false,
             workspace_timer_task: None,
@@ -312,6 +324,8 @@ impl IdleModule {
             lyric_anim_task: None,
             visualizer,
             lyrics_service,
+            flip_clock,
+            flip_anim_task: None,
         }
     }
 
@@ -383,6 +397,45 @@ impl IdleModule {
         self.lyric_anim_task = Some(anim_task);
     }
 
+    fn start_flip_clock_anim(&mut self, cx: &mut Context<Self>) {
+        if self.flip_anim_task.is_some() {
+            return;
+        }
+        let compositor = cx.global::<AppState>().compositor.clone();
+        let anim_task = cx.spawn(async move |this, cx| {
+            let duration_ms = 350.0;
+            loop {
+                cx.background_executor()
+                    .timer(compositor.get_frame_duration())
+                    .await;
+                let all_done = this
+                    .update(cx, |this: &mut Self, cx| {
+                        let done = this.flip_clock.tick(duration_ms);
+                        cx.notify();
+                        done
+                    })
+                    .unwrap_or(true);
+
+                if all_done {
+                    let _ = this.update(cx, |this: &mut Self, _| {
+                        this.flip_anim_task = None;
+                    });
+                    break;
+                }
+            }
+        });
+        self.flip_anim_task = Some(anim_task);
+    }
+
+    fn has_active_lyrics_or_toast(&self) -> bool {
+        self.audio_active
+            && (self.track_toast_text.is_some()
+                || self
+                    .current_lyric_line
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty()))
+    }
+
     fn idle_display_text(&self) -> String {
         if self.workspace_visible && !self.workspace_str.is_empty() {
             format!("{} • {}", self.time_str, self.workspace_str)
@@ -445,10 +498,6 @@ impl Render for IdleModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
 
-        let curr_text = self
-            .get_active_display_text()
-            .unwrap_or_else(|| self.idle_display_text());
-
         let mut row = div()
             .id("idle-row")
             .cursor_pointer()
@@ -473,17 +522,45 @@ impl Render for IdleModule {
         let opacity = if p < 1.0 { p } else { 1.0 };
         let offset = if p < 1.0 { (1.0 - p) * 6.0 } else { 0.0 };
 
-        row.child(
-            div()
-                .flex_shrink_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .font_weight(FontWeight::BOLD)
-                .text_size(px(13.0))
-                .text_color(theme.foreground())
+        if self.has_active_lyrics_or_toast() {
+            let curr_text = self
+                .get_active_display_text()
+                .unwrap_or_else(|| self.idle_display_text());
+
+            row.child(
+                div()
+                    .flex_shrink_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .font_weight(FontWeight::BOLD)
+                    .text_size(px(13.0))
+                    .text_color(theme.foreground())
+                    .opacity(opacity)
+                    .top(px(offset))
+                    .child(curr_text),
+            )
+        } else {
+            let mut clock_row = div()
+                .flex()
+                .flex_row()
+                .items_center()
                 .opacity(opacity)
                 .top(px(offset))
-                .child(curr_text),
-        )
+                .child(self.flip_clock.render(theme));
+
+            if self.workspace_visible && !self.workspace_str.is_empty() {
+                clock_row = clock_row.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .font_weight(FontWeight::BOLD)
+                        .text_size(px(13.0))
+                        .text_color(theme.foreground())
+                        .child(format!(" • {}", self.workspace_str)),
+                );
+            }
+
+            row.child(clock_row)
+        }
     }
 }

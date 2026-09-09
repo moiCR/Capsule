@@ -13,12 +13,22 @@ pub struct AudioSink {
     pub is_default: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AudioSource {
+    pub name: String,
+    pub description: String,
+    pub is_default: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SystemStatus {
     pub volume: u32,
     pub is_muted: bool,
+    pub input_volume: u32,
+    pub is_input_muted: bool,
     pub brightness: u32,
     pub audio_sinks: Vec<AudioSink>,
+    pub audio_sources: Vec<AudioSource>,
 }
 
 #[derive(Clone)]
@@ -27,6 +37,9 @@ pub struct SystemService {
     target_volume: Arc<AtomicU32>,
     volume_pending: Arc<AtomicBool>,
     volume_notify: Arc<tokio::sync::Notify>,
+    target_input_volume: Arc<AtomicU32>,
+    input_volume_pending: Arc<AtomicBool>,
+    input_volume_notify: Arc<tokio::sync::Notify>,
     audio_changed: Arc<tokio::sync::Notify>,
 }
 
@@ -37,6 +50,9 @@ impl SystemService {
             target_volume: Arc::new(AtomicU32::new(50)),
             volume_pending: Arc::new(AtomicBool::new(false)),
             volume_notify: Arc::new(tokio::sync::Notify::new()),
+            target_input_volume: Arc::new(AtomicU32::new(50)),
+            input_volume_pending: Arc::new(AtomicBool::new(false)),
+            input_volume_notify: Arc::new(tokio::sync::Notify::new()),
             audio_changed: Arc::new(tokio::sync::Notify::new()),
         };
 
@@ -49,6 +65,11 @@ impl SystemService {
         let service_volume = service.clone();
         tokio::spawn(async move {
             service_volume.run_volume_worker().await;
+        });
+
+        let service_input = service.clone();
+        tokio::spawn(async move {
+            service_input.run_input_volume_worker().await;
         });
 
         service
@@ -86,6 +107,30 @@ impl SystemService {
         }
     }
 
+    async fn run_input_volume_worker(&self) {
+        loop {
+            self.input_volume_notify.notified().await;
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+            if self.input_volume_pending.swap(false, Ordering::SeqCst) {
+                let target = self.target_input_volume.load(Ordering::SeqCst);
+                let percent_str = format!("{target}%");
+
+                if Command::new("wpctl")
+                    .args(["set-volume", "@DEFAULT_AUDIO_SOURCE@", &percent_str])
+                    .status()
+                    .await
+                    .is_err()
+                {
+                    let _ = Command::new("pactl")
+                        .args(["set-source-volume", "@DEFAULT_SOURCE@", &percent_str])
+                        .status()
+                        .await;
+                }
+            }
+        }
+    }
+
     pub fn set_volume_fast(&self, percent: u32) {
         let percent = percent.min(100);
         let mut current = (**self.status.load()).clone();
@@ -101,12 +146,36 @@ impl SystemService {
         self.audio_changed.notify_waiters();
     }
 
+    pub fn set_input_volume_fast(&self, percent: u32) {
+        let percent = percent.min(100);
+        let mut current = (**self.status.load()).clone();
+        current.input_volume = percent;
+        if percent > 0 {
+            current.is_input_muted = false;
+        }
+        self.status.store(Arc::new(current));
+
+        self.target_input_volume.store(percent, Ordering::SeqCst);
+        self.input_volume_pending.store(true, Ordering::SeqCst);
+        self.input_volume_notify.notify_one();
+        self.audio_changed.notify_waiters();
+    }
+
     pub async fn refresh_audio(&self) -> Result<()> {
         let (volume, is_muted) = Self::fetch_audio_status().await.unwrap_or((50, false));
+        let (input_volume, is_input_muted) = Self::fetch_input_audio_status()
+            .await
+            .unwrap_or((50, false));
         let mut current = (**self.status.load()).clone();
-        if current.volume != volume || current.is_muted != is_muted {
+        if current.volume != volume
+            || current.is_muted != is_muted
+            || current.input_volume != input_volume
+            || current.is_input_muted != is_input_muted
+        {
             current.volume = volume;
             current.is_muted = is_muted;
+            current.input_volume = input_volume;
+            current.is_input_muted = is_input_muted;
             self.status.store(Arc::new(current));
             self.audio_changed.notify_waiters();
         }
@@ -115,14 +184,21 @@ impl SystemService {
 
     pub async fn refresh(&self) -> Result<()> {
         let vol_muted = Self::fetch_audio_status().await.unwrap_or((50, false));
+        let input_vol_muted = Self::fetch_input_audio_status()
+            .await
+            .unwrap_or((50, false));
         let brightness = Self::fetch_brightness().await.unwrap_or(100);
         let audio_sinks = Self::fetch_audio_sinks().await;
+        let audio_sources = Self::fetch_audio_sources().await;
 
         let new_status = SystemStatus {
             volume: vol_muted.0,
             is_muted: vol_muted.1,
+            input_volume: input_vol_muted.0,
+            is_input_muted: input_vol_muted.1,
             brightness,
             audio_sinks,
+            audio_sources,
         };
 
         self.status.store(Arc::new(new_status));
@@ -140,8 +216,8 @@ impl SystemService {
             if let Some(stdout) = child.stdout.take() {
                 let mut reader = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    if line.contains("sink") {
-                        let _ = self.refresh_audio().await;
+                    if line.contains("sink") || line.contains("source") {
+                        let _ = self.refresh().await;
                     } else if line.contains("server") {
                         let _ = self.refresh().await;
                     }
@@ -155,6 +231,11 @@ impl SystemService {
         Ok(())
     }
 
+    pub async fn set_input_volume(&self, percent: u32) -> Result<()> {
+        self.set_input_volume_fast(percent);
+        Ok(())
+    }
+
     pub async fn set_default_sink(&self, sink_name: &str) -> Result<()> {
         if Command::new("pactl")
             .args(["set-default-sink", sink_name])
@@ -164,6 +245,21 @@ impl SystemService {
         {
             let _ = Command::new("wpctl")
                 .args(["set-default", sink_name])
+                .status()
+                .await;
+        }
+        self.refresh().await
+    }
+
+    pub async fn set_default_source(&self, source_name: &str) -> Result<()> {
+        if Command::new("pactl")
+            .args(["set-default-source", source_name])
+            .status()
+            .await
+            .is_err()
+        {
+            let _ = Command::new("wpctl")
+                .args(["set-default", source_name])
                 .status()
                 .await;
         }
@@ -187,6 +283,31 @@ impl SystemService {
         {
             let _ = Command::new("pactl")
                 .args(["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
+                .status()
+                .await;
+        }
+
+        let _ = is_muted;
+        self.refresh().await
+    }
+
+    pub async fn toggle_input_mute(&self) -> Result<()> {
+        let is_muted = {
+            let mut current = (**self.status.load()).clone();
+            current.is_input_muted = !current.is_input_muted;
+            let res = current.is_input_muted;
+            self.status.store(Arc::new(current));
+            res
+        };
+
+        if Command::new("wpctl")
+            .args(["set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
+            .status()
+            .await
+            .is_err()
+        {
+            let _ = Command::new("pactl")
+                .args(["set-source-mute", "@DEFAULT_SOURCE@", "toggle"])
                 .status()
                 .await;
         }
@@ -354,5 +475,99 @@ impl SystemService {
             }
         }
         sinks
+    }
+
+    async fn fetch_input_audio_status() -> Result<(u32, bool)> {
+        if let Ok(output) = Command::new("wpctl")
+            .args(["get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+            .output()
+            .await
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let is_muted = text.contains("[MUTED]");
+            if let Some(vol_str) = text.split_whitespace().nth(1) {
+                if let Ok(val) = vol_str.parse::<f32>() {
+                    return Ok(((val * 100.0).round() as u32, is_muted));
+                }
+            }
+        }
+
+        if let Ok(output) = Command::new("pactl")
+            .args(["get-source-volume", "@DEFAULT_SOURCE@"])
+            .output()
+            .await
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Some(pos) = text.find('/') {
+                let rest = &text[pos + 1..];
+                if let Some(pos2) = rest.find('%') {
+                    if let Ok(val) = rest[..pos2].trim().parse::<u32>() {
+                        return Ok((val, false));
+                    }
+                }
+            }
+        }
+
+        Ok((50, false))
+    }
+
+    async fn fetch_audio_sources() -> Vec<AudioSource> {
+        let default_source = Command::new("pactl")
+            .arg("get-default-source")
+            .output()
+            .await
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+            .unwrap_or_default();
+
+        let mut sources = Vec::new();
+        if let Ok(output) = Command::new("pactl")
+            .arg("list")
+            .arg("sources")
+            .output()
+            .await
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let mut current_name = String::new();
+            let mut current_desc = String::new();
+
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("Name: ") {
+                    if !current_name.is_empty() && !current_name.ends_with(".monitor") {
+                        let is_def = current_name == default_source;
+                        sources.push(AudioSource {
+                            name: current_name.clone(),
+                            description: if current_desc.is_empty() {
+                                current_name.clone()
+                            } else {
+                                current_desc.clone()
+                            },
+                            is_default: is_def,
+                        });
+                        current_desc.clear();
+                    }
+                    current_name = trimmed.trim_start_matches("Name: ").trim().to_string();
+                } else if trimmed.starts_with("Description: ") {
+                    current_desc = trimmed
+                        .trim_start_matches("Description: ")
+                        .trim()
+                        .to_string();
+                }
+            }
+
+            if !current_name.is_empty() && !current_name.ends_with(".monitor") {
+                let is_def = current_name == default_source;
+                sources.push(AudioSource {
+                    name: current_name,
+                    description: if current_desc.is_empty() {
+                        "Audio Input".to_string()
+                    } else {
+                        current_desc
+                    },
+                    is_default: is_def,
+                });
+            }
+        }
+        sources
     }
 }

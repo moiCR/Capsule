@@ -51,7 +51,7 @@ impl CapsuleMode {
             CapsuleMode::Wallpaper => 42.0,
             CapsuleMode::Clipboard => 42.0,
             CapsuleMode::Emoji => 42.0,
-            CapsuleMode::Settings => 36.0,
+            CapsuleMode::Settings => 24.0,
         }
     }
 }

@@ -603,7 +603,7 @@ impl Capsule {
             |capsule, _, event: &SettingsEvent, cx| match event {
                 SettingsEvent::Close => {
                     capsule.modules.settings_view.update(cx, |settings, cx| {
-                        settings.set_tab(SettingsTab::General, cx);
+                        settings.set_tab(SettingsTab::Capsule, cx);
                     });
                     capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                 }
@@ -827,7 +827,7 @@ impl Capsule {
 
         if self.mode == CapsuleMode::Settings && mode != CapsuleMode::Settings {
             self.modules.settings_view.update(cx, |settings, cx| {
-                settings.set_tab(SettingsTab::General, cx);
+                settings.set_tab(SettingsTab::Capsule, cx);
             });
         }
 
@@ -1076,6 +1076,23 @@ impl Capsule {
                         format!("{term} -e {editor} >/dev/null 2>&1 &")
                     } else {
                         format!("{editor} >/dev/null 2>&1 &")
+                    };
+                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                }
+            }
+            services::IpcCommand::FileManager => {
+                if cx.has_global::<AppState>() {
+                    let config = cx.global::<AppState>().config.get();
+                    let file_manager = &config.defaults.file_manager;
+                    let is_terminal_app = matches!(
+                        file_manager.trim().split_whitespace().next().unwrap_or(""),
+                        "yazi" | "ranger" | "lf" | "nnn" | "mc" | "vifm"
+                    );
+                    let cmd = if is_terminal_app {
+                        let term = &config.defaults.terminal;
+                        format!("{term} -e {file_manager} >/dev/null 2>&1 &")
+                    } else {
+                        format!("{file_manager} >/dev/null 2>&1 &")
                     };
                     let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                 }

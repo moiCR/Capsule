@@ -8,6 +8,8 @@ pub struct Defaults {
     pub browser: String,
     #[serde(default = "default_editor")]
     pub editor: String,
+    #[serde(default = "default_file_manager", alias = "fileManager")]
+    pub file_manager: String,
 }
 
 impl Default for Defaults {
@@ -16,6 +18,7 @@ impl Default for Defaults {
             terminal: default_terminal(),
             browser: default_browser(),
             editor: default_editor(),
+            file_manager: default_file_manager(),
         }
     }
 }
@@ -32,4 +35,8 @@ fn default_editor() -> String {
     std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "nvim".to_string())
+}
+
+fn default_file_manager() -> String {
+    std::env::var("FILEMANAGER").unwrap_or_else(|_| "thunar".to_string())
 }
