@@ -287,42 +287,5 @@ NoDisplay=true
 Categories=Utility;System;
 EOF
 success "Desktop entry created at $DESKTOP_FILE"
-
-echo -e "----------------------------------------"
-confirm_dotfiles="y"
-if [[ -t 0 ]]; then
-    read -rp "Do you want to install Capsule-Plus (dotfiles)? [Y/n] " confirm_dotfiles
-fi
-
-confirm_dotfiles=$(echo "$confirm_dotfiles" | tr '[:upper:]' '[:lower:]')
-if [[ "$confirm_dotfiles" == "n" || "$confirm_dotfiles" == "no" ]]; then
-    info "Dotfiles installation skipped by user."
-else
-    info "Installing Capsule-Plus dotfiles directly in $CONFIG_DIR..."
-
-    if [[ -d "$CONFIG_DIR/.git" ]]; then
-        info "Existing Capsule-Plus repository found at $CONFIG_DIR. Updating via git pull..."
-        (cd "$CONFIG_DIR" && git pull) || warn "Git pull failed, proceeding with existing files."
-    elif [[ -d "$CONFIG_DIR" && "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
-        BACKUP_DIR="${CONFIG_DIR}.bak.$(date +%Y%m%d_%H%M%S)"
-        info "Backing up existing $CONFIG_DIR to $BACKUP_DIR..."
-        mv "$CONFIG_DIR" "$BACKUP_DIR"
-        git clone "$DOTFILES_REPO" "$CONFIG_DIR"
-    else
-        mkdir -p "$(dirname "$CONFIG_DIR")"
-        git clone "$DOTFILES_REPO" "$CONFIG_DIR"
-    fi
-
-    if [[ -f "$CONFIG_DIR/install.sh" ]]; then
-        info "Executing Capsule-Plus installer script from $CONFIG_DIR..."
-        chmod +x "$CONFIG_DIR/install.sh"
-        (cd "$CONFIG_DIR" && ./install.sh) || warn "Capsule-Plus install.sh finished with warnings."
-        success "Capsule-Plus dotfiles installed successfully in $CONFIG_DIR!"
-    else
-        warn "No install.sh script found in $CONFIG_DIR."
-    fi
-fi
-
-echo -e "----------------------------------------"
 success "Capsule installation completed successfully!"
 info "You can start Capsule by running 'capsule' in your terminal."

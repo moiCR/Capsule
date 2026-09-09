@@ -16,6 +16,7 @@ assets = { path = "crates/assets" }
 chrono = "0.4.39"
 hyprland = "0.3.13"
 niri-ipc = "26.4.0"
+mango-ipc = "0.6.0"
 
 
 futures-util = { version = "0.3.30", default-features = false }
