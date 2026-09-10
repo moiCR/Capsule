@@ -10,6 +10,10 @@ use super::general_section::{
     render_music_players_card, render_power_selector,
 };
 use super::lockscreen_section::render_text_input;
+use super::record_section::{
+    render_audio_selector, render_container_selector, render_fps_selector, render_output_selector,
+    render_quality_selector, render_resolution_selector,
+};
 use super::setting_item::{
     render_card_container, render_control_row, render_hero_header, render_int_slider_row,
     render_row_divider, render_slider_row, render_toggle_row,
@@ -166,6 +170,58 @@ pub fn render_search_results(
             "Ajusta el consumo y velocidad del procesador vía power-profiles-daemon.".to_string(),
             "Idioma de la Interfaz".to_string(),
             "Cambia el idioma activo de las etiquetas y controles del sistema.".to_string(),
+        )
+    };
+
+    let (
+        rec_fps_title,
+        rec_fps_sub,
+        rec_res_title,
+        rec_res_sub,
+        rec_quality_title,
+        rec_quality_sub,
+        rec_container_title,
+        rec_container_sub,
+        rec_audio_title,
+        rec_audio_sub,
+        rec_cursor_title,
+        rec_cursor_sub,
+        rec_output_title,
+        rec_output_sub,
+    ) = if cx.has_global::<AppState>() {
+        let lang = &cx.global::<AppState>().language;
+        (
+            lang.get("settings.record_fps_title"),
+            lang.get("settings.record_fps_subtitle"),
+            lang.get("settings.record_resolution_title"),
+            lang.get("settings.record_resolution_subtitle"),
+            lang.get("settings.record_quality_title"),
+            lang.get("settings.record_quality_subtitle"),
+            lang.get("settings.record_container_title"),
+            lang.get("settings.record_container_subtitle"),
+            lang.get("settings.record_audio_title"),
+            lang.get("settings.record_audio_subtitle"),
+            lang.get("settings.record_cursor_title"),
+            lang.get("settings.record_cursor_subtitle"),
+            lang.get("settings.record_output_title"),
+            lang.get("settings.record_output_subtitle"),
+        )
+    } else {
+        (
+            "Cuadros por Segundo (FPS)".to_string(),
+            "Fluidez de captura de la grabación de pantalla.".to_string(),
+            "Resolución".to_string(),
+            "Escala de captura del monitor seleccionado.".to_string(),
+            "Calidad de Video".to_string(),
+            "Tasa de bits y compresión del codificador de video.".to_string(),
+            "Formato de Contenedor".to_string(),
+            "Formato de archivo final (MP4 o MKV).".to_string(),
+            "Fuente de Audio".to_string(),
+            "Audio capturado por defecto durante la grabación.".to_string(),
+            "Capturar Cursor".to_string(),
+            "Incluir el puntero del ratón en la grabación.".to_string(),
+            "Salida de Video".to_string(),
+            "Monitor o pantalla capturada en la grabación.".to_string(),
         )
     };
 
@@ -850,6 +906,170 @@ pub fn render_search_results(
                 Some(&lang_sub),
                 render_language_select(module, &languages, theme, cx),
                 theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_output_title,
+        &rec_output_sub,
+        "salida",
+        "output",
+        "monitor",
+        "pantalla",
+        "display",
+        "screen",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_output_title,
+                Some(&rec_output_sub),
+                render_output_selector(
+                    &module.record_output,
+                    &module.record_available_monitors,
+                    theme,
+                    cx,
+                ),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_fps_title,
+        &rec_fps_sub,
+        "fps",
+        "cuadros",
+        "frame rate",
+        "fluidez",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_fps_title,
+                Some(&rec_fps_sub),
+                render_fps_selector(module.record_fps, theme, cx),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_res_title,
+        &rec_res_sub,
+        "resolucion",
+        "resolution",
+        "escala",
+        "1080p",
+        "720p",
+        "native",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_res_title,
+                Some(&rec_res_sub),
+                render_resolution_selector(&module.record_resolution, theme, cx),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_quality_title,
+        &rec_quality_sub,
+        "calidad",
+        "quality",
+        "bitrate",
+        "video",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_quality_title,
+                Some(&rec_quality_sub),
+                render_quality_selector(&module.record_quality, theme, cx),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_container_title,
+        &rec_container_sub,
+        "contenedor",
+        "container",
+        "formato",
+        "format",
+        "mp4",
+        "mkv",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_container_title,
+                Some(&rec_container_sub),
+                render_container_selector(&module.record_container, theme, cx),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_audio_title,
+        &rec_audio_sub,
+        "audio",
+        "microfono",
+        "mic",
+        "sonido",
+        "sound",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_control_row(
+                &rec_audio_title,
+                Some(&rec_audio_sub),
+                render_audio_selector(&module.record_audio, theme, cx),
+                theme,
+            )
+            .into_any_element(),
+        );
+    }
+
+    if matches_query(&[
+        &rec_cursor_title,
+        &rec_cursor_sub,
+        "cursor",
+        "puntero",
+        "raton",
+        "mouse",
+        "pointer",
+        "grabacion",
+        "record",
+    ]) {
+        matched_rows.push(
+            render_toggle_row(
+                ElementId::Name("search-record-cursor".into()),
+                &rec_cursor_title,
+                Some(&rec_cursor_sub),
+                module.record_include_cursor,
+                theme,
+                cx.listener(|this, _, _, cx| {
+                    this.toggle_record_include_cursor(cx);
+                }),
             )
             .into_any_element(),
         );

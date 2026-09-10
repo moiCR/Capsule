@@ -18,7 +18,7 @@ pub fn render_sidebar(
         24.0
     };
 
-    let (placeholder, tab_capsule, tab_apps, tab_media, tab_lock, tab_sys) =
+    let (placeholder, tab_capsule, tab_apps, tab_media, tab_lock, tab_sys, tab_record) =
         if cx.has_global::<AppState>() {
             let lang = &cx.global::<AppState>().language;
             (
@@ -28,6 +28,7 @@ pub fn render_sidebar(
                 lang.get("settings.tab_media"),
                 lang.get("settings.tab_lockscreen"),
                 lang.get("settings.tab_system"),
+                lang.get("settings.tab_record"),
             )
         } else {
             (
@@ -37,6 +38,7 @@ pub fn render_sidebar(
                 "Multimedia".to_string(),
                 "Bloqueo".to_string(),
                 "Sistema".to_string(),
+                "Grabación".to_string(),
             )
         };
 
@@ -55,6 +57,7 @@ pub fn render_sidebar(
         (SettingsTab::Media, "music.svg", tab_media),
         (SettingsTab::LockScreen, "lock.svg", tab_lock),
         (SettingsTab::System, "settings.svg", tab_sys),
+        (SettingsTab::Record, "play.svg", tab_record),
     ];
 
     let mut list = div().flex().flex_col().gap(px(4.0)).w_full();

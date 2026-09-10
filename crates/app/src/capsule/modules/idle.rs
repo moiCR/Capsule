@@ -3,7 +3,7 @@ use gpui::{
     Context, Entity, EventEmitter, FontWeight, IntoElement, Render, Task, Window, div, prelude::*,
     px,
 };
-use services::{AppState, LyricsService, WorkspaceInfo};
+use services::{AppState, LyricsService, RecordStatus, WorkspaceInfo};
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use ui::theme::Theme;
@@ -13,6 +13,7 @@ use crate::capsule::widgets::idle::{FlipClock, visualizer::Visualizer};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IdleEvent {
     ExpandRequested,
+    RecordRequested,
 }
 
 fn ease_out_cubic(t: f32) -> f32 {
@@ -62,6 +63,7 @@ fn calc_text_width(text: &str) -> f32 {
 
 pub struct IdleModule {
     audio_active: bool,
+    record_status: RecordStatus,
     time_str: String,
     workspace_str: String,
     workspace_visible: bool,
@@ -168,6 +170,8 @@ impl IdleModule {
         let lyrics_service_clone = lyrics_service.clone();
         let mpris_service_clone = mpris_service.clone();
         let config_service_clone = config_service.clone();
+        let record_service_for_poll = cx.global::<AppState>().record.clone();
+        let initial_record_status = record_service_for_poll.get_status();
         cx.spawn(async move |this, cx| {
             let mut last_track_key = String::new();
             let mut last_pos_micros: u64 = 0;
@@ -234,9 +238,15 @@ impl IdleModule {
                 }
 
                 let is_audio_playing = active_track.is_some();
+                let current_rec_status = record_service_for_poll.get_status();
 
                 let _ = this.update(cx, |this: &mut Self, cx| {
                     let mut changed = false;
+
+                    if this.record_status != current_rec_status {
+                        this.record_status = current_rec_status;
+                        changed = true;
+                    }
 
                     if this.audio_active != is_audio_playing {
                         this.audio_active = is_audio_playing;
@@ -277,7 +287,6 @@ impl IdleModule {
                         changed = true;
                     }
 
-                    // Update lyric line
                     if this.current_lyric_line != lyric_line {
                         if this.track_toast_text.is_none() {
                             let old_text = this.get_active_display_text();
@@ -295,8 +304,6 @@ impl IdleModule {
                     }
                 });
 
-                // Fast polling (100ms) when audio is playing for smooth lyric sync,
-                // slower when idle to save CPU
                 let poll_interval = if is_audio_playing { 100 } else { 1000 };
                 cx.background_executor()
                     .timer(Duration::from_millis(poll_interval))
@@ -310,6 +317,7 @@ impl IdleModule {
         let flip_clock = FlipClock::new(&time_str);
         Self {
             audio_active: false,
+            record_status: initial_record_status,
             time_str,
             workspace_str: initial_ws_str,
             workspace_visible: false,
@@ -468,9 +476,30 @@ impl IdleModule {
         });
     }
 
+    fn render_record_indicator(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let dot_color = if self.record_status == RecordStatus::Paused {
+            gpui::rgb(0xf59e0b)
+        } else {
+            gpui::rgb(0xef4444)
+        };
+
+        div()
+            .id("idle-record-indicator")
+            .flex_shrink_0()
+            .cursor_pointer()
+            .on_click(cx.listener(|_this, _, _, cx| {
+                cx.stop_propagation();
+                cx.emit(IdleEvent::RecordRequested);
+            }))
+            .child(div().size(px(8.0)).rounded_full().bg(dot_color))
+    }
+
     pub fn desired_dimensions(&self) -> (f32, f32) {
-        let extra_spacing = if self.audio_active { 64.0 } else { 32.0 };
-        let min_w = if self.audio_active { 104.0 } else { 90.0 };
+        let is_recording = self.record_status != RecordStatus::Stopped;
+        let record_spacing = if is_recording { 20.0 } else { 0.0 };
+
+        let extra_spacing = if self.audio_active { 64.0 } else { 32.0 } + record_spacing;
+        let min_w = if self.audio_active { 104.0 } else { 90.0 } + record_spacing;
 
         let curr_text = self
             .get_active_display_text()
@@ -496,7 +525,7 @@ impl EventEmitter<IdleEvent> for IdleModule {}
 
 impl Render for IdleModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
+        let theme = cx.global::<Theme>().clone();
 
         let mut row = div()
             .id("idle-row")
@@ -514,6 +543,12 @@ impl Render for IdleModule {
             .overflow_hidden()
             .gap(px(8.0));
 
+        let is_recording_active = self.record_status != RecordStatus::Stopped;
+
+        if is_recording_active && !self.audio_active {
+            row = row.child(self.render_record_indicator(cx));
+        }
+
         if self.audio_active {
             row = row.child(div().flex_shrink_0().child(self.visualizer.clone()));
         }
@@ -527,7 +562,7 @@ impl Render for IdleModule {
                 .get_active_display_text()
                 .unwrap_or_else(|| self.idle_display_text());
 
-            row.child(
+            row = row.child(
                 div()
                     .flex_shrink_0()
                     .overflow_hidden()
@@ -538,7 +573,7 @@ impl Render for IdleModule {
                     .opacity(opacity)
                     .top(px(offset))
                     .child(curr_text),
-            )
+            );
         } else {
             let mut clock_row = div()
                 .flex()
@@ -546,7 +581,7 @@ impl Render for IdleModule {
                 .items_center()
                 .opacity(opacity)
                 .top(px(offset))
-                .child(self.flip_clock.render(theme));
+                .child(self.flip_clock.render(&theme));
 
             if self.workspace_visible && !self.workspace_str.is_empty() {
                 clock_row = clock_row.child(
@@ -560,7 +595,13 @@ impl Render for IdleModule {
                 );
             }
 
-            row.child(clock_row)
+            row = row.child(clock_row);
         }
+
+        if is_recording_active && self.audio_active {
+            row = row.child(self.render_record_indicator(cx));
+        }
+
+        row
     }
 }

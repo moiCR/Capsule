@@ -11,6 +11,7 @@ use super::{CapsuleMode, apple_island_morph, apple_island_spring};
 
 use super::modules::clipboard::ClipboardEvent;
 use super::modules::emoji::EmojiEvent;
+use super::modules::record::RecordEvent;
 use super::modules::settings::{SettingsEvent, SettingsTab};
 use super::modules::wallpaper::WallpaperEvent;
 
@@ -71,6 +72,11 @@ impl Capsule {
                 super::modules::idle::IdleEvent::ExpandRequested => {
                     if capsule.mode == CapsuleMode::Default {
                         capsule.start_transition_internal(CapsuleMode::Dashboard, None, cx);
+                    }
+                }
+                super::modules::idle::IdleEvent::RecordRequested => {
+                    if capsule.mode == CapsuleMode::Default {
+                        capsule.start_transition_internal(CapsuleMode::Record, None, cx);
                     }
                 }
             },
@@ -335,7 +341,9 @@ impl Capsule {
                         }
 
                         let (m_w, m_h) = match capsule.mode {
-                            CapsuleMode::Default | CapsuleMode::Volume => (0.0, 0.0),
+                            CapsuleMode::Default
+                            | CapsuleMode::Volume
+                            | CapsuleMode::Record => (0.0, 0.0),
                             _ => capsule.dimension_tracker.dimensions(0.0, 0.0),
                         };
 
@@ -611,6 +619,25 @@ impl Capsule {
         )
         .detach();
 
+        cx.subscribe(
+            &modules.record_view,
+            |capsule, _, event: &RecordEvent, cx| match event {
+                RecordEvent::Close => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+            },
+        )
+        .detach();
+
+        cx.observe(&modules.record_view, |capsule, record_view, cx| {
+            if capsule.mode == CapsuleMode::Record {
+                let desired_w = record_view.read(cx).desired_width(cx);
+                capsule.update_target_dimensions(desired_w, 42.0, cx);
+            }
+            cx.notify();
+        })
+        .detach();
+
         let initial_margin_top = if cx.has_global::<AppState>() {
             let ui_cfg = &cx.global::<AppState>().config.get().ui;
             if ui_cfg.capsule_style == services::CapsuleStyle::Concave {
@@ -694,6 +721,28 @@ impl Capsule {
                 self.current_height = target_h;
             }
             cx.notify();
+        } else if self.mode == CapsuleMode::Record {
+            let diff_w = (target_w - self.target_width).abs();
+            let diff_h = (target_h - self.target_height).abs();
+            if diff_w > 0.5 || diff_h > 0.5 {
+                self.target_width = target_w;
+                self.target_height = target_h;
+                self.anim_start_w = self.current_width;
+                self.anim_start_h = self.current_height;
+                self.anim_start_r = self.current_radius;
+                self.anim_start_y = self.current_y;
+                self.anim_start_progress = self.anim_progress;
+                self.anim_start_time = Some(Instant::now());
+                if !self.animating {
+                    self.animate_dimension_change(cx);
+                }
+            } else if !self.animating {
+                self.target_width = target_w;
+                self.target_height = target_h;
+                self.current_width = target_w;
+                self.current_height = target_h;
+            }
+            cx.notify();
         }
     }
 
@@ -736,6 +785,10 @@ impl Capsule {
 
                 if done {
                     this.update(cx, |capsule, cx| {
+                        capsule.animating = false;
+                        capsule.is_mode_transition = false;
+                        capsule.current_width = capsule.target_width;
+                        capsule.current_height = capsule.target_height;
                         capsule.anim_task = None;
                         cx.notify();
                     })
@@ -836,6 +889,7 @@ impl Capsule {
             && mode != CapsuleMode::Launcher
             && mode != CapsuleMode::Polkit
             && mode != CapsuleMode::Settings
+            && mode != CapsuleMode::Record
         {
             self.inactivity_generation += 1;
             let current_gen = self.inactivity_generation;
@@ -853,6 +907,7 @@ impl Capsule {
                                 || capsule.mode == CapsuleMode::Default
                                 || capsule.mode == CapsuleMode::Polkit
                                 || capsule.mode == CapsuleMode::Settings
+                                || capsule.mode == CapsuleMode::Record
                             {
                                 return true;
                             }
@@ -880,6 +935,11 @@ impl Capsule {
         } else if mode == CapsuleMode::Dashboard {
             (
                 self.modules.dashboard_view.read(cx).desired_width(cx),
+                mode.dimensions().1,
+            )
+        } else if mode == CapsuleMode::Record {
+            (
+                self.modules.record_view.read(cx).desired_width(cx),
                 mode.dimensions().1,
             )
         } else {
@@ -958,6 +1018,10 @@ impl Capsule {
 
                 if done {
                     this.update(cx, |capsule, cx| {
+                        capsule.animating = false;
+                        capsule.is_mode_transition = false;
+                        capsule.current_width = capsule.target_width;
+                        capsule.current_height = capsule.target_height;
                         capsule.anim_task = None;
                         cx.notify();
                     })
@@ -1107,6 +1171,17 @@ impl Capsule {
             }
             services::IpcCommand::ShowSettings => {
                 self.start_transition_internal(CapsuleMode::Settings, None, cx);
+            }
+            services::IpcCommand::ToggleRecord => {
+                let target = if self.mode == CapsuleMode::Record {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::Record
+                };
+                self.start_transition_internal(target, None, cx);
+            }
+            services::IpcCommand::ShowRecord => {
+                self.start_transition_internal(CapsuleMode::Record, None, cx);
             }
             _ => {}
         }
@@ -1271,20 +1346,16 @@ impl Render for Capsule {
             } else {
                 1.0
             };
-            let tracked_content = self.dimension_tracker.track(el);
-
-            let wrapper = if self.mode == CapsuleMode::Volume {
+            let wrapper = if self.mode == CapsuleMode::Volume || self.mode == CapsuleMode::Record {
                 div()
                     .absolute()
                     .top_0()
                     .left_0()
                     .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
                     .opacity(opacity)
-                    .child(tracked_content)
+                    .child(el)
             } else {
+                let tracked_content = self.dimension_tracker.track(el);
                 div()
                     .absolute()
                     .top_0()

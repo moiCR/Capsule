@@ -5,8 +5,8 @@ use crate::capsule::CapsuleMode;
 use crate::capsule::modules::{
     clipboard::ClipboardModule, dashboard::DashboardModule, emoji::EmojiModule, idle::IdleModule,
     launcher::LauncherModule, notification::NotificationModule, polkit::PolkitModule,
-    select_theme::SelectThemeModule, settings::SettingsModule, volume::VolumeModule,
-    wallpaper::WallpaperModule,
+    record::RecordModule, select_theme::SelectThemeModule, settings::SettingsModule,
+    volume::VolumeModule, wallpaper::WallpaperModule,
 };
 
 pub mod clipboard;
@@ -16,6 +16,7 @@ pub mod idle;
 pub mod launcher;
 pub mod notification;
 pub mod polkit;
+pub mod record;
 pub mod select_theme;
 pub mod settings;
 pub mod volume;
@@ -33,6 +34,7 @@ pub struct CapsuleModules {
     pub clipboard_view: Entity<ClipboardModule>,
     pub emoji_view: Entity<EmojiModule>,
     pub settings_view: Entity<SettingsModule>,
+    pub record_view: Entity<RecordModule>,
 }
 
 impl CapsuleModules {
@@ -49,6 +51,7 @@ impl CapsuleModules {
             clipboard_view: cx.new(ClipboardModule::new),
             emoji_view: cx.new(EmojiModule::new),
             settings_view: cx.new(SettingsModule::new),
+            record_view: cx.new(RecordModule::new),
         }
     }
 
@@ -65,6 +68,7 @@ impl CapsuleModules {
             CapsuleMode::Clipboard => self.clipboard_view.clone().into_any_element(),
             CapsuleMode::Emoji => self.emoji_view.clone().into_any_element(),
             CapsuleMode::Settings => self.settings_view.clone().into_any_element(),
+            CapsuleMode::Record => self.record_view.clone().into_any_element(),
         }
     }
 
@@ -80,5 +84,6 @@ impl CapsuleModules {
         self.clipboard_view.update(cx, |_, cx| cx.notify());
         self.emoji_view.update(cx, |_, cx| cx.notify());
         self.settings_view.update(cx, |_, cx| cx.notify());
+        self.record_view.update(cx, |_, cx| cx.notify());
     }
 }

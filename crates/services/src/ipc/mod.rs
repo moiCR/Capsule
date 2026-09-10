@@ -32,6 +32,8 @@ pub enum IpcCommand {
     FileManager,
     ToggleSettings,
     ShowSettings,
+    ToggleRecord,
+    ShowRecord,
 }
 
 impl FromStr for IpcCommand {
@@ -73,6 +75,8 @@ impl FromStr for IpcCommand {
             "settings" | "config" | "configuration" | "preferences" | "toggle-settings"
             | "toggle settings" => Ok(IpcCommand::ToggleSettings),
             "show-settings" | "show settings" => Ok(IpcCommand::ShowSettings),
+            "toggle-record" | "toggle record" | "record" => Ok(IpcCommand::ToggleRecord),
+            "show-record" | "show record" => Ok(IpcCommand::ShowRecord),
             _ => anyhow::bail!("Unknown IPC command: '{s}'"),
         }
     }
@@ -102,6 +106,8 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::FileManager => "file-manager".to_string(),
         IpcCommand::ToggleSettings => "settings".to_string(),
         IpcCommand::ShowSettings => "show-settings".to_string(),
+        IpcCommand::ToggleRecord => "toggle-record".to_string(),
+        IpcCommand::ShowRecord => "show-record".to_string(),
     }
 }
 

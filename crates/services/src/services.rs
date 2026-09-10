@@ -17,6 +17,7 @@ pub mod notifications;
 pub mod pam;
 pub mod polkit;
 pub mod power;
+pub mod record;
 pub mod system;
 pub mod tray;
 pub mod wallpaper;
@@ -49,5 +50,8 @@ pub use polkit::{
     start_polkit_agent,
 };
 pub use power::{PowerProfile, PowerService};
+pub use record::{
+    RecordAudio, RecordBackend, RecordOptions, RecordService, RecordStatus, RecordTarget,
+};
 pub use system::{AudioSink, AudioSource, SystemService, SystemStatus};
 pub use tray::{SniHostService, SniItem, TrayAction, TrayService};

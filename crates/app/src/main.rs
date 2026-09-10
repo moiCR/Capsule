@@ -122,6 +122,7 @@ COMMANDS:
     browser             Launch default browser (alias: web)
     editor              Launch default editor (alias: edit)
     settings            Open settings application (alias: config, preferences)
+    toggle-record       Toggle screen recording module (alias: record)
     hide                Hide panels and return to compact pill (alias: close)
     quit                Stop running Capsule daemon (alias: exit)
     ping                Check if Capsule daemon is running

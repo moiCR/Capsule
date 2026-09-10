@@ -20,6 +20,7 @@ pub enum CapsuleMode {
     Clipboard,
     Emoji,
     Settings,
+    Record,
 }
 
 impl CapsuleMode {
@@ -36,6 +37,7 @@ impl CapsuleMode {
             CapsuleMode::Clipboard => (380.0, 360.0),
             CapsuleMode::Emoji => (430.0, 390.0),
             CapsuleMode::Settings => (840.0, 560.0),
+            CapsuleMode::Record => (220.0, 42.0),
         }
     }
 
@@ -52,6 +54,7 @@ impl CapsuleMode {
             CapsuleMode::Clipboard => 42.0,
             CapsuleMode::Emoji => 42.0,
             CapsuleMode::Settings => 24.0,
+            CapsuleMode::Record => 42.0,
         }
     }
 }

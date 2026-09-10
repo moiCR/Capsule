@@ -10,8 +10,8 @@ use ui::theme::Theme;
 
 use crate::capsule::widgets::settings::{
     render_apps_section, render_lockscreen_formats_subsection, render_lockscreen_section,
-    render_media_section, render_music_players_subsection, render_search_results, render_sidebar,
-    render_system_section, render_ui_section,
+    render_media_section, render_music_players_subsection, render_record_section,
+    render_search_results, render_sidebar, render_system_section, render_ui_section,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -21,6 +21,7 @@ pub enum SettingsTab {
     Media = 2,
     LockScreen = 3,
     System = 4,
+    Record = 5,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -107,6 +108,15 @@ pub struct SettingsModule {
     pub output_slider_bounds: Rc<Cell<(f32, f32)>>,
     pub input_slider_bounds: Rc<Cell<(f32, f32)>>,
 
+    pub record_output: String,
+    pub record_available_monitors: Vec<String>,
+    pub record_fps: u32,
+    pub record_resolution: String,
+    pub record_quality: String,
+    pub record_container: String,
+    pub record_audio: String,
+    pub record_include_cursor: bool,
+
     focus_handle: FocusHandle,
     pub scroll_handle: ScrollHandle,
 }
@@ -160,6 +170,14 @@ impl SettingsModule {
             show_input_devices: false,
             output_slider_bounds: Rc::new(Cell::new((0.0, 0.0))),
             input_slider_bounds: Rc::new(Cell::new((0.0, 0.0))),
+            record_output: "screen".to_string(),
+            record_available_monitors: Vec::new(),
+            record_fps: 60,
+            record_resolution: "native".to_string(),
+            record_quality: "very_high".to_string(),
+            record_container: "mp4".to_string(),
+            record_audio: "desktop".to_string(),
+            record_include_cursor: true,
             focus_handle,
             scroll_handle,
         };
@@ -209,6 +227,15 @@ impl SettingsModule {
         self.date_format_input = cfg.lockscreen.date_format.clone();
         self.show_clock = cfg.lockscreen.show_clock;
         self.show_media_player = cfg.lockscreen.show_media_player;
+
+        self.record_output = cfg.record.output.clone();
+        self.record_available_monitors = services::RecordService::list_monitors();
+        self.record_fps = cfg.record.fps;
+        self.record_resolution = cfg.record.resolution.clone();
+        self.record_quality = cfg.record.quality.clone();
+        self.record_container = cfg.record.container.clone();
+        self.record_audio = cfg.record.audio.clone();
+        self.record_include_cursor = cfg.record.include_cursor;
     }
 
     pub fn add_music_player(&mut self, player: String, cx: &mut Context<Self>) {
@@ -524,6 +551,14 @@ impl SettingsModule {
         let show_media_player = self.show_media_player;
         let music_players = self.music_players.clone();
 
+        let record_output = self.record_output.clone();
+        let record_fps = self.record_fps;
+        let record_resolution = self.record_resolution.clone();
+        let record_quality = self.record_quality.clone();
+        let record_container = self.record_container.clone();
+        let record_audio = self.record_audio.clone();
+        let record_include_cursor = self.record_include_cursor;
+
         let _ = cx.global::<AppState>().config.update(|cfg| {
             cfg.ui.capsule_style = capsule_style;
             cfg.defaults.terminal = terminal;
@@ -546,6 +581,14 @@ impl SettingsModule {
             cfg.lockscreen.date_format = date_format;
             cfg.lockscreen.show_clock = show_clock;
             cfg.lockscreen.show_media_player = show_media_player;
+
+            cfg.record.output = record_output;
+            cfg.record.fps = record_fps;
+            cfg.record.resolution = record_resolution;
+            cfg.record.quality = record_quality;
+            cfg.record.container = record_container;
+            cfg.record.audio = record_audio;
+            cfg.record.include_cursor = record_include_cursor;
         });
     }
 
@@ -560,6 +603,48 @@ impl SettingsModule {
         self.active_subsection = None;
         self.set_tab(SettingsTab::Capsule, cx);
         cx.emit(SettingsEvent::Close);
+    }
+
+    pub fn set_record_output(&mut self, output: String, cx: &mut Context<Self>) {
+        self.record_output = output;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn set_record_fps(&mut self, fps: u32, cx: &mut Context<Self>) {
+        self.record_fps = fps;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn set_record_resolution(&mut self, resolution: String, cx: &mut Context<Self>) {
+        self.record_resolution = resolution;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn set_record_quality(&mut self, quality: String, cx: &mut Context<Self>) {
+        self.record_quality = quality;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn set_record_container(&mut self, container: String, cx: &mut Context<Self>) {
+        self.record_container = container;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn set_record_audio(&mut self, audio: String, cx: &mut Context<Self>) {
+        self.record_audio = audio;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
+    pub fn toggle_record_include_cursor(&mut self, cx: &mut Context<Self>) {
+        self.record_include_cursor = !self.record_include_cursor;
+        self.save_to_app_config(cx);
+        cx.notify();
     }
 
     #[allow(dead_code)]
@@ -609,7 +694,8 @@ impl SettingsModule {
                 SettingsTab::Apps => SettingsTab::Media,
                 SettingsTab::Media => SettingsTab::LockScreen,
                 SettingsTab::LockScreen => SettingsTab::System,
-                SettingsTab::System => SettingsTab::Capsule,
+                SettingsTab::System => SettingsTab::Record,
+                SettingsTab::Record => SettingsTab::Capsule,
             };
             self.set_tab(next_tab, cx);
             return;
@@ -745,6 +831,7 @@ impl Render for SettingsModule {
                     render_lockscreen_section(self, &theme, cx).into_any_element()
                 }
                 SettingsTab::System => render_system_section(self, &theme, cx).into_any_element(),
+                SettingsTab::Record => render_record_section(self, &theme, cx).into_any_element(),
             }
         };
 

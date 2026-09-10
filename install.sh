@@ -87,6 +87,7 @@ ARCH_LINUX_DEPENDENCIES=(
     "git"
     "curl"
     "tar"
+    "gpu-screen-recorder"
 )
 
 FEDORA_DEPENDENCIES=(
