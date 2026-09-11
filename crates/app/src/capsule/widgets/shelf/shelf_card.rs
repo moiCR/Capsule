@@ -2,7 +2,7 @@ use gpui::{
     Context, ExternalDragPayload, FileDragPaths, FontWeight, IntoElement, Pixels, Point, Render,
     Window, div, img, prelude::*, px, svg,
 };
-use services::ShelfItem;
+use services::{AppState, ShelfItem};
 use ui::theme::Theme;
 
 use crate::capsule::modules::shelf::{ShelfEvent, ShelfModule};
@@ -32,11 +32,17 @@ pub fn render_shelf_card(
         path_str: item.path.to_string_lossy().to_string(),
     };
 
+    let card_round = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
+    } else {
+        8.0
+    };
+
     let preview_icon = if item.is_image && item.path.exists() {
         div()
             .w(px(44.0))
             .h(px(44.0))
-            .rounded(px(8.0))
+            .rounded(px(card_round))
             .overflow_hidden()
             .border_1()
             .border_color(theme.surface().opacity(0.3))

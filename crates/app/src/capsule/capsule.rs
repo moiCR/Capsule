@@ -984,7 +984,11 @@ impl Capsule {
                 self.is_mode_transition = false;
                 self.target_width = 560.0;
                 self.target_height = 104.0;
-                self.target_radius = 52.0;
+                self.target_radius = if cx.has_global::<AppState>() {
+                    cx.global::<AppState>().config.get().ui.capsule_round
+                } else {
+                    52.0
+                };
 
                 let compositor = cx.global::<AppState>().compositor.clone();
                 let task = cx.spawn(async move |this, cx| {
@@ -1057,7 +1061,16 @@ impl Capsule {
                                 capsule.drag_monitor_task = None;
 
                                 if capsule.mode == CapsuleMode::Default {
-                                    let (w, h) = CapsuleMode::Default.dimensions();
+                                    let (w, h) = {
+                                        let (desired_w, _h) =
+                                            capsule.modules.idle_view.read(cx).desired_dimensions();
+                                        (desired_w, CapsuleMode::Default.dimensions().1)
+                                    };
+                                    let r = if cx.has_global::<AppState>() {
+                                        cx.global::<AppState>().config.get().ui.capsule_round
+                                    } else {
+                                        CapsuleMode::Default.radius()
+                                    };
                                     capsule.anim_start_w = capsule.current_width;
                                     capsule.anim_start_h = capsule.current_height;
                                     capsule.anim_start_r = capsule.current_radius;
@@ -1068,7 +1081,7 @@ impl Capsule {
                                     capsule.is_mode_transition = false;
                                     capsule.target_width = w;
                                     capsule.target_height = h;
-                                    capsule.target_radius = CapsuleMode::Default.radius();
+                                    capsule.target_radius = r;
 
                                     let compositor = cx.global::<AppState>().compositor.clone();
                                     let task = cx.spawn(async move |this, cx| {
@@ -1860,7 +1873,16 @@ impl Render for Capsule {
                         });
                     }
                     if this.mode == CapsuleMode::Default {
-                        let (w, h) = CapsuleMode::Default.dimensions();
+                        let (w, h) = {
+                            let (desired_w, _h) =
+                                this.modules.idle_view.read(cx).desired_dimensions();
+                            (desired_w, CapsuleMode::Default.dimensions().1)
+                        };
+                        let r = if cx.has_global::<AppState>() {
+                            cx.global::<AppState>().config.get().ui.capsule_round
+                        } else {
+                            CapsuleMode::Default.radius()
+                        };
                         this.anim_start_w = this.current_width;
                         this.anim_start_h = this.current_height;
                         this.anim_start_r = this.current_radius;
@@ -1871,7 +1893,7 @@ impl Render for Capsule {
                         this.is_mode_transition = false;
                         this.target_width = w;
                         this.target_height = h;
-                        this.target_radius = CapsuleMode::Default.radius();
+                        this.target_radius = r;
 
                         let compositor = cx.global::<AppState>().compositor.clone();
                         let task = cx.spawn(async move |this, cx| {
@@ -2256,7 +2278,16 @@ impl Render for Capsule {
                             });
                         }
                         if this.mode == CapsuleMode::Default {
-                            let (w, h) = CapsuleMode::Default.dimensions();
+                            let (w, h) = {
+                                let (desired_w, _h) =
+                                    this.modules.idle_view.read(cx).desired_dimensions();
+                                (desired_w, CapsuleMode::Default.dimensions().1)
+                            };
+                            let r = if cx.has_global::<AppState>() {
+                                cx.global::<AppState>().config.get().ui.capsule_round
+                            } else {
+                                CapsuleMode::Default.radius()
+                            };
                             this.anim_start_w = this.current_width;
                             this.anim_start_h = this.current_height;
                             this.anim_start_r = this.current_radius;
@@ -2267,7 +2298,7 @@ impl Render for Capsule {
                             this.is_mode_transition = false;
                             this.target_width = w;
                             this.target_height = h;
-                            this.target_radius = CapsuleMode::Default.radius();
+                            this.target_radius = r;
 
                             let compositor = cx.global::<AppState>().compositor.clone();
                             let task = cx.spawn(async move |this, cx| {
