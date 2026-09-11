@@ -1,9 +1,10 @@
 pub mod templates;
 pub mod theme_manager;
-
 use gpui::{Hsla, Rgba, SharedString};
 use serde::{Deserialize, Serialize};
-pub use templates::{AppTheme, FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
+pub use templates::{
+    AppTheme, GtkApps, QtApps, TemplateEngine, TemplatePlugin, TemplatePluginManager,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Theme {

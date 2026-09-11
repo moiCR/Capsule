@@ -6,13 +6,13 @@ use crate::capsule::modules::dashboard::DashboardModule;
 use crate::capsule::satellites::PANEL_MIN_W;
 
 pub fn compute_bluetooth_panel_height(status: &NetworkStatus) -> f32 {
-    let base_h = 75.0;
+    let base_h = 80.0;
     let items_h = if status.bluetooth_device_list.is_empty() {
-        30.0
+        36.0
     } else {
-        status.bluetooth_device_list.len() as f32 * 32.0
+        status.bluetooth_device_list.len() as f32 * 36.0
     };
-    (base_h + items_h).clamp(140.0, 380.0)
+    (base_h + items_h).clamp(150.0, 420.0)
 }
 
 pub fn render_bluetooth_mini_panel(
@@ -27,16 +27,37 @@ pub fn render_bluetooth_mini_panel(
         NetworkStatus::default()
     };
 
-    let (no_bt_found, bt_devices) = if cx.has_global::<AppState>() {
+    let (
+        no_bt_found,
+        bt_devices,
+        connecting_str,
+        connected_str,
+        paired_str,
+        unpaired_str,
+        disconnect_str,
+        scanning_str,
+    ) = if cx.has_global::<AppState>() {
         let lang = &cx.global::<AppState>().language;
         (
             lang.get("quick_settings.no_bt_found"),
             lang.get("quick_settings.bt_devices"),
+            lang.get("quick_settings.connecting"),
+            lang.get("dashboard.connected"),
+            lang.get("quick_settings.paired"),
+            lang.get("quick_settings.unpaired"),
+            lang.get("quick_settings.disconnect"),
+            lang.get("quick_settings.scanning"),
         )
     } else {
         (
             "No hay dispositivos Bluetooth".to_string(),
             "Dispositivos Bluetooth".to_string(),
+            "Conectando...".to_string(),
+            "Conectado".to_string(),
+            "Vinculado".to_string(),
+            "No vinculado".to_string(),
+            "Desconectar".to_string(),
+            "Buscando...".to_string(),
         )
     };
 
@@ -47,9 +68,15 @@ pub fn render_bluetooth_mini_panel(
         .w_full()
         .flex_1()
         .overflow_scroll()
-        .gap_1();
+        .gap_1p5();
 
     if status.bluetooth_device_list.is_empty() {
+        let empty_label = if status.is_scanning_bluetooth {
+            scanning_str.clone()
+        } else {
+            no_bt_found
+        };
+
         dev_list = dev_list.child(
             div()
                 .flex()
@@ -61,15 +88,23 @@ pub fn render_bluetooth_mini_panel(
                     div()
                         .text_size(px(10.0))
                         .text_color(theme.foreground_muted())
-                        .child(no_bt_found),
+                        .child(empty_label),
                 ),
         );
     } else {
         for (idx, dev) in status.bluetooth_device_list.iter().enumerate() {
             let mac = dev.mac.clone();
-            let name = dev.name.clone();
+            let name = if dev.name.is_empty() {
+                dev.mac.clone()
+            } else {
+                dev.name.clone()
+            };
             let is_conn = dev.is_connected;
+            let is_paired = dev.is_paired;
+            let is_connecting = status.connecting_bluetooth_mac.as_deref() == Some(&mac);
+
             let mac_click = mac.clone();
+            let mac_disconnect = mac.clone();
 
             let indicator_color = if is_conn {
                 theme.accent()
@@ -98,9 +133,15 @@ pub fn render_bluetooth_mini_panel(
                     .cursor_pointer()
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if cx.has_global::<AppState>() {
-                            cx.global::<AppState>()
-                                .network
-                                .connect_bluetooth(&mac_click);
+                            if is_conn {
+                                cx.global::<AppState>()
+                                    .network
+                                    .disconnect_bluetooth(&mac_disconnect);
+                            } else {
+                                cx.global::<AppState>()
+                                    .network
+                                    .connect_bluetooth(&mac_click);
+                            }
                         }
                     }))
                     .child(
@@ -141,10 +182,51 @@ pub fn render_bluetooth_mini_panel(
                     )
                     .child(
                         div()
-                            .text_size(px(9.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.accent().opacity(0.85))
-                            .child(if is_conn { "Conectado" } else { "" }),
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_1p5()
+                            .child(if is_connecting {
+                                div()
+                                    .text_size(px(9.0))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(theme.accent())
+                                    .child(connecting_str.clone())
+                            } else if is_conn {
+                                div()
+                                    .text_size(px(9.0))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(theme.accent().opacity(0.85))
+                                    .child(connected_str.clone())
+                            } else if is_paired {
+                                div()
+                                    .text_size(px(9.0))
+                                    .font_weight(FontWeight::NORMAL)
+                                    .text_color(theme.foreground_muted())
+                                    .child(paired_str.clone())
+                            } else {
+                                div()
+                                    .text_size(px(9.0))
+                                    .font_weight(FontWeight::NORMAL)
+                                    .text_color(theme.foreground_muted().opacity(0.7))
+                                    .child(unpaired_str.clone())
+                            })
+                            .when(is_conn, |s| {
+                                s.child(
+                                    div()
+                                        .id(("bt-disconnect-btn", idx as u32))
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded(px(6.0))
+                                        .bg(theme.surface().opacity(0.7))
+                                        .hover(|h| h.bg(theme.surface().opacity(0.95)))
+                                        .cursor_pointer()
+                                        .text_size(px(8.5))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(theme.foreground())
+                                        .child(disconnect_str.clone()),
+                                )
+                            }),
                     ),
             );
         }
@@ -198,29 +280,66 @@ pub fn render_bluetooth_mini_panel(
                 )
                 .child(
                     div()
-                        .id("close-bt-panel")
                         .flex()
+                        .flex_row()
                         .items_center()
-                        .justify_center()
-                        .w(px(20.0))
-                        .h(px(20.0))
-                        .rounded_full()
-                        .bg(theme.surface().opacity(0.6))
-                        .hover(|s| s.bg(theme.surface().opacity(0.9)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            if cx.has_global::<AppState>() {
-                                cx.global::<AppState>().network.toggle_bluetooth();
-                            }
-                            cx.notify();
-                        }))
-                        .child(svg().path("power.svg").size(px(10.0)).text_color(
-                            if status.bluetooth_enabled {
-                                theme.accent()
-                            } else {
-                                theme.foreground_muted()
-                            },
-                        )),
+                        .gap_1p5()
+                        .child(
+                            div()
+                                .id("scan-bt-btn")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .w(px(20.0))
+                                .h(px(20.0))
+                                .rounded_full()
+                                .bg(if status.is_scanning_bluetooth {
+                                    theme.accent().opacity(0.25)
+                                } else {
+                                    theme.surface().opacity(0.6)
+                                })
+                                .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    if cx.has_global::<AppState>() {
+                                        cx.global::<AppState>().network.start_bluetooth_scan();
+                                    }
+                                    cx.notify();
+                                }))
+                                .child(svg().path("rotate-ccw.svg").size(px(11.0)).text_color(
+                                    if status.is_scanning_bluetooth {
+                                        theme.accent()
+                                    } else {
+                                        theme.foreground_muted()
+                                    },
+                                )),
+                        )
+                        .child(
+                            div()
+                                .id("close-bt-panel")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .w(px(20.0))
+                                .h(px(20.0))
+                                .rounded_full()
+                                .bg(theme.surface().opacity(0.6))
+                                .hover(|s| s.bg(theme.surface().opacity(0.9)))
+                                .cursor_pointer()
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    if cx.has_global::<AppState>() {
+                                        cx.global::<AppState>().network.toggle_bluetooth();
+                                    }
+                                    cx.notify();
+                                }))
+                                .child(svg().path("power.svg").size(px(10.0)).text_color(
+                                    if status.bluetooth_enabled {
+                                        theme.accent()
+                                    } else {
+                                        theme.foreground_muted()
+                                    },
+                                )),
+                        ),
                 ),
         )
         .child(dev_list)

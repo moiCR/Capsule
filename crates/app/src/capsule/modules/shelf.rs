@@ -82,6 +82,9 @@ impl ShelfModule {
             let id = item.id.clone();
             self.service.remove_item(&id);
             self.reload_items(cx);
+            if self.items.is_empty() {
+                cx.emit(ShelfEvent::Close);
+            }
         }
     }
 

@@ -102,13 +102,11 @@ impl AppTheme for GtkApps {
             let _ = fs::write(dir_gtk4.join("settings.ini"), &ini_gtk4);
             let _ = fs::write(dir_gtk4.join("gtk.css"), &gtk_css);
 
-            let nwg_gsettings_file = dirs::data_local_dir()
-                .unwrap()
-                .join("nwg-look")
-                .join("gsettings");
-
-            if nwg_gsettings_file.exists() {
-                if let Ok(content) = fs::read_to_string(&nwg_gsettings_file) {
+            if let Some(data_dir) = dirs::data_local_dir() {
+                let nwg_gsettings_file = data_dir.join("nwg-look").join("gsettings");
+                if nwg_gsettings_file.exists()
+                    && let Ok(content) = fs::read_to_string(&nwg_gsettings_file)
+                {
                     let mut updated_lines = Vec::new();
 
                     for line in content.lines() {

@@ -42,15 +42,12 @@ impl ThemeManager {
 
             theme
         };
-        use crate::theme::{FishApp, GhosttyApp, GtkApps, KittyApp, QtApps, YaziApp};
+        use crate::theme::{GtkApps, QtApps, TemplatePluginManager};
 
         let apps: Vec<Arc<dyn AppTheme>> = vec![
             Arc::new(GtkApps),
             Arc::new(QtApps),
-            Arc::new(GhosttyApp),
-            Arc::new(FishApp),
-            Arc::new(YaziApp),
-            Arc::new(KittyApp),
+            Arc::new(TemplatePluginManager::new()),
         ];
 
         let manager = Self {

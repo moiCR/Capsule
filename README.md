@@ -1,10 +1,5 @@
-> [!WARNING]
-> **Early Development**
-> This project is in an early stage of development, which means that it currently only supports Hyprland and Arch Linux distributions.
-
 # Capsule Shell
 A Wayland desktop shell built with GPUI (The Zed UI framework). It's inspired by the Capsule Corp. capsules in Dragon Ball
-
 
 ## Scope
 Capsule is designed to be lighter and faster than shells created with Quickshell. It's what you might call an all-in-one solution, since the shell is based on a Capsule / Dynamic Island that expands and changes its content depending on the, This eliminates the need for external apps such as rofi/walker, waybar, etc.
@@ -20,31 +15,19 @@ Capsule is designed to be lighter and faster than shells created with Quickshell
 - **Custom Design System & Themes**: Custom theme creation (`create_theme`) and live theme switcher (`select_theme`).
 
 ### Satellites
-- **Volume Satellite**: Audio output device selection and volume control.
-- **Wi-Fi Satellite**: Wi-Fi network scanning, signal strength indicators, and connection status.
-- **Bluetooth Satellite**: Nearby device discovery, paired device management, and connection toggle.
-- **Tray Satellite**: System tray integration for background application icons and menus.
-- **Language Satellite**: System language switcher supporting dynamic `.toml` translation variants (`es`, `en`, and custom files).
-- **Calendar Satellite**: Monthly calendar view with quick navigation.
-- **Power Satellite**: System power options (Lock, Logout, Suspend, Reboot, Shutdown).
 
 ### Launcher
-- **App Launcher**: Application search and launch via `freedesktop` `.desktop` entries.
-- **Calculator**: Mathematical expression evaluation directly inside the search bar.
-- **Clipboard History**: Dedicated clipboard manager for searching history, previews, and copying.
-- **Theme Creator & Switcher**: Modules to customize visual tokens or switch themes live.
-- **Wallpaper Switcher**: Wallpaper browser and switcher integrated with `awww`.
+
 
 ### System Integration
-- **Polkit Authentication Agent**: Native `org.freedesktop.PolicyKit1.AuthenticationAgent` D-Bus service with password prompt dialogs.
-- **Multi-language Support (i18n)**: System-wide localization saved in `~/.config/capsule/languages/`, applying system locales (`LANG`, `LANGUAGE`).
-- **Compositor Integration**: IPC support for Hyprland and Niri.
-- **GPUI Powered**: Built with Zed's GPU-accelerated UI framework.
 
 
 ## Language Support
 - **Spanish**: 100%
 - **English**: 100%
+
+## Linux Support
+
 
 ## Installation
 ```bash

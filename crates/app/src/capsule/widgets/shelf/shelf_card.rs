@@ -154,18 +154,19 @@ pub fn render_shelf_card(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .bg(theme.surface())
-                        .border_1()
-                        .border_color(theme.surface().opacity(0.8))
+                        .bg(gpui::white())
                         .cursor_pointer()
                         .opacity(if is_selected { 1.0 } else { 0.0 })
                         .group_hover(group_id, |s| s.opacity(1.0))
-                        .hover(|s| s.bg(theme.background_alt()).border_color(theme.accent()))
+                        .hover(|s| s.bg(gpui::rgb(0xe2e8f0)))
                         .on_click(cx.listener({
                             let id = item_id.clone();
                             move |this, _, _window, cx| {
                                 this.service.remove_item(&id);
                                 this.reload_items(cx);
+                                if this.items.is_empty() {
+                                    cx.emit(ShelfEvent::Close);
+                                }
                                 cx.stop_propagation();
                             }
                         }))
@@ -173,7 +174,7 @@ pub fn render_shelf_card(
                             svg()
                                 .path("close.svg")
                                 .size(px(8.0))
-                                .text_color(theme.foreground()),
+                                .text_color(gpui::black()),
                         ),
                 ),
         )

@@ -37,14 +37,21 @@ impl ShelfService {
     }
 
     pub fn get_items(&self) -> Vec<ShelfItem> {
-        self.items
-            .lock()
-            .map(|guard| guard.clone())
-            .unwrap_or_default()
+        let mut guard = match self.items.lock() {
+            Ok(guard) => guard,
+            Err(_) => return Vec::new(),
+        };
+        guard.retain(|item| item.path.exists());
+        guard.clone()
     }
 
     pub fn count(&self) -> usize {
-        self.items.lock().map(|guard| guard.len()).unwrap_or(0)
+        let mut guard = match self.items.lock() {
+            Ok(guard) => guard,
+            Err(_) => return 0,
+        };
+        guard.retain(|item| item.path.exists());
+        guard.len()
     }
 
     pub fn is_empty(&self) -> bool {

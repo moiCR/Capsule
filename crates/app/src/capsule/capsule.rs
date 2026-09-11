@@ -146,6 +146,9 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    if cx.has_global::<AppState>() {
+                        cx.global::<AppState>().network.rescan_wifi();
+                    }
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
@@ -162,6 +165,9 @@ impl Capsule {
                         panel_h,
                         max_h,
                     );
+                    if cx.has_global::<AppState>() {
+                        cx.global::<AppState>().network.start_bluetooth_scan();
+                    }
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
@@ -987,7 +993,7 @@ impl Capsule {
                 self.target_radius = if cx.has_global::<AppState>() {
                     cx.global::<AppState>().config.get().ui.capsule_round
                 } else {
-                    52.0
+                    42.0
                 };
 
                 let compositor = cx.global::<AppState>().compositor.clone();
@@ -1801,11 +1807,7 @@ impl Render for Capsule {
         } else {
             (0.12 + 0.4 * (1.0 - self.anim_progress)).clamp(0.12, 0.5)
         };
-        let border_color = if self.drag_target_active {
-            theme.accent().into()
-        } else {
-            theme.surface().opacity(border_opacity)
-        };
+        let border_color = theme.surface().opacity(border_opacity);
         let bg_color = active_theme.background();
 
         let params = super::container::ContainerParams {
@@ -1822,24 +1824,20 @@ impl Render for Capsule {
             },
         };
 
-        let renderer: Box<dyn super::container::CapsuleContainerRenderer> = if self.mode
-            == CapsuleMode::Settings
-            || self.mode == CapsuleMode::Shelf
-            || self.drag_target_active
-        {
-            Box::new(super::container::NormalContainer::new())
-        } else {
-            match ui_config.capsule_style {
-                services::CapsuleStyle::Normal => {
-                    Box::new(super::container::NormalContainer::new())
+        let renderer: Box<dyn super::container::CapsuleContainerRenderer> =
+            if self.mode == CapsuleMode::Settings {
+                Box::new(super::container::NormalContainer::new())
+            } else {
+                match ui_config.capsule_style {
+                    services::CapsuleStyle::Normal => {
+                        Box::new(super::container::NormalContainer::new())
+                    }
+                    services::CapsuleStyle::Concave => {
+                        Box::new(super::container::ConcaveContainer::new())
+                    }
                 }
-                services::CapsuleStyle::Concave => {
-                    Box::new(super::container::ConcaveContainer::new())
-                }
-            }
-        };
+            };
 
-        let theme_accent = theme.accent();
         let pill_wrapper = renderer
             .render(content_container.into_any_element(), &params, cx)
             .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
@@ -1848,7 +1846,7 @@ impl Render for Capsule {
                         capsule.on_drag_over_capsule(cx);
                     });
                 }
-                style.border_2().border_color(theme_accent)
+                style
             })
             .drag_over::<crate::capsule::widgets::shelf::shelf_card::DraggedShelfItem>(
                 move |style, _item, window, cx| {
@@ -1857,7 +1855,7 @@ impl Render for Capsule {
                             capsule.on_drag_over_capsule(cx);
                         });
                     }
-                    style.border_2().border_color(theme_accent)
+                    style
                 },
             )
             .on_drop(
@@ -2012,14 +2010,17 @@ impl Render for Capsule {
                             None
                         }
                     }
-                    PM::PanelKind::Wifi => Some(self.modules.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::wifi::render_wifi_mini_panel(
-                            anim_t,
-                            panel_h,
-                            &active_theme,
-                            cx,
-                        )
-                    })),
+                    PM::PanelKind::Wifi => {
+                        Some(self.modules.dashboard_view.update(cx, |module, cx| {
+                            super::satellites::wifi::render_wifi_mini_panel(
+                                anim_t,
+                                panel_h,
+                                module,
+                                &active_theme,
+                                cx,
+                            )
+                        }))
+                    }
                     PM::PanelKind::Bluetooth => {
                         Some(self.modules.dashboard_view.update(cx, |_, cx| {
                             super::satellites::bluetooth::render_bluetooth_mini_panel(
@@ -2117,14 +2118,17 @@ impl Render for Capsule {
                             None
                         }
                     }
-                    PM::PanelKind::Wifi => Some(self.modules.dashboard_view.update(cx, |_, cx| {
-                        super::satellites::wifi::render_wifi_mini_panel(
-                            anim_t,
-                            panel_h,
-                            &active_theme,
-                            cx,
-                        )
-                    })),
+                    PM::PanelKind::Wifi => {
+                        Some(self.modules.dashboard_view.update(cx, |module, cx| {
+                            super::satellites::wifi::render_wifi_mini_panel(
+                                anim_t,
+                                panel_h,
+                                module,
+                                &active_theme,
+                                cx,
+                            )
+                        }))
+                    }
                     PM::PanelKind::Bluetooth => {
                         Some(self.modules.dashboard_view.update(cx, |_, cx| {
                             super::satellites::bluetooth::render_bluetooth_mini_panel(

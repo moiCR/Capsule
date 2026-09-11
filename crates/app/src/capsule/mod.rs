@@ -39,7 +39,7 @@ impl CapsuleMode {
             CapsuleMode::Emoji => (430.0, 390.0),
             CapsuleMode::Settings => (840.0, 560.0),
             CapsuleMode::Record => (220.0, 42.0),
-            CapsuleMode::Shelf => (560.0, 104.0),
+            CapsuleMode::Shelf => (560.0, 114.0),
         }
     }
 
@@ -57,7 +57,7 @@ impl CapsuleMode {
             CapsuleMode::Emoji => 42.0,
             CapsuleMode::Settings => 24.0,
             CapsuleMode::Record => 42.0,
-            CapsuleMode::Shelf => 52.0,
+            CapsuleMode::Shelf => 42.0,
         }
     }
 }
