@@ -78,6 +78,8 @@ impl Compositor for Niri {
         });
         res.ok().flatten()
     }
+
+    fn request_layer_focus(&self) {}
 }
 
 pub async fn run_events_listener(

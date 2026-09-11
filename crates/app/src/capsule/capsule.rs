@@ -1,4 +1,7 @@
-use gpui::{Bounds, Context, Render, Size, Task, Window, div, point, prelude::*, px};
+use gpui::{
+    Bounds, Context, Render, Size, Task, Window, div, layer_shell::KeyboardInteractivity, point,
+    prelude::*, px, svg,
+};
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
@@ -6,13 +9,14 @@ use ui::tracker::DimensionTracker;
 
 use crate::capsule::modules::CapsuleModules;
 
-use super::satellites::PanelManager;
+use super::satellites::{PanelManager, satellite_retract, satellite_spring};
 use super::{CapsuleMode, apple_island_morph, apple_island_spring};
 
 use super::modules::clipboard::ClipboardEvent;
 use super::modules::emoji::EmojiEvent;
 use super::modules::record::RecordEvent;
 use super::modules::settings::{SettingsEvent, SettingsTab};
+use super::modules::shelf::ShelfEvent;
 use super::modules::wallpaper::WallpaperEvent;
 
 pub struct Capsule {
@@ -38,6 +42,12 @@ pub struct Capsule {
     animating: bool,
     anim_task: Option<Task<()>>,
     satellite_anim_task: Option<Task<()>>,
+    shelf_circle_opened_at: Option<Instant>,
+    shelf_circle_closing_at: Option<Instant>,
+    shelf_circle_anim_task: Option<Task<()>>,
+    drag_target_active: bool,
+    last_drag_over: Option<Instant>,
+    drag_monitor_task: Option<Task<()>>,
     last_activity_time: Instant,
     inactivity_generation: u64,
     last_vol_status: Option<(u32, bool)>,
@@ -58,7 +68,7 @@ impl Capsule {
         };
 
         cx.observe(&modules.idle_view, |capsule, idle_view, cx| {
-            if capsule.mode == CapsuleMode::Default {
+            if capsule.mode == CapsuleMode::Default && !capsule.drag_target_active {
                 let (desired_w, desired_h) = idle_view.read(cx).desired_dimensions();
                 capsule.update_target_dimensions(desired_w, desired_h, cx);
             }
@@ -343,7 +353,8 @@ impl Capsule {
                         let (m_w, m_h) = match capsule.mode {
                             CapsuleMode::Default
                             | CapsuleMode::Volume
-                            | CapsuleMode::Record => (0.0, 0.0),
+                            | CapsuleMode::Record
+                            | CapsuleMode::Shelf => (0.0, 0.0),
                             _ => capsule.dimension_tracker.dimensions(0.0, 0.0),
                         };
 
@@ -583,6 +594,25 @@ impl Capsule {
         )
         .detach();
 
+        cx.observe(&modules.shelf_view, |capsule, _, cx| {
+            capsule.reset_inactivity_timer();
+            cx.notify();
+        })
+        .detach();
+
+        cx.subscribe(
+            &modules.shelf_view,
+            |capsule, _, event: &ShelfEvent, cx| match event {
+                ShelfEvent::Close => {
+                    capsule.start_transition_internal(CapsuleMode::Default, None, cx);
+                }
+                ShelfEvent::ItemCopied(item) => {
+                    services::log_info!("SHELF", "Item copied: {}", item.name);
+                }
+            },
+        )
+        .detach();
+
         cx.observe(&modules.settings_view, |capsule, _, cx| {
             capsule.reset_inactivity_timer();
             if cx.has_global::<AppState>() {
@@ -679,6 +709,12 @@ impl Capsule {
             animating: false,
             anim_task: None,
             satellite_anim_task: None,
+            shelf_circle_opened_at: None,
+            shelf_circle_closing_at: None,
+            shelf_circle_anim_task: None,
+            drag_target_active: false,
+            last_drag_over: None,
+            drag_monitor_task: None,
             last_activity_time: Instant::now(),
             inactivity_generation: 0,
             last_vol_status: None,
@@ -714,6 +750,9 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) {
         if self.mode == CapsuleMode::Default {
+            if self.drag_target_active {
+                return;
+            }
             self.target_width = target_w;
             self.target_height = target_h;
             if !self.animating {
@@ -847,6 +886,248 @@ impl Capsule {
         self.satellite_anim_task = Some(task);
     }
 
+    fn start_shelf_circle_animation(&mut self, cx: &mut Context<Self>) {
+        let compositor = if cx.has_global::<AppState>() {
+            Some(cx.global::<AppState>().compositor.clone())
+        } else {
+            None
+        };
+
+        let task = cx.spawn(async move |this, cx| {
+            loop {
+                let frame_dur = if let Some(ref comp) = compositor {
+                    comp.get_frame_duration()
+                } else {
+                    Duration::from_millis(16)
+                };
+
+                tokio::time::sleep(frame_dur).await;
+
+                let done = this
+                    .update(cx, |capsule, cx| {
+                        cx.notify();
+                        capsule.is_shelf_circle_animation_finished()
+                    })
+                    .unwrap_or(true);
+
+                if done {
+                    this.update(cx, |capsule, cx| {
+                        capsule.shelf_circle_anim_task = None;
+                        if capsule.shelf_circle_closing_at.is_some() {
+                            capsule.shelf_circle_opened_at = None;
+                            capsule.shelf_circle_closing_at = None;
+                        }
+                        cx.notify();
+                    })
+                    .ok();
+                    break;
+                }
+            }
+        });
+        self.shelf_circle_anim_task = Some(task);
+    }
+
+    fn is_shelf_circle_animation_finished(&self) -> bool {
+        if let Some(closing_at) = self.shelf_circle_closing_at {
+            closing_at.elapsed().as_secs_f32() >= 0.22
+        } else if let Some(opened_at) = self.shelf_circle_opened_at {
+            opened_at.elapsed().as_secs_f32() >= 0.38
+        } else {
+            true
+        }
+    }
+
+    fn update_shelf_circle_state(&mut self, shelf_count: usize, cx: &mut Context<Self>) {
+        let should_be_visible =
+            self.mode == CapsuleMode::Default && !self.drag_target_active && shelf_count > 0;
+
+        if should_be_visible {
+            if self.shelf_circle_opened_at.is_none() || self.shelf_circle_closing_at.is_some() {
+                self.shelf_circle_closing_at = None;
+                self.shelf_circle_opened_at = Some(Instant::now());
+                self.start_shelf_circle_animation(cx);
+            }
+        } else if self.shelf_circle_opened_at.is_some() && self.shelf_circle_closing_at.is_none() {
+            self.shelf_circle_closing_at = Some(Instant::now());
+            self.start_shelf_circle_animation(cx);
+        }
+    }
+
+    fn shelf_circle_factor(&self) -> Option<f32> {
+        if let Some(closing_at) = self.shelf_circle_closing_at {
+            let t = (closing_at.elapsed().as_secs_f32() / 0.22).min(1.0);
+            if t >= 1.0 {
+                None
+            } else {
+                Some((1.0 - satellite_retract(t)).max(0.0))
+            }
+        } else if let Some(opened_at) = self.shelf_circle_opened_at {
+            let t = (opened_at.elapsed().as_secs_f32() / 0.38).min(1.0);
+            Some(satellite_spring(t))
+        } else {
+            None
+        }
+    }
+
+    pub fn on_drag_over_capsule(&mut self, cx: &mut Context<Self>) {
+        self.last_drag_over = Some(Instant::now());
+        if !self.drag_target_active {
+            self.drag_target_active = true;
+            if self.mode == CapsuleMode::Default {
+                self.anim_start_w = self.current_width;
+                self.anim_start_h = self.current_height;
+                self.anim_start_r = self.current_radius;
+                self.anim_start_y = self.current_y;
+                self.anim_start_progress = self.anim_progress;
+                self.anim_start_time = Some(Instant::now());
+                self.animating = true;
+                self.is_mode_transition = false;
+                self.target_width = 560.0;
+                self.target_height = 104.0;
+                self.target_radius = 52.0;
+
+                let compositor = cx.global::<AppState>().compositor.clone();
+                let task = cx.spawn(async move |this, cx| {
+                    loop {
+                        cx.background_executor()
+                            .timer(compositor.get_frame_duration())
+                            .await;
+                        let done = this
+                            .update(cx, |capsule, cx| {
+                                let duration = if cx.has_global::<AppState>() {
+                                    cx.global::<AppState>()
+                                        .config
+                                        .get()
+                                        .ui
+                                        .animation_duration_ms
+                                        as f32
+                                        / 1000.0
+                                } else {
+                                    0.28
+                                };
+                                let finished = capsule.tick_animation(duration);
+                                cx.notify();
+                                finished
+                            })
+                            .unwrap_or(true);
+
+                        if done {
+                            this.update(cx, |capsule, cx| {
+                                capsule.animating = false;
+                                capsule.is_mode_transition = false;
+                                capsule.current_width = capsule.target_width;
+                                capsule.current_height = capsule.target_height;
+                                capsule.anim_task = None;
+                                cx.notify();
+                            })
+                            .ok();
+                            break;
+                        }
+                    }
+                });
+                self.anim_task = Some(task);
+            }
+            self.start_drag_monitor(cx);
+            cx.notify();
+        }
+    }
+
+    fn start_drag_monitor(&mut self, cx: &mut Context<Self>) {
+        if self.drag_monitor_task.is_some() {
+            return;
+        }
+
+        let task = cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(40))
+                    .await;
+
+                let should_stop = this
+                    .update(cx, |capsule, cx| {
+                        if !capsule.drag_target_active {
+                            capsule.drag_monitor_task = None;
+                            return true;
+                        }
+
+                        if let Some(last) = capsule.last_drag_over {
+                            if last.elapsed().as_millis() > 140 {
+                                capsule.drag_target_active = false;
+                                capsule.last_drag_over = None;
+                                capsule.drag_monitor_task = None;
+
+                                if capsule.mode == CapsuleMode::Default {
+                                    let (w, h) = CapsuleMode::Default.dimensions();
+                                    capsule.anim_start_w = capsule.current_width;
+                                    capsule.anim_start_h = capsule.current_height;
+                                    capsule.anim_start_r = capsule.current_radius;
+                                    capsule.anim_start_y = capsule.current_y;
+                                    capsule.anim_start_progress = capsule.anim_progress;
+                                    capsule.anim_start_time = Some(Instant::now());
+                                    capsule.animating = true;
+                                    capsule.is_mode_transition = false;
+                                    capsule.target_width = w;
+                                    capsule.target_height = h;
+                                    capsule.target_radius = CapsuleMode::Default.radius();
+
+                                    let compositor = cx.global::<AppState>().compositor.clone();
+                                    let task = cx.spawn(async move |this, cx| {
+                                        loop {
+                                            cx.background_executor()
+                                                .timer(compositor.get_frame_duration())
+                                                .await;
+                                            let done = this
+                                                .update(cx, |capsule, cx| {
+                                                    let duration = if cx.has_global::<AppState>() {
+                                                        cx.global::<AppState>()
+                                                            .config
+                                                            .get()
+                                                            .ui
+                                                            .animation_duration_ms
+                                                            as f32
+                                                            / 1000.0
+                                                    } else {
+                                                        0.28
+                                                    };
+                                                    let finished = capsule.tick_animation(duration);
+                                                    cx.notify();
+                                                    finished
+                                                })
+                                                .unwrap_or(true);
+
+                                            if done {
+                                                this.update(cx, |capsule, cx| {
+                                                    capsule.animating = false;
+                                                    capsule.is_mode_transition = false;
+                                                    capsule.current_width = capsule.target_width;
+                                                    capsule.current_height = capsule.target_height;
+                                                    capsule.anim_task = None;
+                                                    cx.notify();
+                                                })
+                                                .ok();
+                                                break;
+                                            }
+                                        }
+                                    });
+                                    capsule.anim_task = Some(task);
+                                }
+                                cx.notify();
+                                return true;
+                            }
+                        }
+                        false
+                    })
+                    .unwrap_or(true);
+
+                if should_stop {
+                    break;
+                }
+            }
+        });
+
+        self.drag_monitor_task = Some(task);
+    }
+
     pub(crate) fn start_transition_internal(
         &mut self,
         mode: CapsuleMode,
@@ -862,6 +1143,10 @@ impl Capsule {
         self.mode = mode;
         services::log_info!("UI", "Transitioning to mode: {:?}", mode);
 
+        if mode != CapsuleMode::Default && cx.has_global::<AppState>() {
+            cx.global::<AppState>().compositor.request_layer_focus();
+        }
+
         if old_mode == CapsuleMode::Wallpaper && mode != CapsuleMode::Wallpaper {
             self.modules.wallpaper_view.update(cx, |wallpaper, cx| {
                 wallpaper.clear_cache(cx);
@@ -875,6 +1160,10 @@ impl Capsule {
         } else if mode == CapsuleMode::SelectTheme {
             self.modules.select_theme_view.update(cx, |st, cx| {
                 st.refresh_themes(cx);
+            });
+        } else if mode == CapsuleMode::Shelf {
+            self.modules.shelf_view.update(cx, |shelf, cx| {
+                shelf.reload_items(cx);
             });
         }
 
@@ -890,6 +1179,7 @@ impl Capsule {
             && mode != CapsuleMode::Polkit
             && mode != CapsuleMode::Settings
             && mode != CapsuleMode::Record
+            && mode != CapsuleMode::Shelf
         {
             self.inactivity_generation += 1;
             let current_gen = self.inactivity_generation;
@@ -908,6 +1198,7 @@ impl Capsule {
                                 || capsule.mode == CapsuleMode::Polkit
                                 || capsule.mode == CapsuleMode::Settings
                                 || capsule.mode == CapsuleMode::Record
+                                || capsule.mode == CapsuleMode::Shelf
                             {
                                 return true;
                             }
@@ -1183,6 +1474,17 @@ impl Capsule {
             services::IpcCommand::ShowRecord => {
                 self.start_transition_internal(CapsuleMode::Record, None, cx);
             }
+            services::IpcCommand::ToggleShelf => {
+                let target = if self.mode == CapsuleMode::Shelf {
+                    CapsuleMode::Default
+                } else {
+                    CapsuleMode::Shelf
+                };
+                self.start_transition_internal(target, None, cx);
+            }
+            services::IpcCommand::ShowShelf => {
+                self.start_transition_internal(CapsuleMode::Shelf, None, cx);
+            }
             _ => {}
         }
     }
@@ -1263,13 +1565,40 @@ impl Render for Capsule {
             self.window_height = win_h;
         }
 
+        let shelf_count = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().shelf.count()
+        } else {
+            0
+        };
+        self.update_shelf_circle_state(shelf_count, cx);
+        let circle_factor_opt = self.shelf_circle_factor();
+        let circle_size = 26.0;
+        let circle_gap = ui_config.gap.max(8.0);
+
         let is_modal = self.mode == CapsuleMode::Launcher
             || self.mode == CapsuleMode::Dashboard
             || self.mode == CapsuleMode::Polkit
             || self.mode == CapsuleMode::SelectTheme
+            || self.mode == CapsuleMode::Wallpaper
+            || self.mode == CapsuleMode::Clipboard
+            || self.mode == CapsuleMode::Emoji
+            || self.mode == CapsuleMode::Settings
+            || self.drag_target_active;
+
+        let needs_exclusive_focus = self.mode == CapsuleMode::Launcher
+            || self.mode == CapsuleMode::Dashboard
+            || self.mode == CapsuleMode::Polkit
+            || self.mode == CapsuleMode::SelectTheme
+            || self.mode == CapsuleMode::Wallpaper
             || self.mode == CapsuleMode::Clipboard
             || self.mode == CapsuleMode::Emoji
             || self.mode == CapsuleMode::Settings;
+
+        if needs_exclusive_focus {
+            window.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+        } else {
+            window.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
+        }
 
         if is_modal {
             window.set_input_region(None);
@@ -1280,7 +1609,21 @@ impl Render for Capsule {
                 origin: point(px(pill_x), px(pill_y)),
                 size: Size::new(px(self.current_width), px(self.current_height)),
             };
-            window.set_input_region(Some(&[pill_bounds]));
+            let circle_interactive = self.mode == CapsuleMode::Default
+                && self.shelf_circle_closing_at.is_none()
+                && circle_factor_opt.map_or(false, |f| f >= 0.85);
+
+            if circle_interactive {
+                let circle_x = pill_x - circle_size - circle_gap;
+                let circle_y = pill_y + ((self.current_height - circle_size) / 2.0).max(0.0);
+                let circle_bounds = Bounds {
+                    origin: point(px(circle_x), px(circle_y)),
+                    size: Size::new(px(circle_size), px(circle_size)),
+                };
+                window.set_input_region(Some(&[pill_bounds, circle_bounds]));
+            } else {
+                window.set_input_region(Some(&[pill_bounds]));
+            }
         }
 
         let mut content_container = div().relative().size_full();
@@ -1301,8 +1644,12 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::Clipboard
                 || self.mode == CapsuleMode::Emoji
                 || self.mode == CapsuleMode::Settings
+                || self.mode == CapsuleMode::Shelf
             {
                 window.activate_window();
+                if cx.has_global::<AppState>() {
+                    cx.global::<AppState>().compositor.request_layer_focus();
+                }
             }
             if self.mode == CapsuleMode::Launcher {
                 self.modules.launcher_view.update(cx, |launcher, cx| {
@@ -1332,6 +1679,12 @@ impl Render for Capsule {
                     settings.focus(window, cx);
                 });
             }
+            if self.mode == CapsuleMode::Shelf {
+                self.modules.shelf_view.update(cx, |shelf, cx| {
+                    shelf.reload_items(cx);
+                    shelf.focus(window, cx);
+                });
+            }
         }
 
         let mode_element = if self.mode == CapsuleMode::Default {
@@ -1340,13 +1693,31 @@ impl Render for Capsule {
             Some(self.modules.render_active_view(self.mode))
         };
 
-        if let Some(el) = mode_element {
+        if self.drag_target_active {
+            content_container = content_container.child(
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        svg()
+                            .path("cloud-upload.svg")
+                            .size(px(32.0))
+                            .text_color(gpui::rgb(0x64748b)),
+                    ),
+            );
+        } else if let Some(el) = mode_element {
             let opacity = if self.animating && self.is_mode_transition {
                 eased.clamp(0.0, 1.0)
             } else {
                 1.0
             };
-            let wrapper = if self.mode == CapsuleMode::Volume || self.mode == CapsuleMode::Record {
+            let wrapper = if self.mode == CapsuleMode::Volume
+                || self.mode == CapsuleMode::Record
+                || self.mode == CapsuleMode::Shelf
+            {
                 div()
                     .absolute()
                     .top_0()
@@ -1409,41 +1780,143 @@ impl Render for Capsule {
             }
         }
 
+        let active_theme = cx.global::<Theme>().clone();
+
         let is_dashboard = self.mode == CapsuleMode::Dashboard;
         let border_opacity = if is_dashboard {
             0.6
         } else {
             (0.12 + 0.4 * (1.0 - self.anim_progress)).clamp(0.12, 0.5)
         };
-        let border_color = theme.surface().opacity(border_opacity);
-
-        let active_theme = cx.global::<Theme>().clone();
+        let border_color = if self.drag_target_active {
+            theme.accent().into()
+        } else {
+            theme.surface().opacity(border_opacity)
+        };
+        let bg_color = active_theme.background();
 
         let params = super::container::ContainerParams {
             width: self.current_width,
             height: self.current_height,
             radius: self.current_radius,
             border_color,
-            bg_color: active_theme.background(),
+            bg_color,
             font_family: theme.font_family(),
-            mode: self.mode,
+            mode: if self.drag_target_active {
+                CapsuleMode::Shelf
+            } else {
+                self.mode
+            },
         };
 
-        let renderer: Box<dyn super::container::CapsuleContainerRenderer> =
-            if self.mode == CapsuleMode::Settings {
-                Box::new(super::container::NormalContainer::new())
-            } else {
-                match ui_config.capsule_style {
-                    services::CapsuleStyle::Normal => {
-                        Box::new(super::container::NormalContainer::new())
-                    }
-                    services::CapsuleStyle::Concave => {
-                        Box::new(super::container::ConcaveContainer::new())
-                    }
+        let renderer: Box<dyn super::container::CapsuleContainerRenderer> = if self.mode
+            == CapsuleMode::Settings
+            || self.mode == CapsuleMode::Shelf
+            || self.drag_target_active
+        {
+            Box::new(super::container::NormalContainer::new())
+        } else {
+            match ui_config.capsule_style {
+                services::CapsuleStyle::Normal => {
+                    Box::new(super::container::NormalContainer::new())
                 }
-            };
+                services::CapsuleStyle::Concave => {
+                    Box::new(super::container::ConcaveContainer::new())
+                }
+            }
+        };
 
-        let pill_wrapper = renderer.render(content_container.into_any_element(), &params, cx);
+        let theme_accent = theme.accent();
+        let pill_wrapper = renderer
+            .render(content_container.into_any_element(), &params, cx)
+            .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
+                if let Some(Some(root)) = window.root::<Capsule>() {
+                    _ = root.update(cx, |capsule, cx| {
+                        capsule.on_drag_over_capsule(cx);
+                    });
+                }
+                style.border_2().border_color(theme_accent)
+            })
+            .drag_over::<crate::capsule::widgets::shelf::shelf_card::DraggedShelfItem>(
+                move |style, _item, window, cx| {
+                    if let Some(Some(root)) = window.root::<Capsule>() {
+                        _ = root.update(cx, |capsule, cx| {
+                            capsule.on_drag_over_capsule(cx);
+                        });
+                    }
+                    style.border_2().border_color(theme_accent)
+                },
+            )
+            .on_drop(
+                cx.listener(|this, external_paths: &gpui::ExternalPaths, _window, cx| {
+                    this.drag_target_active = false;
+                    this.last_drag_over = None;
+                    this.drag_monitor_task = None;
+                    if cx.has_global::<AppState>() {
+                        let paths = external_paths.paths();
+                        cx.global::<AppState>().shelf.add_paths(paths);
+                        this.modules.shelf_view.update(cx, |shelf, cx| {
+                            shelf.reload_items(cx);
+                        });
+                    }
+                    if this.mode == CapsuleMode::Default {
+                        let (w, h) = CapsuleMode::Default.dimensions();
+                        this.anim_start_w = this.current_width;
+                        this.anim_start_h = this.current_height;
+                        this.anim_start_r = this.current_radius;
+                        this.anim_start_y = this.current_y;
+                        this.anim_start_progress = this.anim_progress;
+                        this.anim_start_time = Some(Instant::now());
+                        this.animating = true;
+                        this.is_mode_transition = false;
+                        this.target_width = w;
+                        this.target_height = h;
+                        this.target_radius = CapsuleMode::Default.radius();
+
+                        let compositor = cx.global::<AppState>().compositor.clone();
+                        let task = cx.spawn(async move |this, cx| {
+                            loop {
+                                cx.background_executor()
+                                    .timer(compositor.get_frame_duration())
+                                    .await;
+                                let done = this
+                                    .update(cx, |capsule, cx| {
+                                        let duration = if cx.has_global::<AppState>() {
+                                            cx.global::<AppState>()
+                                                .config
+                                                .get()
+                                                .ui
+                                                .animation_duration_ms
+                                                as f32
+                                                / 1000.0
+                                        } else {
+                                            0.28
+                                        };
+                                        let finished = capsule.tick_animation(duration);
+                                        cx.notify();
+                                        finished
+                                    })
+                                    .unwrap_or(true);
+
+                                if done {
+                                    this.update(cx, |capsule, cx| {
+                                        capsule.animating = false;
+                                        capsule.is_mode_transition = false;
+                                        capsule.current_width = capsule.target_width;
+                                        capsule.current_height = capsule.target_height;
+                                        capsule.anim_task = None;
+                                        cx.notify();
+                                    })
+                                    .ok();
+                                    break;
+                                }
+                            }
+                        });
+                        this.anim_task = Some(task);
+                    }
+                    cx.notify();
+                }),
+            );
 
         let mut satellites_layer = div().absolute().inset_0();
 
@@ -1686,12 +2159,184 @@ impl Render for Capsule {
             }
         }
 
-        let content_stack = div()
+        let satellite_circle = if let Some(factor) = circle_factor_opt {
+            let anim_x = (-circle_size - circle_gap) * factor;
+            let anim_y = ((self.current_height - circle_size) / 2.0).max(0.0);
+            let anim_opacity = factor.clamp(0.0, 1.0);
+            let circle_accent = active_theme.accent();
+            let circle_btn = div()
+                .id("shelf-satellite-btn")
+                .size_full()
+                .rounded_full()
+                .bg(active_theme.background())
+                .border_1()
+                .border_color(active_theme.surface())
+                .group_hover("shelf-satellite", |s| s.border_color(active_theme.accent()))
+                .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
+                    if let Some(Some(root)) = window.root::<Capsule>() {
+                        _ = root.update(cx, |capsule, cx| {
+                            capsule.on_drag_over_capsule(cx);
+                        });
+                    }
+                    style.border_2().border_color(circle_accent)
+                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    svg()
+                        .path("pin-tilted.svg")
+                        .size(px(13.0))
+                        .text_color(active_theme.foreground()),
+                );
+
+            let badge_el = div()
+                .id("shelf-badge-counter")
+                .absolute()
+                .bottom(px(-3.0))
+                .right(px(-3.0))
+                .min_w(px(14.0))
+                .h(px(14.0))
+                .px(px(2.0))
+                .rounded_full()
+                .bg(active_theme.accent())
+                .border_1()
+                .border_color(active_theme.background())
+                .flex()
+                .items_center()
+                .justify_center()
+                .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
+                    if let Some(Some(root)) = window.root::<Capsule>() {
+                        _ = root.update(cx, |capsule, cx| {
+                            capsule.on_drag_over_capsule(cx);
+                        });
+                    }
+                    style
+                })
+                .child(
+                    div()
+                        .relative()
+                        .top(px(1.5))
+                        .text_center()
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_size(px(8.0))
+                        .text_color(gpui::white())
+                        .child(shelf_count.to_string()),
+                );
+
+            let circle_el = div()
+                .id("shelf-satellite-circle")
+                .group("shelf-satellite")
+                .cursor_pointer()
+                .size(px(circle_size))
+                .relative()
+                .child(circle_btn)
+                .child(badge_el)
+                .on_click(cx.listener(|this, _, _window, cx| {
+                    if this.shelf_circle_closing_at.is_some() {
+                        return;
+                    }
+                    let target = if this.mode == CapsuleMode::Shelf {
+                        CapsuleMode::Default
+                    } else {
+                        CapsuleMode::Shelf
+                    };
+                    this.start_transition_internal(target, None, cx);
+                }))
+                .on_drop(
+                    cx.listener(|this, external_paths: &gpui::ExternalPaths, _window, cx| {
+                        this.drag_target_active = false;
+                        this.last_drag_over = None;
+                        this.drag_monitor_task = None;
+                        if cx.has_global::<AppState>() {
+                            let paths = external_paths.paths();
+                            cx.global::<AppState>().shelf.add_paths(paths);
+                            this.modules.shelf_view.update(cx, |shelf, cx| {
+                                shelf.reload_items(cx);
+                            });
+                        }
+                        if this.mode == CapsuleMode::Default {
+                            let (w, h) = CapsuleMode::Default.dimensions();
+                            this.anim_start_w = this.current_width;
+                            this.anim_start_h = this.current_height;
+                            this.anim_start_r = this.current_radius;
+                            this.anim_start_y = this.current_y;
+                            this.anim_start_progress = this.anim_progress;
+                            this.anim_start_time = Some(Instant::now());
+                            this.animating = true;
+                            this.is_mode_transition = false;
+                            this.target_width = w;
+                            this.target_height = h;
+                            this.target_radius = CapsuleMode::Default.radius();
+
+                            let compositor = cx.global::<AppState>().compositor.clone();
+                            let task = cx.spawn(async move |this, cx| {
+                                loop {
+                                    cx.background_executor()
+                                        .timer(compositor.get_frame_duration())
+                                        .await;
+                                    let done = this
+                                        .update(cx, |capsule, cx| {
+                                            let duration = if cx.has_global::<AppState>() {
+                                                cx.global::<AppState>()
+                                                    .config
+                                                    .get()
+                                                    .ui
+                                                    .animation_duration_ms
+                                                    as f32
+                                                    / 1000.0
+                                            } else {
+                                                0.28
+                                            };
+                                            let finished = capsule.tick_animation(duration);
+                                            cx.notify();
+                                            finished
+                                        })
+                                        .unwrap_or(true);
+
+                                    if done {
+                                        this.update(cx, |capsule, cx| {
+                                            capsule.animating = false;
+                                            capsule.is_mode_transition = false;
+                                            capsule.current_width = capsule.target_width;
+                                            capsule.current_height = capsule.target_height;
+                                            capsule.anim_task = None;
+                                            cx.notify();
+                                        })
+                                        .ok();
+                                        break;
+                                    }
+                                }
+                            });
+                            this.anim_task = Some(task);
+                        }
+                        cx.notify();
+                    }),
+                );
+
+            Some(
+                div()
+                    .absolute()
+                    .left(px(anim_x))
+                    .top(px(anim_y))
+                    .opacity(anim_opacity)
+                    .child(circle_el),
+            )
+        } else {
+            None
+        };
+
+        let mut content_stack = div()
             .relative()
             .w(px(self.current_width))
             .h(px(self.current_height))
-            .child(satellites_layer)
-            .child(pill_wrapper);
+            .child(satellites_layer);
+
+        if let Some(circle) = satellite_circle {
+            content_stack = content_stack.child(circle);
+        }
+
+        content_stack = content_stack.child(pill_wrapper);
 
         let flex_container = div()
             .flex()

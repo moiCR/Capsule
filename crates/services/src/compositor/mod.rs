@@ -32,6 +32,7 @@ impl Default for WorkspaceInfo {
 pub trait Compositor: Send + Sync {
     fn get_refresh_rate(&self) -> f64;
     fn get_workspace(&self) -> Option<WorkspaceInfo>;
+    fn request_layer_focus(&self) {}
 }
 
 #[derive(Clone)]
@@ -39,19 +40,21 @@ pub struct CompositorService {
     refresh_rate: Arc<ArcSwap<f64>>,
     current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
     workspace_tx: broadcast::Sender<WorkspaceInfo>,
+    compositor: Arc<dyn Compositor>,
 }
 
 impl CompositorService {
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
-        let initial_ws = if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
-            hyprland::Hyprland::new().get_workspace()
-        } else if std::env::var("NIRI_SOCKET").is_ok() {
-            niri::Niri::new().get_workspace()
-        } else {
-            kinetic::KineticWE::new().get_workspace()
-        }
-        .unwrap_or_default();
+        let compositor: Arc<dyn Compositor> =
+            if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+                Arc::new(hyprland::Hyprland::new())
+            } else if std::env::var("NIRI_SOCKET").is_ok() {
+                Arc::new(niri::Niri::new())
+            } else {
+                Arc::new(kinetic::KineticWE::new())
+            };
+        let initial_ws = compositor.get_workspace().unwrap_or_default();
         let current_workspace = Arc::new(ArcSwap::from_pointee(initial_ws));
         let (workspace_tx, _) = broadcast::channel(32);
 
@@ -59,6 +62,7 @@ impl CompositorService {
             refresh_rate,
             current_workspace,
             workspace_tx,
+            compositor,
         };
 
         let service_clone = service.clone();
@@ -95,6 +99,10 @@ impl CompositorService {
 
     pub fn on_change_workspace(&self) -> broadcast::Receiver<WorkspaceInfo> {
         self.workspace_tx.subscribe()
+    }
+
+    pub fn request_layer_focus(&self) {
+        self.compositor.request_layer_focus();
     }
 
     async fn run_workspace_events_loop(&self) {
@@ -139,9 +147,6 @@ impl CompositorService {
         let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
 
         loop {
-            // Call get_refresh_rate in a blocking thread so that:
-            //  1. Any panic (e.g. old hyprland crate IPC bug) stays in that thread.
-            //  2. Blocking I/O doesn't starve the async runtime.
             let rate = tokio::task::spawn_blocking(move || {
                 std::panic::catch_unwind(|| {
                     if use_hyprland {

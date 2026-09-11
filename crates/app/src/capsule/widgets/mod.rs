@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod dashboard;
 pub mod emoji;
 pub mod idle;
@@ -6,4 +7,5 @@ pub mod polkit;
 pub mod record;
 pub mod select_theme;
 pub mod settings;
+pub mod shelf;
 pub mod volume;

@@ -17,8 +17,14 @@ chrono = "0.4.39"
 hyprland = "0.3.13"
 niri-ipc = "26.4.0"
 mango-ipc = "0.6.0"
+fend-core = "1.5.8"
 
 
 futures-util = { version = "0.3.30", default-features = false }
 futures-signals = "0.3.34"
 futures = "0.3.31"
+
+[patch."https://github.com/zed-industries/zed"]
+gpui = { path = "../zed/crates/gpui" }
+gpui_linux = { path = "../zed/crates/gpui_linux" }
+gpui_platform = { path = "../zed/crates/gpui_platform" }

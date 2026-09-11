@@ -26,6 +26,12 @@ impl AssetSource for Assets {
             return Ok(None);
         }
 
+        if path.starts_with('/') {
+            if let Ok(data) = std::fs::read(path) {
+                return Ok(Some(Cow::Owned(data)));
+            }
+        }
+
         let key = path.strip_prefix("icons/").unwrap_or(path);
         let key = key.strip_prefix("./").unwrap_or(key);
         let key = key.strip_prefix("/").unwrap_or(key);

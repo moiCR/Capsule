@@ -18,6 +18,7 @@ pub mod pam;
 pub mod polkit;
 pub mod power;
 pub mod record;
+pub mod shelf;
 pub mod system;
 pub mod tray;
 pub mod wallpaper;
@@ -25,9 +26,10 @@ pub mod wallpaper;
 pub use calendar::CalendarService;
 
 pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccessPoint};
+pub use shelf::{ShelfItem, ShelfService};
 
 pub use app_state::AppState;
-pub use clipboard::{ClipboardItem, ClipboardService};
+pub use clipboard::{ClipboardItem, ClipboardService, Snippet};
 pub use compositor::{CompositorService, WorkspaceInfo};
 pub use config::{
     AppConfig, CapsuleStyle, ConfigService, Defaults, LockScreenConfig, LockscreenConfig,

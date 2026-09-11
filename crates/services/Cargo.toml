@@ -29,6 +29,7 @@ futures-signals.workspace = true
 niri-ipc.workspace = true
 hyprland.workspace = true
 mango-ipc.workspace = true
+fend-core = { workspace = true }
 
 toml = { workspace = true }
 wayland-client = "0.31"

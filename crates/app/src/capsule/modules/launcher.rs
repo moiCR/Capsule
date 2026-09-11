@@ -6,7 +6,7 @@ use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;
 
 use crate::capsule::widgets::launcher::{
-    app_item::render_app_item, search_input::render_search_input,
+    app_item::render_app_item, calc_item::render_calc_item, search_input::render_search_input,
 };
 
 pub enum LauncherEvent {
@@ -17,6 +17,7 @@ pub struct LauncherModule {
     service: LauncherService,
     query: String,
     apps: Vec<Application>,
+    calc_result: Option<String>,
     pub selected_index: usize,
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
@@ -36,6 +37,7 @@ impl LauncherModule {
             service,
             query: String::new(),
             apps: initial_apps,
+            calc_result: None,
             selected_index: 0,
             focus_handle,
             scroll_handle,
@@ -45,6 +47,7 @@ impl LauncherModule {
 
     pub fn reset_search(&mut self, cx: &mut Context<Self>) {
         self.query.clear();
+        self.calc_result = None;
         self.selected_index = 0;
         self.mouse_moved = false;
         self.apps = self.service.search("");
@@ -57,8 +60,13 @@ impl LauncherModule {
         window.focus(&self.focus_handle, cx);
     }
 
+    fn total_items(&self) -> usize {
+        self.apps.len() + usize::from(self.calc_result.is_some())
+    }
+
     fn update_search(&mut self, new_query: String, cx: &mut Context<Self>) {
         self.query = new_query;
+        self.calc_result = services::launcher::calculator::evaluate(&self.query);
         self.apps = self.service.search(&self.query);
         self.selected_index = 0;
         self.scroll_handle.scroll_to_item(0);
@@ -66,17 +74,19 @@ impl LauncherModule {
     }
 
     fn select_next(&mut self, cx: &mut Context<Self>) {
-        if !self.apps.is_empty() {
-            self.selected_index = (self.selected_index + 1) % self.apps.len();
+        let total = self.total_items();
+        if total > 0 {
+            self.selected_index = (self.selected_index + 1) % total;
             self.scroll_handle.scroll_to_item(self.selected_index);
             cx.notify();
         }
     }
 
     fn select_prev(&mut self, cx: &mut Context<Self>) {
-        if !self.apps.is_empty() {
+        let total = self.total_items();
+        if total > 0 {
             if self.selected_index == 0 {
-                self.selected_index = self.apps.len() - 1;
+                self.selected_index = total - 1;
             } else {
                 self.selected_index -= 1;
             }
@@ -86,7 +96,22 @@ impl LauncherModule {
     }
 
     fn launch_selected(&mut self, cx: &mut Context<Self>) -> bool {
-        if let Some(app) = self.apps.get(self.selected_index) {
+        if let Some(result) = &self.calc_result
+            && self.selected_index == 0
+        {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(result.clone()));
+            self.reset_search(cx);
+            cx.emit(LauncherEvent::Close);
+            return true;
+        }
+
+        let app_index = if self.calc_result.is_some() {
+            self.selected_index.saturating_sub(1)
+        } else {
+            self.selected_index
+        };
+
+        if let Some(app) = self.apps.get(app_index) {
             if let Err(err) = app.launch() {
                 eprintln!("Failed to launch {}: {err}", app.name);
             }
@@ -110,15 +135,12 @@ impl LauncherModule {
         if ctrl {
             match key {
                 "v" => {
-                    if let Some(item) = cx.read_from_clipboard() {
-                        if let Some(text) = item.text() {
-                            let clean_text: String =
-                                text.chars().filter(|c| !c.is_control()).collect();
-                            if !clean_text.is_empty() {
-                                let mut new_q = self.query.clone();
-                                new_q.push_str(&clean_text);
-                                self.update_search(new_q, cx);
-                            }
+                    if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                        let clean_text: String = text.chars().filter(|c| !c.is_control()).collect();
+                        if !clean_text.is_empty() {
+                            let mut new_q = self.query.clone();
+                            new_q.push_str(&clean_text);
+                            self.update_search(new_q, cx);
                         }
                     }
                     return;
@@ -207,7 +229,8 @@ impl Render for LauncherModule {
             "No se encontraron aplicaciones".to_string()
         };
 
-        let is_empty = self.apps.is_empty();
+        let has_calc = self.calc_result.is_some();
+        let is_empty = self.apps.is_empty() && !has_calc;
 
         let mut app_list = div()
             .id("launcher-app-list")
@@ -218,9 +241,21 @@ impl Render for LauncherModule {
             .overflow_scroll()
             .gap(px(4.0));
 
+        if let Some(ref calc_res) = self.calc_result {
+            let is_selected = self.selected_index == 0;
+            app_list = app_list.child(render_calc_item(
+                calc_res,
+                &self.query,
+                is_selected,
+                &theme,
+                cx,
+            ));
+        }
+
         for (idx, app) in self.apps.iter().enumerate() {
-            let is_selected = idx == self.selected_index;
-            app_list = app_list.child(render_app_item(idx, app, is_selected, &theme, cx));
+            let item_index = if has_calc { idx + 1 } else { idx };
+            let is_selected = item_index == self.selected_index;
+            app_list = app_list.child(render_app_item(item_index, app, is_selected, &theme, cx));
         }
 
         let content = if is_empty {

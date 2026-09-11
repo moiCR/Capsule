@@ -274,6 +274,8 @@ impl Compositor for Hyprland {
         });
         res.ok().flatten()
     }
+
+    fn request_layer_focus(&self) {}
 }
 
 pub fn parse_hyprland_event(line: &str, current: &WorkspaceInfo) -> Option<WorkspaceInfo> {

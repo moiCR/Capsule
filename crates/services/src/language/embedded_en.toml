@@ -50,8 +50,13 @@ ethernet = "Ethernet"
 title = "CLIPBOARD"
 search_placeholder = "Search history..."
 empty_history = "No items in history"
+empty_snippets = "No pinned snippets"
 empty_item = "[Empty item]"
 image_item = "Image"
+history_tab = "History"
+snippets_tab = "Snippets"
+pin_hint = "Pin snippet"
+unpin_hint = "Delete snippet"
 
 [launcher]
 title = "LAUNCHER"
@@ -235,4 +240,13 @@ record_audio_both = "Both"
 record_audio_none = "None"
 record_output_fullscreen = "Full Screen"
 
-
+[shelf]
+title = "SHELF"
+empty = "No files in the shelf"
+empty_title = "Drag files or folders onto Capsule"
+empty_hint = "Drag a file to reorder it or drop it into another application"
+clear_all = "Clear all"
+items_count = "{count} files"
+drag_hint = "Drag to paste into another app"
+copied_hint = "Copied to clipboard"
+remove_item = "Remove from shelf"
