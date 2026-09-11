@@ -275,8 +275,10 @@ mod tests {
 
     #[test]
     fn test_render_variables() {
-        let mut theme = Theme::default();
-        theme.accent_color = Color::from("#FF5500");
+        let theme = Theme {
+            accent_color: Color::from("#FF5500"),
+            ..Default::default()
+        };
         let ctx = TemplateEngine::build_context(&theme);
 
         let tpl = "accent={{accent}} raw={{accent.strip}} qt={{accent.qt}}";
@@ -286,16 +288,20 @@ mod tests {
 
     #[test]
     fn test_render_conditionals() {
-        let mut theme = Theme::default();
-        theme.mode = ThemeMode::Dark;
+        let theme = Theme {
+            mode: ThemeMode::Dark,
+            ..Default::default()
+        };
         let ctx = TemplateEngine::build_context(&theme);
 
         let tpl = "{% if is_dark %}theme-dark{% else %}theme-light{% endif %}";
         let rendered = TemplateEngine::render(tpl, &ctx);
         assert_eq!(rendered, "theme-dark");
 
-        let mut light_theme = Theme::default();
-        light_theme.mode = ThemeMode::Light;
+        let light_theme = Theme {
+            mode: ThemeMode::Light,
+            ..Default::default()
+        };
         let light_ctx = TemplateEngine::build_context(&light_theme);
         let light_rendered = TemplateEngine::render(tpl, &light_ctx);
         assert_eq!(light_rendered, "theme-light");

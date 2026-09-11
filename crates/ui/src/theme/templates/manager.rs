@@ -331,16 +331,12 @@ white = "{{palette.15}}"
 const DEFAULT_FOOT_TEMPLATE: &str = r##"name = "foot"
 description = "Foot Wayland terminal emulator theme"
 enabled = true
-target = "~/.config/foot/theme.ini"
-
-[hook]
-file = "~/.config/foot/foot.ini"
-contains = "include=theme.ini"
-inject = "include=theme.ini\n"
+target = "~/.config/foot/foot.ini"
+replace_section = "[colors-{{mode}}]"
 
 [template]
 content = """
-[colors]
+[colors-{{mode}}]
 background={{background.strip}}
 foreground={{foreground.strip}}
 regular0={{palette.0.strip}}
@@ -415,6 +411,9 @@ mod tests {
             target: target_file.to_string_lossy().to_string(),
             reload: None,
             hook: None,
+            replace_section: None,
+            start_marker: None,
+            end_marker: None,
             template: crate::theme::templates::plugin::TemplateConfig {
                 content: Some("accent={{accent}} bg={{bg.strip}}".to_string()),
                 file: None,
@@ -461,5 +460,23 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap_or_default();
         assert!(content.contains("return {"));
         assert!(content.contains("active_border = \"rgb("));
+    }
+
+    #[test]
+    fn test_foot_template_replace_section() {
+        let manager = TemplatePluginManager::new();
+        let theme = Theme::default();
+        let ctx = TemplateEngine::build_context(&theme);
+        let plugins = manager.load_plugins();
+        let foot = plugins.into_iter().find(|p| p.name == "foot");
+        assert!(foot.is_some());
+        let foot = foot.unwrap_or_else(|| unreachable!());
+        assert_eq!(foot.replace_section.as_deref(), Some("[colors-{{mode}}]"));
+        assert!(foot.apply_theme(&theme, &ctx));
+        let path = TemplatePlugin::expand_path(&foot.target);
+        assert!(path.exists());
+        let content = fs::read_to_string(&path).unwrap_or_default();
+        assert!(content.contains("[colors-dark]"));
+        assert!(content.contains("background="));
     }
 }
