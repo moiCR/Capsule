@@ -1,18 +1,21 @@
-## What's New in Capsule v1
+# Changelog
+
+All notable changes to Capsule are documented in this file.
+
+## [v1.0]
 
 ### Features
-- Se agrego un nuevo modulo de grabación que utiliza gpu-screen-recorder como backend (configurable en el modulo de configuraciones)
+- **GPU Screen Recorder Integration**: Added a screen recording module powered by `gpu-screen-recorder` as the recording backend, fully configurable through the Settings module.
+- **Shelf Widget (Drag & Drop Staging)**: Introduced a temporary file staging shelf supporting drag-and-drop operations, quick copy actions, and automatic file-type icon resolution.
+- **Inline Calculator & Unit Converter**: Integrated mathematical evaluation into the application launcher search bar powered by `fend-core`, supporting arithmetic, percentages, powers, and unit conversions.
+- **Declarative Theme Template Engine**: Redesigned external application theming into a dynamic, user-configurable template engine (`~/.config/capsule/templates/`). Supports arbitrary applications with in-place section patching (`replace_section`), comment marker blocks (`start_marker` / `end_marker`), include hook injection, and real-time palette synchronization without external templating dependencies.
+- **Wi-Fi & Bluetooth Satellites**: Added dedicated interactive satellite overlays for NetworkManager (Wi-Fi) and BlueZ (Bluetooth), featuring real-time device discovery, status monitoring, and connection controls.
 
-- Se agrego un nuevo modulo de almacenamiento de archivos mediante drag (shelf)
+### Improvements
+- **Settings Module Redesign**: Overhauled the Settings UI with a streamlined layout, improved spacing, and clearer category organization.
+- **Clipboard Snippets**: Added snippet management alongside clipboard history for quick access and insertion of frequently used text.
+- **Default File Manager Setting**: Added an option in default applications settings to configure the preferred file manager.
+- **Performance & Spring Bounds**: Fine-tuned satellite spring animations and bounds tracking for smoother, glitch-free transitions.
 
-- Se agrego un sistema de calculadora en el launcher de aplicaciones (impulsado por fend-core)
-
-- Se cambio el diseño de templates a uno mas configurable para el usuario (.config/capsule/templates), con este nuevo sistema podran poner el color de la shell a cualquier aplicacion
-
-## Minor Changes
-- Se rediseño la interfaz del modulo de configuraciones
-- Se agregaron snippets al portapapeles
-- Se agrego la opcion de file manager en las aplicaciones predeterminadas
-
-### Fixes
-- La shell ahora pide el foco al cambiar entre modulos, esto resuelve el problema de abrir el launcher escribir y que escriba en una app en vez de la shell
+### Bug Fixes
+- **Keyboard Focus Routing**: The shell now explicitly requests compositor keyboard focus during module and launcher transitions, resolving an issue where typing in the launcher would leak keystrokes to the underlying client window.

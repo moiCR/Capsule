@@ -1426,7 +1426,11 @@ impl Capsule {
                     let config = cx.global::<AppState>().config.get();
                     let term = &config.defaults.terminal;
                     let cmd = format!("{term} >/dev/null 2>&1 &");
-                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                    let mut command = std::process::Command::new("sh");
+                    if let Some(home) = dirs::home_dir() {
+                        command.current_dir(home);
+                    }
+                    let _ = command.arg("-c").arg(cmd).spawn();
                 }
             }
             services::IpcCommand::Browser => {
@@ -1434,7 +1438,11 @@ impl Capsule {
                     let config = cx.global::<AppState>().config.get();
                     let browser = &config.defaults.browser;
                     let cmd = format!("{browser} >/dev/null 2>&1 &");
-                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                    let mut command = std::process::Command::new("sh");
+                    if let Some(home) = dirs::home_dir() {
+                        command.current_dir(home);
+                    }
+                    let _ = command.arg("-c").arg(cmd).spawn();
                 }
             }
             services::IpcCommand::Editor => {
@@ -1451,7 +1459,11 @@ impl Capsule {
                     } else {
                         format!("{editor} >/dev/null 2>&1 &")
                     };
-                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                    let mut command = std::process::Command::new("sh");
+                    if let Some(home) = dirs::home_dir() {
+                        command.current_dir(home);
+                    }
+                    let _ = command.arg("-c").arg(cmd).spawn();
                 }
             }
             services::IpcCommand::FileManager => {
@@ -1468,7 +1480,11 @@ impl Capsule {
                     } else {
                         format!("{file_manager} >/dev/null 2>&1 &")
                     };
-                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
+                    let mut command = std::process::Command::new("sh");
+                    if let Some(home) = dirs::home_dir() {
+                        command.current_dir(home);
+                    }
+                    let _ = command.arg("-c").arg(cmd).spawn();
                 }
             }
             services::IpcCommand::ToggleSettings => {

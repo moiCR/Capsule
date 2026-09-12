@@ -760,6 +760,7 @@ version = "1.0.0"
 dependencies = [
  "assets",
  "chrono",
+ "dirs",
  "gpui",
  "gpui_platform",
  "libc",

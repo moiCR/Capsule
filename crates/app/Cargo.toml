@@ -16,6 +16,7 @@ ui = { path = "../ui" }
 services = { path = "../services" }
 chrono.workspace = true
 libc = "0.2"
+dirs.workspace = true
 
 
 

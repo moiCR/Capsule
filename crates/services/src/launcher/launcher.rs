@@ -77,7 +77,11 @@ impl LauncherService {
 
         crate::log_info!("LAUNCHER", "Launching app '{}': {cmd_str}", app.name);
 
-        std::process::Command::new("sh")
+        let mut command = std::process::Command::new("sh");
+        if let Some(home) = dirs::home_dir() {
+            command.current_dir(home);
+        }
+        command
             .arg("-c")
             .arg(&cmd_str)
             .spawn()
