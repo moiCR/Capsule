@@ -182,6 +182,7 @@ async fn publish_updates(
     sender: watch::Sender<OrbitState>,
     mut animation_updates: watch::Receiver<bool>,
     mut status_updates: broadcast::Receiver<RecordStatus>,
+    mut shelf_updates: broadcast::Receiver<usize>,
     read_state: impl Fn() -> OrbitState,
     frame_duration: impl Fn() -> Duration,
 ) {
@@ -197,6 +198,10 @@ async fn publish_updates(
             }
             _ = tokio::time::sleep(frame_duration()), if animating => true,
             result = status_updates.recv() => {
+                if matches!(result, Err(broadcast::error::RecvError::Closed)) { break; }
+                false
+            }
+            result = shelf_updates.recv() => {
                 if matches!(result, Err(broadcast::error::RecvError::Closed)) { break; }
                 false
             }
@@ -234,6 +239,7 @@ impl Orbit {
         let record = state.record.clone();
         let compositor = state.compositor.clone();
         let status_updates = record.subscribe_status();
+        let shelf_updates = shelf.subscribe_changes();
         let initial = OrbitState {
             shelf_count: shelf.count(),
             record_status: record.get_status(),
@@ -244,6 +250,7 @@ impl Orbit {
             sender,
             animation_updates,
             status_updates,
+            shelf_updates,
             move || OrbitState {
                 shelf_count: shelf.count(),
                 record_status: record.get_status(),
@@ -416,6 +423,7 @@ mod tests {
         };
         let (source, snapshot) = watch::channel(initial);
         let (status, status_updates) = broadcast::channel(4);
+        let (shelf, shelf_updates) = broadcast::channel(4);
         let (rendered, mut renders) = watch::channel(0);
         let (finished, completion) = tokio::sync::oneshot::channel();
         let succeeded = Arc::new(AtomicBool::new(false));
@@ -427,12 +435,14 @@ mod tests {
                     record_status: RecordStatus::Recording,
                 });
                 let _ = status.send(RecordStatus::Recording);
+                let _ = shelf.send(1);
                 if renders.wait_for(|count| *count == 2).await.is_err() {
                     return false;
                 }
                 tokio::time::sleep(Duration::from_millis(450)).await;
                 source.send_replace(initial);
                 let _ = status.send(RecordStatus::Stopped);
+                let _ = shelf.send(0);
                 renders.wait_for(|count| *count == 0).await.is_ok()
             })
             .await
@@ -462,6 +472,7 @@ mod tests {
                                 sender,
                                 animation_updates,
                                 status_updates,
+                                shelf_updates,
                                 move || *snapshot.borrow(),
                                 || Duration::from_millis(16),
                             ));
@@ -523,10 +534,12 @@ mod tests {
         let (sender, receiver) = watch::channel(active);
         let (animate, animation_updates) = watch::channel(false);
         let (status, status_updates) = broadcast::channel(4);
+        let (shelf, shelf_updates) = broadcast::channel(4);
         let worker = tokio::spawn(publish_updates(
             sender,
             animation_updates,
             status_updates,
+            shelf_updates,
             move || *snapshot.borrow(),
             || Duration::from_millis(1),
         ));
@@ -534,6 +547,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
         source.send_replace(inactive);
         assert!(status.send(RecordStatus::Stopped).is_ok());
+        assert!(shelf.send(0).is_ok());
         let updated = tokio::time::timeout(Duration::from_secs(1), async {
             while *receiver.borrow() != inactive {
                 tokio::time::sleep(Duration::from_millis(5)).await;
@@ -577,10 +591,12 @@ mod tests {
         let (sender, receiver) = watch::channel(initial);
         let (_animate, animation_updates) = watch::channel(false);
         let (_status, status_updates) = broadcast::channel(4);
+        let (_shelf, shelf_updates) = broadcast::channel(4);
         let worker = tokio::spawn(publish_updates(
             sender,
             animation_updates,
             status_updates,
+            shelf_updates,
             move || *snapshot.borrow(),
             || Duration::from_millis(16),
         ));

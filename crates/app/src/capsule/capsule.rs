@@ -917,7 +917,6 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) {
         self.drag_target_active = false;
-        self.sync_orbit_visibility(cx);
         self.last_drag_over = None;
         self.drag_monitor_task = None;
         cx.global::<AppState>()
@@ -926,6 +925,7 @@ impl Capsule {
         self.modules
             .shelf_view
             .update(cx, |shelf, cx| shelf.reload_items(cx));
+        self.sync_orbit_visibility(cx);
         if self.mode == CapsuleMode::Default {
             let (width, _) = self.modules.idle_view.read(cx).desired_dimensions();
             self.target_width = width;
@@ -1812,7 +1812,7 @@ impl Render for Capsule {
             .render(content_container.into_any_element(), &params, cx)
             .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
                 if let Some(Some(root)) = window.root::<Capsule>() {
-                    _ = root.update(cx, |capsule, cx| {
+                    root.update(cx, |capsule, cx| {
                         capsule.on_drag_over_capsule(cx);
                     });
                 }
@@ -1821,7 +1821,7 @@ impl Render for Capsule {
             .drag_over::<crate::capsule::widgets::shelf::shelf_card::DraggedShelfItem>(
                 move |style, _item, window, cx| {
                     if let Some(Some(root)) = window.root::<Capsule>() {
-                        _ = root.update(cx, |capsule, cx| {
+                        root.update(cx, |capsule, cx| {
                             capsule.on_drag_over_capsule(cx);
                         });
                     }
