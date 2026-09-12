@@ -13,6 +13,20 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
+read_input() {
+    local prompt="$1"
+    local default="${2:-}"
+    local reply=""
+    if [ -t 0 ]; then
+        read -rp "$prompt" reply
+    elif [ -r /dev/tty ]; then
+        read -rp "$prompt" reply < /dev/tty || reply="$default"
+    else
+        reply="$default"
+    fi
+    echo "${reply:-$default}"
+}
+
 APP_NAME="capsule"
 GITHUB_REPO="moiCR/Capsule"
 INSTALL_DIR="/usr/local/bin"
@@ -78,14 +92,11 @@ fi
 
 if [[ -n "$CURRENT_VERSION" && -n "$LATEST_VERSION" && "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
     warn "Capsule is already installed and up to date (version ${CURRENT_VERSION})."
-    confirm="y"
-    if [[ -t 0 ]]; then
-        read -rp "Do you want to reinstall Capsule ${CURRENT_VERSION}? [y/N] " confirm
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
-            info "Installation skipped. Existing version kept."
-            exit 0
-        fi
+    confirm=$(read_input "Do you want to reinstall Capsule ${CURRENT_VERSION}? [y/N] " "n")
+    confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
+    if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+        info "Installation skipped. Existing version kept."
+        exit 0
     fi
 fi
 
@@ -186,10 +197,7 @@ if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
     echo -e "----------------------------------------"
     info "Packages to install: ${#TO_INSTALL[@]}"
 
-    confirm="y"
-    if [[ -t 0 ]]; then
-        read -rp "Do you want to proceed with the installation of dependencies? [Y/n] " confirm
-    fi
+    confirm=$(read_input "Do you want to proceed with the installation of dependencies? [Y/n] " "y")
     confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
 
     if [[ "$confirm" == "n" || "$confirm" == "no" ]]; then
@@ -244,8 +252,12 @@ sudo mkdir -p "$DESKTOP_DIR"
 
 BINARY_INSTALLED=false
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-if [[ -f "$SCRIPT_DIR/Cargo.toml" && -f "$SCRIPT_DIR/crates/app/src/main.rs" ]]; then
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+fi
+
+if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/Cargo.toml" && -f "$SCRIPT_DIR/crates/app/src/main.rs" ]]; then
     if [[ -f "$SCRIPT_DIR/target/release/capsule" ]]; then
         info "Found locally compiled release binary in workspace..."
         sudo cp "$SCRIPT_DIR/target/release/capsule" "$INSTALL_DIR/capsule"
@@ -276,7 +288,7 @@ if [[ "$BINARY_INSTALLED" == false ]]; then
     warn "Pre-compiled release binary is unavailable."
     if command -v cargo &>/dev/null; then
         info "Cargo detected. Building Capsule from source..."
-        if [[ -f "$SCRIPT_DIR/Cargo.toml" ]]; then
+        if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/Cargo.toml" ]]; then
             (
                 cd "$SCRIPT_DIR"
                 cargo build --release
@@ -338,8 +350,8 @@ success "Capsule installation completed successfully!"
 START_CAPSULE=false
 if [[ "$WAS_RUNNING" == true ]]; then
     START_CAPSULE=true
-elif [[ -t 0 ]]; then
-    read -rp "Do you want to start Capsule now? [Y/n] " start_confirm
+else
+    start_confirm=$(read_input "Do you want to start Capsule now? [Y/n] " "y")
     start_confirm=$(echo "$start_confirm" | tr '[:upper:]' '[:lower:]')
     if [[ "$start_confirm" != "n" && "$start_confirm" != "no" ]]; then
         START_CAPSULE=true
