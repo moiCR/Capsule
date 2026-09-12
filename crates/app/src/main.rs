@@ -21,6 +21,10 @@ async fn main() {
         daemonize();
     }
 
+    if let Some(home) = dirs::home_dir() {
+        let _ = std::env::set_current_dir(home);
+    }
+
     services::init_logger();
 
     let args: Vec<String> = std::env::args().collect();
@@ -32,6 +36,11 @@ async fn main() {
 
     if let Some(ref raw) = cmd_arg {
         let normalized = raw.trim().to_lowercase();
+        if normalized == "--version" || normalized == "-v" || normalized == "version" {
+            println!("Capsule {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+
         if normalized == "--help" || normalized == "-h" || normalized == "help" {
             print_help();
             return;

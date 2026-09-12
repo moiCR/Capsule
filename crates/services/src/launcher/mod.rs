@@ -1,3 +1,4 @@
+pub mod calculator;
 pub mod launcher;
 
 pub use launcher::LauncherService;

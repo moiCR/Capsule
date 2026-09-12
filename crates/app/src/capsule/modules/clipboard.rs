@@ -1,19 +1,32 @@
 use gpui::{
-    Context, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
-    ScrollHandle, Window, div, img, prelude::*, px, svg,
+    Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
+    div, prelude::*, px, svg,
 };
-use services::{ClipboardItem, ClipboardService};
+use services::{ClipboardItem, ClipboardService, Snippet};
 use ui::theme::Theme;
+
+use crate::capsule::widgets::clipboard::{
+    header::render_header, history_item::render_history_item, snippet_item::render_snippet_item,
+};
 
 pub enum ClipboardEvent {
     Close,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClipboardTab {
+    History,
+    Snippets,
+}
+
 pub struct ClipboardModule {
-    service: ClipboardService,
-    query: String,
+    pub service: ClipboardService,
+    pub query: String,
+    pub current_tab: ClipboardTab,
     items: Vec<ClipboardItem>,
     filtered_items: Vec<ClipboardItem>,
+    snippets: Vec<Snippet>,
+    filtered_snippets: Vec<Snippet>,
     pub selected_index: usize,
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
@@ -28,12 +41,16 @@ impl ClipboardModule {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
         let initial_items = service.fetch_history();
+        let initial_snippets = service.get_snippets();
 
         Self {
             service,
             query: String::new(),
+            current_tab: ClipboardTab::History,
             items: initial_items.clone(),
             filtered_items: initial_items,
+            snippets: initial_snippets.clone(),
+            filtered_snippets: initial_snippets,
             selected_index: 0,
             focus_handle,
             scroll_handle,
@@ -44,11 +61,23 @@ impl ClipboardModule {
     pub fn reload_items(&mut self, cx: &mut Context<Self>) {
         self.query.clear();
         self.items = self.service.fetch_history();
+        self.snippets = self.service.get_snippets();
         self.filter_items();
+        self.filter_snippets();
         self.selected_index = 0;
         self.mouse_moved = false;
         self.scroll_handle.scroll_to_item(0);
         cx.notify();
+    }
+
+    pub fn switch_tab(&mut self, tab: ClipboardTab, cx: &mut Context<Self>) {
+        if self.current_tab != tab {
+            self.current_tab = tab;
+            self.selected_index = 0;
+            self.mouse_moved = false;
+            self.scroll_handle.scroll_to_item(0);
+            cx.notify();
+        }
     }
 
     fn filter_items(&mut self) {
@@ -73,31 +102,58 @@ impl ClipboardModule {
         }
     }
 
+    fn filter_snippets(&mut self) {
+        if self.query.trim().is_empty() {
+            self.filtered_snippets = self.snippets.clone();
+        } else {
+            let q = self.query.to_lowercase();
+            self.filtered_snippets = self
+                .snippets
+                .iter()
+                .filter(|snippet| {
+                    snippet.title.to_lowercase().contains(&q)
+                        || snippet.content.to_lowercase().contains(&q)
+                })
+                .cloned()
+                .collect();
+        }
+    }
+
     #[allow(dead_code)]
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus_handle, cx);
     }
 
-    fn update_search(&mut self, new_query: String, cx: &mut Context<Self>) {
+    pub fn update_search(&mut self, new_query: String, cx: &mut Context<Self>) {
         self.query = new_query;
         self.filter_items();
+        self.filter_snippets();
         self.selected_index = 0;
         self.scroll_handle.scroll_to_item(0);
         cx.notify();
     }
 
+    fn current_count(&self) -> usize {
+        match self.current_tab {
+            ClipboardTab::History => self.filtered_items.len(),
+            ClipboardTab::Snippets => self.filtered_snippets.len(),
+        }
+    }
+
     fn select_next(&mut self, cx: &mut Context<Self>) {
-        if !self.filtered_items.is_empty() {
-            self.selected_index = (self.selected_index + 1) % self.filtered_items.len();
+        let count = self.current_count();
+        if count > 0 {
+            self.selected_index = (self.selected_index + 1) % count;
             self.scroll_handle.scroll_to_item(self.selected_index);
             cx.notify();
         }
     }
 
     fn select_prev(&mut self, cx: &mut Context<Self>) {
-        if !self.filtered_items.is_empty() {
+        let count = self.current_count();
+        if count > 0 {
             if self.selected_index == 0 {
-                self.selected_index = self.filtered_items.len() - 1;
+                self.selected_index = count - 1;
             } else {
                 self.selected_index -= 1;
             }
@@ -107,18 +163,61 @@ impl ClipboardModule {
     }
 
     fn copy_selected(&mut self, cx: &mut Context<Self>) -> bool {
-        if let Some(item) = self.filtered_items.get(self.selected_index) {
-            self.service.copy_item(item);
-            cx.emit(ClipboardEvent::Close);
-            true
-        } else {
-            false
+        match self.current_tab {
+            ClipboardTab::History => {
+                if let Some(item) = self.filtered_items.get(self.selected_index) {
+                    self.service.copy_item(item);
+                    cx.emit(ClipboardEvent::Close);
+                    true
+                } else {
+                    false
+                }
+            }
+            ClipboardTab::Snippets => {
+                if let Some(snippet) = self.filtered_snippets.get(self.selected_index) {
+                    self.service.copy_text(&snippet.content);
+                    cx.emit(ClipboardEvent::Close);
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 
-    fn clear_all(&mut self, cx: &mut Context<Self>) {
+    pub fn clear_all(&mut self, cx: &mut Context<Self>) {
         self.service.clear_history();
         self.reload_items(cx);
+    }
+
+    pub fn toggle_pin_history(&mut self, item: &ClipboardItem, cx: &mut Context<Self>) {
+        if self.service.is_pinned(&item.preview) {
+            let id_to_remove = self
+                .snippets
+                .iter()
+                .find(|snippet| snippet.content == item.preview)
+                .map(|snippet| snippet.id.clone());
+            if let Some(id) = id_to_remove {
+                self.service.remove_snippet(&id);
+            }
+        } else {
+            self.service.pin_from_history(item);
+        }
+
+        self.snippets = self.service.get_snippets();
+        self.filter_snippets();
+        cx.notify();
+    }
+
+    pub fn remove_snippet(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.service.remove_snippet(id);
+        self.snippets = self.service.get_snippets();
+        self.filter_snippets();
+        let count = self.filtered_snippets.len();
+        if self.selected_index >= count && count > 0 {
+            self.selected_index = count - 1;
+        }
+        cx.notify();
     }
 
     fn handle_key_down(
@@ -151,6 +250,13 @@ impl ClipboardModule {
         }
 
         match key {
+            "tab" => {
+                let next_tab = match self.current_tab {
+                    ClipboardTab::History => ClipboardTab::Snippets,
+                    ClipboardTab::Snippets => ClipboardTab::History,
+                };
+                self.switch_tab(next_tab, cx);
+            }
             "down" => {
                 self.mouse_moved = false;
                 self.select_next(cx);
@@ -188,299 +294,108 @@ impl ClipboardModule {
     }
 }
 
-fn render_fallback_image_icon(theme: &Theme) -> gpui::AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .justify_center()
-        .w(px(56.0))
-        .h(px(40.0))
-        .rounded(px(8.0))
-        .bg(theme.surface().opacity(0.6))
-        .border_1()
-        .border_color(theme.surface().opacity(0.35))
-        .flex_shrink_0()
-        .child(
-            svg()
-                .path("wallpaper.svg")
-                .size(px(18.0))
-                .text_color(theme.foreground_muted()),
-        )
-        .into_any_element()
-}
-
 impl Render for ClipboardModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        let (search_placeholder, empty_item, empty_history, image_label) =
-            if cx.has_global::<services::AppState>() {
-                let lang = &cx.global::<services::AppState>().language;
-                (
-                    lang.get("clipboard.search_placeholder"),
-                    lang.get("clipboard.empty_item"),
-                    lang.get("clipboard.empty_history"),
-                    lang.get("clipboard.image_item"),
-                )
-            } else {
-                (
-                    "Buscar en el historial...".to_string(),
-                    "[Elemento vacío]".to_string(),
-                    "No hay elementos en el historial".to_string(),
-                    "Imagen".to_string(),
-                )
-            };
-
-        let image_title = if image_label.is_empty() || image_label == "clipboard.image_item" {
-            "Imagen".to_string()
+        let (empty_history, empty_snippets) = if cx.has_global::<services::AppState>() {
+            let lang = &cx.global::<services::AppState>().language;
+            (
+                lang.get("clipboard.empty_history"),
+                lang.get("clipboard.empty_snippets"),
+            )
         } else {
-            image_label
+            (
+                "No hay elementos en el historial".to_string(),
+                "No hay plantillas fijadas".to_string(),
+            )
         };
 
         window.focus(&self.focus_handle, cx);
 
-        let query = self.query.clone();
         let selected_index = self.selected_index;
-        let is_empty = self.filtered_items.is_empty();
-        let has_query = !query.is_empty();
 
-        let header = div()
-            .flex()
-            .items_center()
-            .gap_3()
-            .w_full()
-            .px_3()
-            .py_2()
-            .child(
-                svg()
-                    .path("search.svg")
-                    .w_4()
-                    .h_4()
-                    .text_color(theme.foreground_muted().opacity(0.8)),
-            )
-            .child(div().flex_1().text_sm().child(if has_query {
-                div()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(theme.foreground())
-                    .child(query.clone())
-            } else {
-                div()
-                    .text_color(theme.foreground_muted().opacity(0.7))
-                    .child(search_placeholder)
-            }))
-            .children(if has_query {
-                Some(
+        let content_list = match self.current_tab {
+            ClipboardTab::History => {
+                if self.filtered_items.is_empty() {
                     div()
-                        .id("clear-search-btn")
+                        .id("clipboard-empty-state")
                         .flex()
+                        .flex_1()
                         .items_center()
                         .justify_center()
-                        .w(px(20.0))
-                        .h(px(20.0))
-                        .rounded_full()
-                        .cursor_pointer()
-                        .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                        .active(|s| s.opacity(0.6))
-                        .on_click(cx.listener(|this, _, _window, cx| {
-                            this.update_search(String::new(), cx);
-                        }))
+                        .py_8()
+                        .text_size(px(13.0))
+                        .text_color(theme.foreground_muted())
+                        .child(empty_history)
+                        .into_any_element()
+                } else {
+                    let mut list = div()
+                        .id("clipboard-item-list")
+                        .track_scroll(&self.scroll_handle)
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .overflow_scroll()
+                        .gap_1();
+
+                    for (idx, item) in self.filtered_items.iter().enumerate() {
+                        let is_selected = idx == selected_index;
+                        let is_pinned = self.service.is_pinned(&item.preview);
+                        list = list.child(render_history_item(
+                            idx,
+                            item,
+                            is_selected,
+                            is_pinned,
+                            &theme,
+                            cx,
+                        ));
+                    }
+                    list.into_any_element()
+                }
+            }
+            ClipboardTab::Snippets => {
+                if self.filtered_snippets.is_empty() {
+                    div()
+                        .id("snippets-empty-state")
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .items_center()
+                        .justify_center()
+                        .py_8()
+                        .gap_2()
                         .child(
                             svg()
-                                .path("close.svg")
-                                .w_3()
-                                .h_3()
-                                .text_color(theme.foreground_muted()),
-                        ),
-                )
-            } else {
-                None
-            })
-            .child(
-                div()
-                    .id("clip-clear-btn")
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .w(px(22.0))
-                    .h(px(22.0))
-                    .rounded_full()
-                    .cursor_pointer()
-                    .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                    .active(|s| s.opacity(0.6))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.clear_all(cx);
-                    }))
-                    .child(
-                        svg()
-                            .path("trash.svg")
-                            .size(px(13.0))
-                            .text_color(theme.foreground_muted()),
-                    ),
-            );
-
-        let mut list_container = div()
-            .id("clipboard-item-list")
-            .track_scroll(&self.scroll_handle)
-            .flex()
-            .flex_col()
-            .flex_1()
-            .overflow_scroll()
-            .gap_1();
-
-        for (idx, item) in self.filtered_items.iter().enumerate() {
-            let is_selected = idx == selected_index;
-            let item_clone = item.clone();
-            let empty_text = empty_item.clone();
-            let image_title_text = image_title.clone();
-
-            let indicator_color = if is_selected {
-                theme.accent()
-            } else {
-                gpui::hsla(0.0, 0.0, 0.0, 0.0)
-            };
-
-            let item_bg = if is_selected {
-                theme.surface().opacity(0.55)
-            } else {
-                gpui::hsla(0.0, 0.0, 0.0, 0.0)
-            };
-
-            let indicator_height = if item.is_image { px(36.0) } else { px(18.0) };
-
-            let mut content = div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap_2p5()
-                .flex_1()
-                .overflow_hidden()
-                .child(
-                    div()
-                        .font_weight(FontWeight::BOLD)
-                        .text_size(px(10.0))
-                        .text_color(theme.foreground_muted().opacity(0.7))
-                        .child(format!("#{}", idx + 1)),
-                );
-
-            if item.is_image {
-                let thumbnail_element = if let Some(ref path) = item.image_path {
-                    if path.exists() {
-                        div()
-                            .w(px(56.0))
-                            .h(px(40.0))
-                            .rounded(px(8.0))
-                            .overflow_hidden()
-                            .bg(theme.surface().opacity(0.6))
-                            .border_1()
-                            .border_color(theme.surface().opacity(0.35))
-                            .flex_shrink_0()
-                            .child(
-                                img(path.clone())
-                                    .size_full()
-                                    .object_fit(gpui::ObjectFit::Cover),
-                            )
-                            .into_any_element()
-                    } else {
-                        render_fallback_image_icon(&theme)
-                    }
+                                .path("pin.svg")
+                                .size(px(24.0))
+                                .text_color(theme.foreground_muted().opacity(0.4)),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .text_color(theme.foreground_muted())
+                                .child(empty_snippets),
+                        )
+                        .into_any_element()
                 } else {
-                    render_fallback_image_icon(&theme)
-                };
+                    let mut list = div()
+                        .id("snippets-item-list")
+                        .track_scroll(&self.scroll_handle)
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .overflow_scroll()
+                        .gap_1();
 
-                let mut text_column = div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .overflow_hidden()
-                    .gap_0p5()
-                    .child(
-                        div()
-                            .font_weight(if is_selected {
-                                FontWeight::SEMIBOLD
-                            } else {
-                                FontWeight::MEDIUM
-                            })
-                            .text_size(px(13.0))
-                            .text_color(if is_selected {
-                                theme.foreground()
-                            } else {
-                                theme.foreground_muted()
-                            })
-                            .truncate()
-                            .child(image_title_text),
-                    );
-
-                if !item.preview.is_empty() {
-                    text_column = text_column.child(
-                        div()
-                            .text_size(px(10.5))
-                            .text_color(theme.foreground_muted().opacity(0.75))
-                            .truncate()
-                            .child(item.preview.clone()),
-                    );
+                    for (idx, snippet) in self.filtered_snippets.iter().enumerate() {
+                        let is_selected = idx == selected_index;
+                        list =
+                            list.child(render_snippet_item(idx, snippet, is_selected, &theme, cx));
+                    }
+                    list.into_any_element()
                 }
-
-                content = content.child(thumbnail_element).child(text_column);
-            } else {
-                content = content.child(
-                    div()
-                        .font_weight(if is_selected {
-                            FontWeight::SEMIBOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
-                        .text_size(px(13.0))
-                        .text_color(if is_selected {
-                            theme.foreground()
-                        } else {
-                            theme.foreground_muted()
-                        })
-                        .truncate()
-                        .child(if item.preview.is_empty() {
-                            empty_text
-                        } else {
-                            item.preview.clone()
-                        }),
-                );
             }
-
-            let row = div()
-                .id(format!("clip-item-{idx}"))
-                .flex()
-                .flex_row()
-                .items_center()
-                .w_full()
-                .gap_2p5()
-                .px_2()
-                .py(if item.is_image { px(5.0) } else { px(6.0) })
-                .rounded(px(12.0))
-                .cursor_pointer()
-                .bg(item_bg)
-                .hover(|s| s.bg(theme.surface().opacity(0.4)))
-                .active(|s| s.bg(theme.surface().opacity(0.6)))
-                .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                    if !this.mouse_moved {
-                        this.mouse_moved = true;
-                    }
-                    if this.selected_index != idx {
-                        this.selected_index = idx;
-                        cx.notify();
-                    }
-                }))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.service.copy_item(&item_clone);
-                    cx.emit(ClipboardEvent::Close);
-                }))
-                .child(
-                    div()
-                        .w(px(3.0))
-                        .h(indicator_height)
-                        .rounded_full()
-                        .bg(indicator_color),
-                )
-                .child(content);
-
-            list_container = list_container.child(row);
-        }
+        };
 
         div()
             .track_focus(&self.focus_handle)
@@ -492,20 +407,7 @@ impl Render for ClipboardModule {
             .p_3()
             .gap_2()
             .overflow_hidden()
-            .child(header)
-            .child(if is_empty {
-                div()
-                    .id("clipboard-empty-state")
-                    .flex()
-                    .flex_1()
-                    .items_center()
-                    .justify_center()
-                    .py_8()
-                    .text_size(px(13.0))
-                    .text_color(theme.foreground_muted())
-                    .child(empty_history)
-            } else {
-                list_container
-            })
+            .child(render_header(&self.query, self.current_tab, &theme, cx))
+            .child(content_list)
     }
 }

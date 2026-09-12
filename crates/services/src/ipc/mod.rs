@@ -34,6 +34,8 @@ pub enum IpcCommand {
     ShowSettings,
     ToggleRecord,
     ShowRecord,
+    ToggleShelf,
+    ShowShelf,
 }
 
 impl FromStr for IpcCommand {
@@ -77,6 +79,10 @@ impl FromStr for IpcCommand {
             "show-settings" | "show settings" => Ok(IpcCommand::ShowSettings),
             "toggle-record" | "toggle record" | "record" => Ok(IpcCommand::ToggleRecord),
             "show-record" | "show record" => Ok(IpcCommand::ShowRecord),
+            "toggle-shelf" | "toggle shelf" | "shelf" | "drop" | "pocket" | "stash" => {
+                Ok(IpcCommand::ToggleShelf)
+            }
+            "show-shelf" | "show shelf" => Ok(IpcCommand::ShowShelf),
             _ => anyhow::bail!("Unknown IPC command: '{s}'"),
         }
     }
@@ -108,6 +114,8 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::ShowSettings => "show-settings".to_string(),
         IpcCommand::ToggleRecord => "toggle-record".to_string(),
         IpcCommand::ShowRecord => "show-record".to_string(),
+        IpcCommand::ToggleShelf => "toggle-shelf".to_string(),
+        IpcCommand::ShowShelf => "show-shelf".to_string(),
     }
 }
 

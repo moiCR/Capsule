@@ -40,6 +40,8 @@ pub struct DashboardModule {
     pub open_panel_indices: Vec<usize>,
     pub is_dragging_volume: bool,
     pub slider_tracker: DimensionTracker,
+    pub wifi_selected_ssid: Option<String>,
+    pub wifi_password_input: String,
 }
 
 fn format_dashboard_date(
@@ -109,16 +111,16 @@ impl DashboardModule {
                 let name_str = name.to_string_lossy();
                 if name_str.starts_with("BAT") {
                     let cap_path = entry.path().join("capacity");
-                    if let Ok(cap_str) = std::fs::read_to_string(cap_path) {
-                        if let Ok(val) = cap_str.trim().parse::<i32>() {
-                            bat = Some(val);
-                        }
+                    if let Ok(cap_str) = std::fs::read_to_string(cap_path)
+                        && let Ok(val) = cap_str.trim().parse::<i32>()
+                    {
+                        bat = Some(val);
                     }
                     let stat_path = entry.path().join("status");
-                    if let Ok(stat_str) = std::fs::read_to_string(stat_path) {
-                        if stat_str.trim().to_lowercase().contains("charging") {
-                            charging = true;
-                        }
+                    if let Ok(stat_str) = std::fs::read_to_string(stat_path)
+                        && stat_str.trim().to_lowercase().contains("charging")
+                    {
+                        charging = true;
                     }
                     break;
                 }
@@ -149,6 +151,8 @@ impl DashboardModule {
             open_panel_indices: Vec::new(),
             is_dragging_volume: false,
             slider_tracker: DimensionTracker::new(),
+            wifi_selected_ssid: None,
+            wifi_password_input: String::new(),
         }
     }
 
@@ -190,12 +194,95 @@ impl DashboardModule {
         self.last_user_action = None;
     }
 
+    pub fn select_wifi_for_password(&mut self, ssid: String, cx: &mut Context<Self>) {
+        self.wifi_selected_ssid = Some(ssid);
+        self.wifi_password_input.clear();
+        cx.notify();
+    }
+
+    pub fn cancel_wifi_password(&mut self, cx: &mut Context<Self>) {
+        self.wifi_selected_ssid = None;
+        self.wifi_password_input.clear();
+        cx.notify();
+    }
+
+    pub fn submit_wifi_password(&mut self, cx: &mut Context<Self>) {
+        if let Some(ssid) = self.wifi_selected_ssid.take() {
+            let pwd = std::mem::take(&mut self.wifi_password_input);
+            if cx.has_global::<AppState>() {
+                cx.global::<AppState>()
+                    .network
+                    .connect_wifi(&ssid, Some(&pwd));
+            }
+            cx.notify();
+        }
+    }
+
     fn handle_key_down(
         &mut self,
         event: &KeyDownEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.wifi_selected_ssid.is_some() {
+            let key = event.keystroke.key.as_str();
+            let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+            if ctrl {
+                match key {
+                    "v" => {
+                        if let Some(item) = cx.read_from_clipboard()
+                            && let Some(text) = item.text()
+                        {
+                            let clean_text: String =
+                                text.chars().filter(|c| !c.is_control()).collect();
+                            if !clean_text.is_empty() {
+                                self.wifi_password_input.push_str(&clean_text);
+                                cx.notify();
+                            }
+                        }
+                        return;
+                    }
+                    "u" | "w" => {
+                        self.wifi_password_input.clear();
+                        cx.notify();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+
+            match key {
+                "enter" => {
+                    self.submit_wifi_password(cx);
+                    return;
+                }
+                "backspace" => {
+                    if !self.wifi_password_input.is_empty() {
+                        self.wifi_password_input.pop();
+                        cx.notify();
+                    }
+                    return;
+                }
+                "escape" => {
+                    self.cancel_wifi_password(cx);
+                    return;
+                }
+                _ => {
+                    let text = event
+                        .keystroke
+                        .key_char
+                        .as_deref()
+                        .unwrap_or(event.keystroke.key.as_str());
+                    if text.chars().count() == 1 && !ctrl {
+                        self.wifi_password_input.push_str(text);
+                        cx.notify();
+                        return;
+                    }
+                }
+            }
+        }
+
         if event.keystroke.key == "escape" {
             cx.emit(DashboardEvent::CloseRequested);
         }

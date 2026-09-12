@@ -1,3 +1,6 @@
+pub mod snippets;
+pub use snippets::Snippet;
+
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -83,6 +86,7 @@ fn parse_image_preview(raw: &str) -> String {
 #[derive(Clone)]
 pub struct ClipboardService {
     fallback_history: Arc<Mutex<VecDeque<String>>>,
+    snippets: Arc<Mutex<snippets::SnippetsConfig>>,
 }
 
 impl Default for ClipboardService {
@@ -95,6 +99,7 @@ impl ClipboardService {
     pub fn new() -> Self {
         let service = Self {
             fallback_history: Arc::new(Mutex::new(VecDeque::new())),
+            snippets: Arc::new(Mutex::new(snippets::SnippetsConfig::load())),
         };
 
         service.ensure_watch_daemon();
@@ -276,6 +281,72 @@ impl ClipboardService {
         let _ = std::fs::remove_dir_all("/tmp/capsule_clipboard");
         true
     }
+
+    pub fn get_snippets(&self) -> Vec<Snippet> {
+        self.snippets
+            .lock()
+            .map(|guard| guard.snippets.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn add_snippet(&self, title: &str, content: &str) -> Option<Snippet> {
+        let mut guard = self.snippets.lock().ok()?;
+        Some(guard.add(title.to_string(), content.to_string()))
+    }
+
+    pub fn remove_snippet(&self, id: &str) -> bool {
+        let mut guard = match self.snippets.lock() {
+            Ok(guard) => guard,
+            Err(_) => return false,
+        };
+        guard.remove(id)
+    }
+
+    pub fn pin_from_history(&self, item: &ClipboardItem) -> bool {
+        if item.is_image {
+            return false;
+        }
+
+        let content = item.preview.trim();
+        if content.is_empty() {
+            return false;
+        }
+
+        let first_line = content.lines().next().unwrap_or(content).trim();
+        let title = if first_line.chars().count() > 30 {
+            let truncated: String = first_line.chars().take(27).collect();
+            format!("{truncated}...")
+        } else {
+            first_line.to_string()
+        };
+
+        self.add_snippet(&title, content).is_some()
+    }
+
+    pub fn is_pinned(&self, content: &str) -> bool {
+        self.snippets
+            .lock()
+            .map(|guard| {
+                guard
+                    .snippets
+                    .iter()
+                    .any(|snippet| snippet.content == content)
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn copy_text(&self, text: &str) -> bool {
+        if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write;
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = child.wait();
+            return true;
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]
@@ -300,6 +371,7 @@ mod tests {
     fn test_fetch_history_with_real_cliphist() {
         let service = ClipboardService {
             fallback_history: Arc::new(Mutex::new(VecDeque::new())),
+            snippets: Arc::new(Mutex::new(snippets::SnippetsConfig::default())),
         };
         let items = service.fetch_history();
         for item in &items {

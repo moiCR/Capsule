@@ -1,17 +1,15 @@
 use crate::theme::Theme;
-pub mod fish_app;
-pub mod ghostty_app;
+pub mod engine;
 pub mod gtk_apps;
-pub mod kitty_app;
+pub mod manager;
+pub mod plugin;
 pub mod qt_apps;
-pub mod yazi_app;
 
-pub use fish_app::FishApp;
-pub use ghostty_app::GhosttyApp;
+pub use engine::{ColorFormats, TemplateEngine};
 pub use gtk_apps::GtkApps;
-pub use kitty_app::KittyApp;
+pub use manager::TemplatePluginManager;
+pub use plugin::{HookConfig, TemplateConfig, TemplatePlugin};
 pub use qt_apps::QtApps;
-pub use yazi_app::YaziApp;
 
 pub trait AppTheme: Send + Sync + 'static {
     fn apply_current_theme(&self, theme: &Theme);
