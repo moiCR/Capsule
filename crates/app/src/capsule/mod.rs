@@ -2,6 +2,7 @@
 pub mod capsule;
 pub mod container;
 pub mod modules;
+pub mod orbit;
 pub mod satellites;
 pub mod widgets;
 

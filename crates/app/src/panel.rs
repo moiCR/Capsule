@@ -52,13 +52,14 @@ impl CapsulePanel {
         ipc_subscriber: IpcSubscriber,
     ) -> Option<WindowHandle<Capsule>> {
         let options = Self::window_options(cx);
-        let window = match cx.open_window(options, |_, cx| cx.new(Capsule::new)) {
-            Ok(w) => w,
-            Err(err) => {
-                eprintln!("Failed to open layer shell window: {err}");
-                return None;
-            }
-        };
+        let window =
+            match cx.open_window(options, |window, cx| cx.new(|cx| Capsule::new(window, cx))) {
+                Ok(w) => w,
+                Err(err) => {
+                    eprintln!("Failed to open layer shell window: {err}");
+                    return None;
+                }
+            };
 
         if let Ok(capsule_handle) = window.entity(cx) {
             ipc_subscriber.start(cx, capsule_handle, Capsule::handle_ipc_command);

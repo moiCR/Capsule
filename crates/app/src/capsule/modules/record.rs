@@ -130,6 +130,7 @@ impl RecordModule {
         let record_service = cx.global::<AppState>().record.clone();
         self.is_starting = false;
         self.timer_task = None;
+        record_service.mark_stopped();
 
         tokio::spawn(async move {
             let _ = record_service.stop().await;

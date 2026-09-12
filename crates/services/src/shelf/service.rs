@@ -2,17 +2,31 @@ use super::item::ShelfItem;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ShelfService {
     items: Arc<Mutex<Vec<ShelfItem>>>,
+    change_tx: broadcast::Sender<usize>,
+}
+
+impl Default for ShelfService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ShelfService {
     pub fn new() -> Self {
+        let (change_tx, _) = broadcast::channel(16);
         Self {
             items: Arc::new(Mutex::new(Vec::new())),
+            change_tx,
         }
+    }
+
+    pub fn subscribe_changes(&self) -> broadcast::Receiver<usize> {
+        self.change_tx.subscribe()
     }
 
     pub fn add_paths(&self, paths: &[PathBuf]) -> usize {
@@ -31,6 +45,12 @@ impl ShelfService {
                 guard.push(item);
                 added += 1;
             }
+        }
+
+        if added > 0 {
+            let count = guard.len();
+            drop(guard);
+            let _ = self.change_tx.send(count);
         }
 
         added
@@ -66,17 +86,25 @@ impl ShelfService {
 
         let previous_len = guard.len();
         guard.retain(|item| item.id != id);
-        guard.len() != previous_len
+        let changed = guard.len() != previous_len;
+        if changed {
+            let count = guard.len();
+            drop(guard);
+            let _ = self.change_tx.send(count);
+        }
+        changed
     }
 
     pub fn clear(&self) {
         if let Ok(mut guard) = self.items.lock() {
             guard.clear();
+            drop(guard);
+            let _ = self.change_tx.send(0);
         }
     }
 
     pub fn copy_item(&self, item: &ShelfItem) -> bool {
-        copy_paths_to_clipboard(&[item.path.clone()])
+        copy_paths_to_clipboard(std::slice::from_ref(&item.path))
     }
 
     pub fn copy_all(&self) -> bool {

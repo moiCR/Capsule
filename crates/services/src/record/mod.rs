@@ -198,6 +198,11 @@ impl RecordService {
         self.status_tx.subscribe()
     }
 
+    pub fn mark_stopped(&self) {
+        self.status.store(Arc::new(RecordStatus::Stopped));
+        let _ = self.status_tx.send(RecordStatus::Stopped);
+    }
+
     pub fn get_duration_secs(&self) -> u64 {
         if let Ok(guard) = self.active_session.try_lock()
             && let Some(ref session) = *guard
@@ -454,6 +459,9 @@ impl RecordService {
             .take()
             .ok_or_else(|| "No hay ninguna grabación en curso".to_string())?;
 
+        self.status.store(Arc::new(RecordStatus::Stopped));
+        let _ = self.status_tx.send(RecordStatus::Stopped);
+
         let mut stopped_via_ipc = false;
         if let Some(ref socket_path) = session.ipc_socket_path
             && let Ok(mut stream) = UnixStream::connect(socket_path).await
@@ -485,9 +493,6 @@ impl RecordService {
         if let Some(ref socket) = session.ipc_socket_path {
             let _ = std::fs::remove_file(socket);
         }
-
-        self.status.store(Arc::new(RecordStatus::Stopped));
-        let _ = self.status_tx.send(RecordStatus::Stopped);
 
         Ok(session.output_path)
     }

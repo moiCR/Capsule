@@ -1,6 +1,6 @@
 use gpui::{
-    Bounds, Context, Render, Size, Task, Window, div, layer_shell::KeyboardInteractivity, point,
-    prelude::*, px, svg,
+    Bounds, Context, Entity, Render, Size, Task, Window, div, layer_shell::KeyboardInteractivity,
+    point, prelude::*, px, svg,
 };
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
@@ -9,7 +9,9 @@ use ui::tracker::DimensionTracker;
 
 use crate::capsule::modules::CapsuleModules;
 
-use super::satellites::{PanelManager, satellite_retract, satellite_spring};
+use super::orbit::{ORB_SIZE, OrbKind, Orbit};
+use super::satellites::PanelManager;
+use super::widgets::{record::orb::render_record_orb, shelf::orb::render_shelf_orb};
 use super::{CapsuleMode, apple_island_morph, apple_island_spring};
 
 use super::modules::clipboard::ClipboardEvent;
@@ -42,9 +44,7 @@ pub struct Capsule {
     animating: bool,
     anim_task: Option<Task<()>>,
     satellite_anim_task: Option<Task<()>>,
-    shelf_circle_opened_at: Option<Instant>,
-    shelf_circle_closing_at: Option<Instant>,
-    shelf_circle_anim_task: Option<Task<()>>,
+    orbit: Entity<Orbit>,
     drag_target_active: bool,
     last_drag_over: Option<Instant>,
     drag_monitor_task: Option<Task<()>>,
@@ -58,8 +58,10 @@ pub struct Capsule {
 }
 
 impl Capsule {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &Window, cx: &mut Context<Self>) -> Self {
         let modules = CapsuleModules::new(cx);
+        let orbit = cx.new(|cx| Orbit::new(window, cx));
+        cx.observe(&orbit, |_, _, cx| cx.notify()).detach();
         let (initial_w, initial_h) = modules.idle_view.read(cx).desired_dimensions();
         let r = if cx.has_global::<AppState>() {
             cx.global::<AppState>().config.get().ui.capsule_round
@@ -82,11 +84,6 @@ impl Capsule {
                 super::modules::idle::IdleEvent::ExpandRequested => {
                     if capsule.mode == CapsuleMode::Default {
                         capsule.start_transition_internal(CapsuleMode::Dashboard, None, cx);
-                    }
-                }
-                super::modules::idle::IdleEvent::RecordRequested => {
-                    if capsule.mode == CapsuleMode::Default {
-                        capsule.start_transition_internal(CapsuleMode::Record, None, cx);
                     }
                 }
             },
@@ -338,6 +335,7 @@ impl Capsule {
                                     "THEME",
                                     "Reloaded current_theme and applied to GTK/Qt/Ghostty/Fish/Yazi apps!"
                                 );
+                                cx.notify();
                             }
                         }
 
@@ -397,8 +395,6 @@ impl Capsule {
                             }
                             cx.notify();
                         }
-
-                        cx.notify();
                     })
                     .is_err()
                 {
@@ -715,9 +711,7 @@ impl Capsule {
             animating: false,
             anim_task: None,
             satellite_anim_task: None,
-            shelf_circle_opened_at: None,
-            shelf_circle_closing_at: None,
-            shelf_circle_anim_task: None,
+            orbit,
             drag_target_active: false,
             last_drag_over: None,
             drag_monitor_task: None,
@@ -892,93 +886,63 @@ impl Capsule {
         self.satellite_anim_task = Some(task);
     }
 
-    fn start_shelf_circle_animation(&mut self, cx: &mut Context<Self>) {
-        let compositor = if cx.has_global::<AppState>() {
-            Some(cx.global::<AppState>().compositor.clone())
-        } else {
-            None
+    fn sync_orbit_visibility(&mut self, cx: &mut Context<Self>) {
+        let visible = self.mode == CapsuleMode::Default && !self.drag_target_active;
+        self.orbit
+            .update(cx, |orbit, cx| orbit.set_visible(visible, cx));
+    }
+
+    pub(crate) fn open_orb(&mut self, kind: OrbKind, cx: &mut Context<Self>) {
+        if self.mode != CapsuleMode::Default || self.drag_target_active {
+            return;
+        }
+        let orbit = self.orbit.read(cx);
+        let active = match kind {
+            OrbKind::Shelf => orbit.shelf_count > 0,
+            OrbKind::Recording => orbit.record_status != services::RecordStatus::Stopped,
         };
-
-        let task = cx.spawn(async move |this, cx| {
-            loop {
-                let frame_dur = if let Some(ref comp) = compositor {
-                    comp.get_frame_duration()
-                } else {
-                    Duration::from_millis(16)
-                };
-
-                tokio::time::sleep(frame_dur).await;
-
-                let done = this
-                    .update(cx, |capsule, cx| {
-                        cx.notify();
-                        capsule.is_shelf_circle_animation_finished()
-                    })
-                    .unwrap_or(true);
-
-                if done {
-                    this.update(cx, |capsule, cx| {
-                        capsule.shelf_circle_anim_task = None;
-                        if capsule.shelf_circle_closing_at.is_some() {
-                            capsule.shelf_circle_opened_at = None;
-                            capsule.shelf_circle_closing_at = None;
-                        }
-                        cx.notify();
-                    })
-                    .ok();
-                    break;
-                }
-            }
-        });
-        self.shelf_circle_anim_task = Some(task);
-    }
-
-    fn is_shelf_circle_animation_finished(&self) -> bool {
-        if let Some(closing_at) = self.shelf_circle_closing_at {
-            closing_at.elapsed().as_secs_f32() >= 0.22
-        } else if let Some(opened_at) = self.shelf_circle_opened_at {
-            opened_at.elapsed().as_secs_f32() >= 0.38
-        } else {
-            true
+        if active {
+            let mode = match kind {
+                OrbKind::Shelf => CapsuleMode::Shelf,
+                OrbKind::Recording => CapsuleMode::Record,
+            };
+            self.start_transition_internal(mode, None, cx);
         }
     }
 
-    fn update_shelf_circle_state(&mut self, shelf_count: usize, cx: &mut Context<Self>) {
-        let should_be_visible =
-            self.mode == CapsuleMode::Default && !self.drag_target_active && shelf_count > 0;
-
-        if should_be_visible {
-            if self.shelf_circle_opened_at.is_none() || self.shelf_circle_closing_at.is_some() {
-                self.shelf_circle_closing_at = None;
-                self.shelf_circle_opened_at = Some(Instant::now());
-                self.start_shelf_circle_animation(cx);
-            }
-        } else if self.shelf_circle_opened_at.is_some() && self.shelf_circle_closing_at.is_none() {
-            self.shelf_circle_closing_at = Some(Instant::now());
-            self.start_shelf_circle_animation(cx);
+    pub(crate) fn drop_on_shelf(
+        &mut self,
+        external_paths: &gpui::ExternalPaths,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.drag_target_active = false;
+        self.sync_orbit_visibility(cx);
+        self.last_drag_over = None;
+        self.drag_monitor_task = None;
+        cx.global::<AppState>()
+            .shelf
+            .add_paths(external_paths.paths());
+        self.modules
+            .shelf_view
+            .update(cx, |shelf, cx| shelf.reload_items(cx));
+        if self.mode == CapsuleMode::Default {
+            let (width, _) = self.modules.idle_view.read(cx).desired_dimensions();
+            self.target_width = width;
+            self.target_height = CapsuleMode::Default.dimensions().1;
+            self.target_radius = cx.global::<AppState>().config.get().ui.capsule_round;
+            self.anim_task = None;
+            self.animating = false;
+            self.animate_dimension_change(cx);
         }
-    }
-
-    fn shelf_circle_factor(&self) -> Option<f32> {
-        if let Some(closing_at) = self.shelf_circle_closing_at {
-            let t = (closing_at.elapsed().as_secs_f32() / 0.22).min(1.0);
-            if t >= 1.0 {
-                None
-            } else {
-                Some((1.0 - satellite_retract(t)).max(0.0))
-            }
-        } else if let Some(opened_at) = self.shelf_circle_opened_at {
-            let t = (opened_at.elapsed().as_secs_f32() / 0.38).min(1.0);
-            Some(satellite_spring(t))
-        } else {
-            None
-        }
+        cx.notify();
     }
 
     pub fn on_drag_over_capsule(&mut self, cx: &mut Context<Self>) {
         self.last_drag_over = Some(Instant::now());
         if !self.drag_target_active {
             self.drag_target_active = true;
+            self.sync_orbit_visibility(cx);
             if self.mode == CapsuleMode::Default {
                 self.anim_start_w = self.current_width;
                 self.anim_start_h = self.current_height;
@@ -1063,6 +1027,7 @@ impl Capsule {
                         if let Some(last) = capsule.last_drag_over {
                             if last.elapsed().as_millis() > 140 {
                                 capsule.drag_target_active = false;
+                                capsule.sync_orbit_visibility(cx);
                                 capsule.last_drag_over = None;
                                 capsule.drag_monitor_task = None;
 
@@ -1160,6 +1125,7 @@ impl Capsule {
         let old_mode = self.mode;
         self.reset_inactivity_timer();
         self.mode = mode;
+        self.sync_orbit_visibility(cx);
         services::log_info!("UI", "Transitioning to mode: {:?}", mode);
 
         if mode != CapsuleMode::Default && cx.has_global::<AppState>() {
@@ -1600,15 +1566,10 @@ impl Render for Capsule {
             self.window_height = win_h;
         }
 
-        let shelf_count = if cx.has_global::<AppState>() {
-            cx.global::<AppState>().shelf.count()
-        } else {
-            0
-        };
-        self.update_shelf_circle_state(shelf_count, cx);
-        let circle_factor_opt = self.shelf_circle_factor();
-        let circle_size = 26.0;
-        let circle_gap = ui_config.gap.max(8.0);
+        let orbit = self.orbit.read(cx);
+        let shelf_count = orbit.shelf_count;
+        let record_status = orbit.record_status;
+        let orbs = orbit.geometry(self.current_width, self.current_height, ui_config.gap);
 
         let is_modal = self.mode == CapsuleMode::Launcher
             || self.mode == CapsuleMode::Dashboard
@@ -1644,21 +1605,14 @@ impl Render for Capsule {
                 origin: point(px(pill_x), px(pill_y)),
                 size: Size::new(px(self.current_width), px(self.current_height)),
             };
-            let circle_interactive = self.mode == CapsuleMode::Default
-                && self.shelf_circle_closing_at.is_none()
-                && circle_factor_opt.map_or(false, |f| f >= 0.85);
-
-            if circle_interactive {
-                let circle_x = pill_x - circle_size - circle_gap;
-                let circle_y = pill_y + ((self.current_height - circle_size) / 2.0).max(0.0);
-                let circle_bounds = Bounds {
-                    origin: point(px(circle_x), px(circle_y)),
-                    size: Size::new(px(circle_size), px(circle_size)),
-                };
-                window.set_input_region(Some(&[pill_bounds, circle_bounds]));
-            } else {
-                window.set_input_region(Some(&[pill_bounds]));
+            let mut input_bounds = vec![pill_bounds];
+            for orb in orbs.iter().filter(|orb| orb.interactive) {
+                input_bounds.push(Bounds {
+                    origin: point(px(pill_x + orb.x), px(pill_y + orb.y)),
+                    size: Size::new(px(ORB_SIZE), px(ORB_SIZE)),
+                });
             }
+            window.set_input_region(Some(&input_bounds));
         }
 
         let mut content_container = div().relative().size_full();
@@ -1874,85 +1828,7 @@ impl Render for Capsule {
                     style
                 },
             )
-            .on_drop(
-                cx.listener(|this, external_paths: &gpui::ExternalPaths, _window, cx| {
-                    this.drag_target_active = false;
-                    this.last_drag_over = None;
-                    this.drag_monitor_task = None;
-                    if cx.has_global::<AppState>() {
-                        let paths = external_paths.paths();
-                        cx.global::<AppState>().shelf.add_paths(paths);
-                        this.modules.shelf_view.update(cx, |shelf, cx| {
-                            shelf.reload_items(cx);
-                        });
-                    }
-                    if this.mode == CapsuleMode::Default {
-                        let (w, h) = {
-                            let (desired_w, _h) =
-                                this.modules.idle_view.read(cx).desired_dimensions();
-                            (desired_w, CapsuleMode::Default.dimensions().1)
-                        };
-                        let r = if cx.has_global::<AppState>() {
-                            cx.global::<AppState>().config.get().ui.capsule_round
-                        } else {
-                            CapsuleMode::Default.radius()
-                        };
-                        this.anim_start_w = this.current_width;
-                        this.anim_start_h = this.current_height;
-                        this.anim_start_r = this.current_radius;
-                        this.anim_start_y = this.current_y;
-                        this.anim_start_progress = this.anim_progress;
-                        this.anim_start_time = Some(Instant::now());
-                        this.animating = true;
-                        this.is_mode_transition = false;
-                        this.target_width = w;
-                        this.target_height = h;
-                        this.target_radius = r;
-
-                        let compositor = cx.global::<AppState>().compositor.clone();
-                        let task = cx.spawn(async move |this, cx| {
-                            loop {
-                                cx.background_executor()
-                                    .timer(compositor.get_frame_duration())
-                                    .await;
-                                let done = this
-                                    .update(cx, |capsule, cx| {
-                                        let duration = if cx.has_global::<AppState>() {
-                                            cx.global::<AppState>()
-                                                .config
-                                                .get()
-                                                .ui
-                                                .animation_duration_ms
-                                                as f32
-                                                / 1000.0
-                                        } else {
-                                            0.28
-                                        };
-                                        let finished = capsule.tick_animation(duration);
-                                        cx.notify();
-                                        finished
-                                    })
-                                    .unwrap_or(true);
-
-                                if done {
-                                    this.update(cx, |capsule, cx| {
-                                        capsule.animating = false;
-                                        capsule.is_mode_transition = false;
-                                        capsule.current_width = capsule.target_width;
-                                        capsule.current_height = capsule.target_height;
-                                        capsule.anim_task = None;
-                                        cx.notify();
-                                    })
-                                    .ok();
-                                    break;
-                                }
-                            }
-                        });
-                        this.anim_task = Some(task);
-                    }
-                    cx.notify();
-                }),
-            );
+            .on_drop(cx.listener(Self::drop_on_shelf));
 
         let mut satellites_layer = div().absolute().inset_0();
 
@@ -2201,190 +2077,29 @@ impl Render for Capsule {
             }
         }
 
-        let satellite_circle = if let Some(factor) = circle_factor_opt {
-            let anim_x = (-circle_size - circle_gap) * factor;
-            let anim_y = ((self.current_height - circle_size) / 2.0).max(0.0);
-            let anim_opacity = factor.clamp(0.0, 1.0);
-            let circle_accent = active_theme.accent();
-            let circle_btn = div()
-                .id("shelf-satellite-btn")
-                .size_full()
-                .rounded_full()
-                .bg(active_theme.background())
-                .border_1()
-                .border_color(active_theme.surface())
-                .group_hover("shelf-satellite", |s| s.border_color(active_theme.accent()))
-                .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
-                    if let Some(Some(root)) = window.root::<Capsule>() {
-                        _ = root.update(cx, |capsule, cx| {
-                            capsule.on_drag_over_capsule(cx);
-                        });
-                    }
-                    style.border_2().border_color(circle_accent)
-                })
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    svg()
-                        .path("pin-tilted.svg")
-                        .size(px(13.0))
-                        .text_color(active_theme.foreground()),
-                );
-
-            let badge_el = div()
-                .id("shelf-badge-counter")
-                .absolute()
-                .bottom(px(-3.0))
-                .right(px(-3.0))
-                .min_w(px(14.0))
-                .h(px(14.0))
-                .px(px(2.0))
-                .rounded_full()
-                .bg(active_theme.accent())
-                .border_1()
-                .border_color(active_theme.background())
-                .flex()
-                .items_center()
-                .justify_center()
-                .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
-                    if let Some(Some(root)) = window.root::<Capsule>() {
-                        _ = root.update(cx, |capsule, cx| {
-                            capsule.on_drag_over_capsule(cx);
-                        });
-                    }
-                    style
-                })
-                .child(
-                    div()
-                        .relative()
-                        .top(px(1.5))
-                        .text_center()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_size(px(8.0))
-                        .text_color(gpui::white())
-                        .child(shelf_count.to_string()),
-                );
-
-            let circle_el = div()
-                .id("shelf-satellite-circle")
-                .group("shelf-satellite")
-                .cursor_pointer()
-                .size(px(circle_size))
-                .relative()
-                .child(circle_btn)
-                .child(badge_el)
-                .on_click(cx.listener(|this, _, _window, cx| {
-                    if this.shelf_circle_closing_at.is_some() {
-                        return;
-                    }
-                    let target = if this.mode == CapsuleMode::Shelf {
-                        CapsuleMode::Default
-                    } else {
-                        CapsuleMode::Shelf
-                    };
-                    this.start_transition_internal(target, None, cx);
-                }))
-                .on_drop(
-                    cx.listener(|this, external_paths: &gpui::ExternalPaths, _window, cx| {
-                        this.drag_target_active = false;
-                        this.last_drag_over = None;
-                        this.drag_monitor_task = None;
-                        if cx.has_global::<AppState>() {
-                            let paths = external_paths.paths();
-                            cx.global::<AppState>().shelf.add_paths(paths);
-                            this.modules.shelf_view.update(cx, |shelf, cx| {
-                                shelf.reload_items(cx);
-                            });
-                        }
-                        if this.mode == CapsuleMode::Default {
-                            let (w, h) = {
-                                let (desired_w, _h) =
-                                    this.modules.idle_view.read(cx).desired_dimensions();
-                                (desired_w, CapsuleMode::Default.dimensions().1)
-                            };
-                            let r = if cx.has_global::<AppState>() {
-                                cx.global::<AppState>().config.get().ui.capsule_round
-                            } else {
-                                CapsuleMode::Default.radius()
-                            };
-                            this.anim_start_w = this.current_width;
-                            this.anim_start_h = this.current_height;
-                            this.anim_start_r = this.current_radius;
-                            this.anim_start_y = this.current_y;
-                            this.anim_start_progress = this.anim_progress;
-                            this.anim_start_time = Some(Instant::now());
-                            this.animating = true;
-                            this.is_mode_transition = false;
-                            this.target_width = w;
-                            this.target_height = h;
-                            this.target_radius = r;
-
-                            let compositor = cx.global::<AppState>().compositor.clone();
-                            let task = cx.spawn(async move |this, cx| {
-                                loop {
-                                    cx.background_executor()
-                                        .timer(compositor.get_frame_duration())
-                                        .await;
-                                    let done = this
-                                        .update(cx, |capsule, cx| {
-                                            let duration = if cx.has_global::<AppState>() {
-                                                cx.global::<AppState>()
-                                                    .config
-                                                    .get()
-                                                    .ui
-                                                    .animation_duration_ms
-                                                    as f32
-                                                    / 1000.0
-                                            } else {
-                                                0.28
-                                            };
-                                            let finished = capsule.tick_animation(duration);
-                                            cx.notify();
-                                            finished
-                                        })
-                                        .unwrap_or(true);
-
-                                    if done {
-                                        this.update(cx, |capsule, cx| {
-                                            capsule.animating = false;
-                                            capsule.is_mode_transition = false;
-                                            capsule.current_width = capsule.target_width;
-                                            capsule.current_height = capsule.target_height;
-                                            capsule.anim_task = None;
-                                            cx.notify();
-                                        })
-                                        .ok();
-                                        break;
-                                    }
-                                }
-                            });
-                            this.anim_task = Some(task);
-                        }
-                        cx.notify();
-                    }),
-                );
-
-            Some(
-                div()
-                    .absolute()
-                    .left(px(anim_x))
-                    .top(px(anim_y))
-                    .opacity(anim_opacity)
-                    .child(circle_el),
-            )
-        } else {
-            None
-        };
-
         let mut content_stack = div()
             .relative()
             .w(px(self.current_width))
             .h(px(self.current_height))
             .child(satellites_layer);
 
-        if let Some(circle) = satellite_circle {
-            content_stack = content_stack.child(circle);
+        for orb in orbs {
+            let content = match orb.kind {
+                OrbKind::Shelf => render_shelf_orb(shelf_count, orb.interactive, &active_theme, cx)
+                    .into_any_element(),
+                OrbKind::Recording => {
+                    render_record_orb(record_status, orb.interactive, &active_theme, cx)
+                        .into_any_element()
+                }
+            };
+            content_stack = content_stack.child(
+                div()
+                    .absolute()
+                    .left(px(orb.x))
+                    .top(px(orb.y))
+                    .opacity(orb.opacity)
+                    .child(content),
+            );
         }
 
         content_stack = content_stack.child(pill_wrapper);
