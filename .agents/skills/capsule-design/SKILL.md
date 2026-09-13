@@ -1,160 +1,160 @@
 ---
 name: capsule-design
-description: Diseña y refina el frontend GPUI de Capsule y Orbit con el estilo minimalista del proyecto. Úsala para cambios visuales, módulos, widgets, orbs, satélites, controles, espaciado, tipografía, estados y animaciones. Basa las decisiones en las implementaciones existentes, el tema y la configuración; evita añadir interfaz permanente o decoración innecesaria.
+description: Design and refine Capsule and Orbit's GPUI interface using the project's minimalist style. Use for visual changes, modules, widgets, orbs, satellites, controls, spacing, typography, states, and animations. Ground decisions in existing implementations, theme, and configuration; avoid unnecessary persistent UI or decoration.
 ---
 
-# Diseño de Capsule y Orbit
+# Capsule and Orbit Design
 
-## Dirección
+## Direction
 
-Capsule es una shell contextual de Wayland, no un dashboard web. Su interfaz debe ocupar y reclamar solo lo necesario para la tarea presente.
+Capsule is a contextual Wayland shell. Its interface should occupy only the space and attention needed for the current task.
 
-**Menos elementos simultáneos, una jerarquía clara y detalle bajo demanda.** Minimalismo no significa hacer todo diminuto, esconder acciones indispensables ni sustituir etiquetas comprensibles por iconos ambiguos.
+**Fewer simultaneous elements, clear hierarchy, and detail on demand.** Minimalism does not mean making everything tiny, hiding essential actions, or replacing clear labels with ambiguous icons.
 
-- Parte del módulo o widget existente más parecido. Mejora su coherencia antes de inventar otro lenguaje visual.
-- Cada elemento visible debe comunicar un estado útil, permitir una acción necesaria o facilitar la comprensión. Si quitarlo no perjudica ninguna de esas funciones, omítelo.
-- No interpretes una petición de diseño como permiso para añadir funciones, opciones de configuración, paneles o dependencias.
-- No conviertas la inspiración de Capsule Corp. en decoración temática: evita motivos de anime, neón o estética de ciencia ficción salvo petición explícita.
-- Las reglas siguientes dirigen cambios nuevos; no autorizan rediseñar módulos ajenos al encargo.
+- Start with the closest existing module or widget. Improve consistency before introducing another visual language.
+- Each visible element must communicate useful state, enable a necessary action, or aid understanding. Omit elements whose removal harms none of these.
+- A design request does not authorize new features, configuration options, panels, or dependencies.
+- Do not turn Capsule Corp. inspiration into themed decoration. Avoid anime motifs, neon, or sci-fi styling unless explicitly requested.
+- These rules guide new changes; they do not authorize redesigning unrelated modules.
 
-## Antes de diseñar
+## Before Designing
 
-1. Delimita la tarea: qué necesita ver o hacer el usuario, cuándo aparece la interfaz y cuándo deja de ser necesaria.
-2. Consulta el grafo del proyecto y verifica su cobertura/frescura según las reglas del repositorio. Lee el código actual de la superficie afectada y de un referente cercano. Si el grafo no basta, usa lectura directa y declara la limitación.
-3. Revisa el contenedor, el widget, sus estados y el origen de tema/configuración; no diseñes a partir del README solamente.
-4. Elige la superficie más pequeña que resuelva la tarea usando las distinciones siguientes.
-5. Conserva la estructura y los gestos existentes salvo que el cambio solicitado los afecte. No solicites decisiones que el código ya resuelve.
+1. Define the task: what users need to see or do, when the interface appears, and when it is no longer needed.
+2. Consult the project graph and verify coverage and freshness according to repository rules. Read the affected surface's current code and a nearby reference implementation. If the graph is insufficient, inspect files directly and disclose the limitation.
+3. Inspect the container, widget, states, and theme/configuration sources. Do not design from the README alone.
+4. Choose the smallest surface that solves the task using the distinctions below.
+5. Preserve existing structure and gestures unless the requested change affects them. Do not ask users to resolve decisions already established by the code.
 
-Las rutas de esta guía son relativas a la raíz del repositorio, no al directorio de la skill. Los valores documentados son referencias observadas, no tokens universales ni sustitutos de la configuración. Verifica su vigencia antes de reutilizarlos.
+Paths below are relative to the repository root, not the skill directory. Documented values are observed references, not universal tokens or substitutes for configuration. Verify them before reuse.
 
-## Responsabilidades de cada superficie
+## Surface Responsibilities
 
-### Capsule: interacción principal
+### Capsule: Primary Interaction
 
-- Usa el contenedor existente para presentar el módulo activo. No dibujes una segunda cápsula con su propio marco dentro de él.
-- Ajusta el tamaño a la información y los controles necesarios. Una acción breve puede vivir en una fila; una búsqueda necesita entrada y resultados, no una página de bienvenida.
-- Conserva el morphing de dimensiones y radio. No fuerces todos los módulos a un rectángulo grande idéntico.
-- Usa el launcher como referencia para listas compactas y la barra de grabación para estados y controles en una sola fila.
-- Un módulo complejo como el dashboard puede agrupar controles. Eso no justifica copiar su densidad en una interacción simple.
+- Use the existing container to present the active module. Do not draw another framed capsule inside it.
+- Size the interface for the necessary information and controls. A brief action can fit in one row; search needs input and results, not a welcome page.
+- Preserve dimension and corner-radius morphing. Do not force every module into the same large rectangle.
+- Use the launcher as a reference for compact lists and the recording bar for single-row status and controls.
+- Complex modules such as the dashboard may group controls. Their density should not carry over to simple interactions.
 
-### Orbit y orbs: presencia contextual
+### Orbit and Orbs: Contextual Presence
 
-Orbit gestiona disposición, visibilidad y movimiento; los widgets de orb dibujan el indicador y conectan su interacción.
+Orbit manages layout, visibility, and motion. Orb widgets render indicators and connect interactions.
 
-- Un orb representa un estado activo que merece acceso rápido, no una función instalada. No añadas un orb permanente por cada módulo.
-- El patrón actual muestra Shelf cuando contiene elementos y Recording mientras no está detenido. Capsule permite mostrarlos en modo `Default`, sin destino de arrastre activo; abrirlos lleva al módulo correspondiente.
-- Conserva esa política salvo que el encargo requiera cambiarla. No mantengas orbs alrededor de todos los módulos por decoración.
-- Mantén un círculo con un único símbolo o indicador. Un badge solo se justifica si aporta información operativa, como el número de elementos del Shelf.
-- No añadas al orb títulos, descripciones, temporizadores, menús de acciones o leyendas permanentes. El detalle pertenece al módulo que abre.
-- Reutiliza `ORB_SIZE` y la geometría de Orbit. No calcules posiciones independientes en cada widget ni crees otro gestor.
-- Preserva la estabilidad lateral de los orbs activos, el cierre de huecos y la continuidad al invertir una transición. No los reordenes con cada actualización de estado.
-- Respeta `interactive` y las regiones de entrada al cambiar visibilidad. No dejes blancos de clic invisibles ni bloquees el escritorio con el área transparente de la ventana.
-- Conserva interacciones especializadas, como arrastrar archivos al Shelf, sin generalizarlas a todos los orbs.
+- An orb represents an active state worth quick access, not an installed feature. Do not add a permanent orb for every module.
+- The current pattern shows Shelf when it contains items and Recording while it is not stopped. Capsule allows them in `Default` mode with no active drag target; opening them activates the corresponding module.
+- Preserve this policy unless the task requires changing it. Do not keep orbs around every module as decoration.
+- Keep each orb circular with one symbol or indicator. Add a badge only for operational information, such as Shelf item count.
+- Do not add permanent titles, descriptions, timers, action menus, or legends to orbs. Details belong in the module they open.
+- Reuse `ORB_SIZE` and Orbit geometry. Do not calculate independent positions in each widget or create another manager.
+- Preserve active orbs' lateral stability, gap closing, and continuity when reversing transitions. Do not reorder them on every state update.
+- Respect `interactive` and input regions when changing visibility. Hidden elements must not capture clicks, and transparent window areas must not block desktop input.
+- Preserve specialized interactions, such as dropping files onto Shelf, without extending them to all orbs.
 
-### Satélites: detalle auxiliar
+### Satellites: Supporting Detail
 
-- No confundas los orbs circulares de estado con los paneles de `satellites/`.
-- Reutiliza los satélites y su gestor para detalles auxiliares que ya siguen ese patrón; no crees una ventana o sistema de popups paralelo.
-- Abrir un detalle no debe desplegar controles adicionales sin relación. Respeta las reglas existentes de colocación, espacio disponible y cierre.
+- Distinguish circular status orbs from panels in `satellites/`.
+- Reuse existing satellites and their manager for supporting details that follow this pattern. Do not create a parallel window or popup system.
+- Opening a detail view must not expose unrelated controls. Preserve placement, available-space, and dismissal rules.
 
-## Lenguaje visual
+## Visual Language
 
-### Color y superficies
+### Color and Surfaces
 
-- Obtén los colores del `Theme` existente: `background()`, `background_alt()`, `surface()`, `foreground()`, `foreground_muted()`, `accent()`, `red()` y `green()` según su significado.
-- Usa `background` para la base; `surface` y sus opacidades para agrupación y feedback. No asumas que el tema siempre es oscuro.
-- Reserva `accent` para selección, acción principal, estado activado o feedback puntual. No conviertas todos los bordes, iconos y fondos en acentos simultáneamente.
-- El texto principal usa `foreground`; el secundario, `foreground_muted`. No rebajes tanto la opacidad que el contenido útil deje de leerse.
-- Un control activado puede usar fondo de acento, como las pills de conectividad. No confundas esa señal funcional con decoración.
-- Reutiliza el borde y la sombra del contenedor. No apiles sombras, marcos ni tarjetas anidadas para fabricar jerarquía; primero usa espacio y alineación.
-- No introduzcas gradientes, glow, glassmorphism, blur adicional o colores arbitrarios para hacer el diseño «más moderno».
-- Hay colores fijos en los widgets actuales de grabación y blanco fijo en el badge del Shelf. Son excepciones observadas, no una paleta que debas copiar. Prioriza los colores semánticos disponibles sin inventar métodos de tema ni ampliar su esquema fuera del alcance.
+- Use the existing `Theme` colors according to their meaning: `background()`, `background_alt()`, `surface()`, `foreground()`, `foreground_muted()`, `accent()`, `red()`, and `green()`.
+- Use `background` for the base and `surface` with appropriate opacity for grouping and feedback. Do not assume the theme is always dark.
+- Reserve `accent` for selection, primary actions, active states, or brief feedback. Do not accent every border, icon, and background simultaneously.
+- Use `foreground` for primary text and `foreground_muted` for secondary text. Keep useful content readable.
+- Active controls may use an accent background, as connectivity pills do. Preserve this functional signal.
+- Reuse the container's border and shadow. Build hierarchy through spacing and alignment before adding internal backgrounds, frames, or nested cards.
+- Do not introduce gradients, glow, glassmorphism, extra blur, or arbitrary colors merely to make the design look modern.
+- Current recording widgets contain fixed colors, and the Shelf badge uses fixed white. These are observed exceptions, not a palette to copy. Prefer available semantic colors without inventing theme methods or expanding its schema beyond scope.
 
-### Forma, escala y espaciado
+### Shape, Scale, and Spacing
 
-- Mantén la familia de formas existente: contenedor adaptable, pills para controles compactos, círculos para acciones por icono y filas de esquinas suaves para listas.
-- Respeta los parámetros que recibe el contenedor y la configuración disponible. No fijes otro radio global, fuente, separación o duración en un widget.
-- Usa alineación, proximidad y espacio libre para agrupar. Añade un fondo interno solo cuando distinga un control o grupo funcional real.
-- Conserva una densidad compacta pero legible. No llenes el espacio libre con contenido adicional ni reduzcas las zonas interactivas para parecer más minimalista.
+- Preserve the existing shape family: adaptive container, pills for compact controls, circles for icon actions, and softly rounded list rows.
+- Respect container parameters and available configuration. Do not hardcode another global radius, font, spacing, or duration inside a widget.
+- Group through alignment, proximity, and whitespace. Add an internal background only when it distinguishes an actual control or functional group.
+- Keep density compact and readable. Do not fill unused space with extra content or shrink interactive areas for a minimalist appearance.
 
-Referencias de escala verificables en el código:
+Scale references to verify in code:
 
-| Elemento | Referencia actual | Uso |
+| Element | Current reference | Use |
 | --- | --- | --- |
-| Orb | `ORB_SIZE = 26.0`; icono de 13 px | Reutilizar la constante, no duplicarla |
-| Indicador de grabación del orb | Punto de 8 px | Estado sin texto adicional |
-| `IconButton` | Control de 24 px; icono de 13 px por defecto | Acción compacta reutilizable |
-| Controles de la barra de grabación | Control de 26 px; icono de 12 px | Referencia para una fila de actividad |
-| Fila del launcher | Radio de 12 px; padding vertical de 6 px | Lista compacta, no una tarjeta de dashboard |
-| Texto de aplicación del launcher | Principal de 13 px semibold; secundario de 11 px | Jerarquía breve dentro de una fila |
-| Lista del launcher | Separación de 4 px | Ritmo entre resultados |
+| Orb | `ORB_SIZE = 26.0`; 13 px icon | Reuse the constant |
+| Recording orb indicator | 8 px dot | Status without extra text |
+| `IconButton` | 24 px control; default 13 px icon | Reusable compact action |
+| Recording bar controls | 26 px control; 12 px icon | Activity-row reference |
+| Launcher row | 12 px radius; 6 px vertical padding | Compact list |
+| Launcher app text | 13 px semibold primary; 11 px secondary | Brief row hierarchy |
+| Launcher list | 4 px gap | Result spacing |
 
-No conviertas los tamaños pequeños de un badge en tamaños de texto general. No impongas estas medidas a superficies con otras necesidades.
+Do not use small badge text sizes for general content or impose these measurements on surfaces with different needs.
 
-### Tipografía, iconos y contenido
+### Typography, Icons, and Content
 
-- Hereda la familia configurada mediante el tema/contenedor; Geist es el valor por defecto, no una fuente que debas fijar en cada widget.
-- Prefiere un nivel principal y uno secundario. Usa semibold o bold para énfasis localizado, no en cada etiqueta.
-- Usa los SVG existentes y conserva su escala óptica. Evita emoji decorativos, mezclar familias de iconos o introducir otro paquete.
-- Evita títulos que repiten lo que ya explica el control o el contenido. Una barra de grabación no necesita además una cabecera «Grabación».
-- Escribe etiquetas cortas, concretas y localizadas mediante el servicio de idioma existente. No añadas párrafos de ayuda por defecto.
-- Conserva elipsis, límites de altura y scroll donde corresponda. Prueba títulos, rutas, traducciones y contadores largos sin agrandar arbitrariamente toda la interfaz.
-- Los estados vacíos deben ser discretos: una frase útil y, si aporta contexto, un icono tenue. Sin ilustraciones grandes, onboarding ni llamadas a funciones ajenas.
+- Inherit the configured font through the theme/container. Geist is the default, not a font to hardcode in every widget.
+- Prefer primary and secondary text levels. Use semibold or bold for focused emphasis, not every label.
+- Reuse existing SVGs and preserve optical scale. Avoid decorative emoji, mixed icon families, or additional icon packages.
+- Avoid headings that repeat what controls or content already explain. A recording bar does not need an additional “Recording” heading.
+- Write short, concrete labels localized through the existing language service. Do not add help paragraphs by default.
+- Preserve ellipsis, height limits, and scrolling where appropriate. Check long titles, paths, translations, and counters without arbitrarily enlarging the entire interface.
+- Keep empty states quiet: a useful sentence and, where helpful, a muted icon. Avoid large illustrations, onboarding, or unrelated feature prompts.
 
-## Interacción y movimiento
+## Interaction and Motion
 
-- Haz distinguibles selección, hover, presión y deshabilitado con cambios contenidos de superficie, borde o contraste. No añadas desplazamientos o escalados a cada hover.
-- Mantén selección de teclado visible y coherente con el ratón. Conserva Enter, Escape, foco y navegación del módulo existente.
-- No hagas depender una acción indispensable únicamente de hover o de un gesto nuevo oculto. Los iconos deben tener significado claro y nombre accesible donde la API lo permita.
-- No elimines feedback o confirmaciones necesarias en nombre del minimalismo. Los estados importantes deben entenderse sin depender solo del color.
-- Cerrar una vista no equivale a detener su actividad: conserva la distinción entre cerrar la barra de grabación y detener la grabación.
-- Reutiliza las transiciones de Capsule y las curvas de Orbit/satélites. Lee `animation_duration_ms` donde se usa; no supongas que todas las animaciones comparten configuración.
-- El movimiento explica aparición, retracción o cambio de tamaño. No añadas rebotes independientes, pulsos permanentes o animación ornamental.
-- Al interrumpir una animación, continúa desde el estado visual actual. Al terminarla, no mantengas repintados continuos sin una actividad que los necesite.
+- Distinguish selection, hover, pressed, and disabled states through restrained surface, border, or contrast changes. Do not move or scale every control on hover.
+- Keep keyboard selection visible and consistent with pointer interaction. Preserve the module's Enter, Escape, focus, and navigation behavior.
+- Do not make essential actions depend solely on hover or a new hidden gesture. Icons need clear meaning and accessible names where supported.
+- Preserve necessary feedback and confirmations. Important states must remain understandable without color alone.
+- Closing a view does not stop its activity. Preserve the distinction between closing the recording bar and stopping recording.
+- Reuse Capsule transitions and Orbit/satellite curves. Read `animation_duration_ms` where used; do not assume every animation shares configuration.
+- Use motion to explain appearance, retraction, or resizing. Avoid independent bounces, persistent pulses, and ornamental animation.
+- Continue interrupted animations from the current visual state. Stop continuous repainting when no ongoing activity requires it.
 
-## Composición GPUI
+## GPUI Composition
 
-- Mantén el render declarativo. Los widgets presentan estado y conectan acciones; no instancian servicios ni realizan trabajo bloqueante.
-- Extiende el módulo correspondiente en `crates/app/src/capsule/modules/` y sus widgets en `crates/app/src/capsule/widgets/`. No acumules todo el frontend nuevo en `capsule.rs`.
-- Reutiliza controles de `crates/ui/src/components/` cuando encajen. Extrae un componente compartido solo si hay reutilización real, no para envolver cada `div()`.
-- Usa las entidades y los servicios globales de `AppState`; no dupliques gestores de tema, configuración u Orbit.
-- Sigue las reglas del proyecto para trabajo de fondo con Tokio. Las implementaciones antiguas no autorizan copiar patrones que contradigan esas reglas.
-- Conserva IDs estables, propagación de eventos, foco y regiones de entrada. Una modificación visual no debe disparar accidentalmente la acción del contenedor padre.
+- Keep rendering declarative. Widgets present state and connect actions; they do not instantiate services or perform blocking work.
+- Extend the relevant module in `crates/app/src/capsule/modules/` and widgets in `crates/app/src/capsule/widgets/`. Do not accumulate all new UI in `capsule.rs`.
+- Reuse controls from `crates/ui/src/components/` where appropriate. Extract shared components for actual reuse, not to wrap every `div()`.
+- Use `AppState` entities and global services. Do not duplicate theme, configuration, or Orbit managers.
+- Follow project rules for background work with Tokio. Older implementations do not justify copying patterns that conflict with those rules.
+- Preserve stable IDs, event propagation, focus, and input regions. Visual changes must not accidentally trigger parent-container actions.
 
-## Referencias de implementación
+## Implementation References
 
-Lee solo las referencias pertinentes a la tarea:
+Read only references relevant to the task:
 
-| Ruta | Qué consultar |
+| Path | What to inspect |
 | --- | --- |
-| `crates/app/src/capsule/capsule.rs` | `sync_orbit_visibility`, `open_orb`, dimensiones, configuración, foco y regiones de entrada |
-| `crates/app/src/capsule/container/normal.rs` | Contenedor con parámetros de tamaño, radio, fuente, fondo y borde |
-| `crates/app/src/capsule/orbit.rs` | `ORB_SIZE`, `Layout`, `Motion`, geometría y pruebas de continuidad/visibilidad |
-| `crates/app/src/capsule/widgets/record/orb.rs` | Indicador mínimo de grabación o pausa y acceso al módulo |
-| `crates/app/src/capsule/widgets/shelf/orb.rs` | Icono, contador y feedback de arrastre |
-| `crates/app/src/capsule/widgets/record/bar.rs` | Estado, duración y acciones compactas sin cabecera extra |
-| `crates/app/src/capsule/modules/record.rs` | Ancho según estado/contenido y distinción entre cerrar y detener |
-| `crates/app/src/capsule/modules/launcher.rs` | Composición de búsqueda/resultados, vacío y navegación de teclado |
-| `crates/app/src/capsule/widgets/launcher/app_item.rs` | Jerarquía de fila, selección, elipsis y feedback |
-| `crates/app/src/capsule/widgets/dashboard/quick_settings.rs` | Agrupación funcional y pills con estado activado |
-| `crates/app/src/capsule/satellites/mod.rs` | Paneles auxiliares, lanes, límites y animación |
-| `crates/ui/src/components/button.rs` | `IconButton` y `TextButton` existentes |
-| `crates/ui/src/theme/mod.rs` | API real de colores y familia tipográfica |
+| `crates/app/src/capsule/capsule.rs` | `sync_orbit_visibility`, `open_orb`, dimensions, configuration, focus, input regions |
+| `crates/app/src/capsule/container/normal.rs` | Parameterized size, radius, font, background, border |
+| `crates/app/src/capsule/orbit.rs` | `ORB_SIZE`, `Layout`, `Motion`, geometry, continuity/visibility tests |
+| `crates/app/src/capsule/widgets/record/orb.rs` | Minimal recording/paused indicator and module access |
+| `crates/app/src/capsule/widgets/shelf/orb.rs` | Icon, counter, drag feedback |
+| `crates/app/src/capsule/widgets/record/bar.rs` | Status, duration, compact actions without extra heading |
+| `crates/app/src/capsule/modules/record.rs` | Width by state/content; closing versus stopping |
+| `crates/app/src/capsule/modules/launcher.rs` | Search/results composition, empty state, keyboard navigation |
+| `crates/app/src/capsule/widgets/launcher/app_item.rs` | Row hierarchy, selection, ellipsis, feedback |
+| `crates/app/src/capsule/widgets/dashboard/quick_settings.rs` | Functional grouping and active pills |
+| `crates/app/src/capsule/satellites/mod.rs` | Supporting panels, lanes, bounds, animation |
+| `crates/ui/src/components/button.rs` | Existing `IconButton` and `TextButton` |
+| `crates/ui/src/theme/mod.rs` | Actual color and font APIs |
 
-Estas referencias documentan patrones concretos, no una auditoría visual de todas las superficies. Si el código y esta guía divergen, verifica el estado actual y no inventes APIs ni fuerces medidas antiguas.
+These references describe specific patterns, not a complete visual audit. If code and this guide diverge, verify the current implementation. Do not invent APIs or force outdated measurements.
 
-## Filtro final
+## Final Review
 
-Antes de dar por terminado un diseño, comprueba:
+Before completing a design, check:
 
-- ¿Se resuelve la tarea sin añadir una nueva superficie permanente?
-- ¿Se entiende qué es principal sin otro título, tarjeta o color?
-- ¿El orb sigue siendo un indicador/acceso y no un módulo en miniatura?
-- ¿Los detalles aparecen cuando hacen falta y desaparecen sin cancelar actividades por accidente?
-- ¿Se respetan tema, configuración, densidad y componentes del entorno?
-- ¿Se conserva legibilidad con temas claros/oscuros, contenido largo y la escala disponible?
-- ¿Funcionan teclado, ratón y, si aplica, arrastre, apertura/cierre rápido y varios orbs?
-- ¿La zona transparente deja pasar entrada y los elementos ocultos no capturan clics?
-- ¿Se evitó ampliar el alcance con funciones, configuración o refactors no solicitados?
+- Does it solve the task without adding a persistent surface?
+- Is the primary content clear without another title, card, or color?
+- Does each orb remain an indicator/access point rather than a miniature module?
+- Do details appear when needed and disappear without accidentally canceling activities?
+- Are theme, configuration, density, and shared components respected?
+- Is content readable across light/dark themes, long content, and supported scaling?
+- Do keyboard, pointer, and relevant drag interactions work, including rapid opening/closing and multiple orbs?
+- Do transparent areas pass input through, and do hidden elements stop capturing clicks?
+- Has the change avoided unrelated features, configuration, and refactors?
 
-Si cambias Rust, ejecuta `cargo fmt`, las pruebas pertinentes y Clippy según el alcance y las reglas del proyecto. Verifica visualmente los estados afectados cuando puedas ejecutar la shell; si no, di que la revisión fue de código y especifica lo que falta comprobar. No presentes una compilación correcta como validación del diseño visual.
+For Rust changes, run `cargo fmt`, relevant tests, and Clippy according to scope and repository rules. Visually verify affected states when the shell can run. Otherwise, disclose that verification was code-only and identify remaining visual checks. A successful build is not visual validation.
