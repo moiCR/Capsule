@@ -88,3 +88,10 @@ crates/
 
 ## Capsule UI guidelines
 - Use the config settings
+
+## Notes
+- Before exploring the repository structure, consult codebase-memory-mcp.
+- Check that the index belongs to the current project and is up to date.
+- Use the graph to locate relevant symbols, dependencies, and files.
+- Verify the source code before modifying it.
+- If the graph is unavailable or its coverage is insufficient, inspect the files directly and disclose that limitation.
