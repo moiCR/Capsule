@@ -44,7 +44,6 @@ pub struct Capsule {
     animating: bool,
     anim_task: Option<Task<()>>,
     satellite_anim_task: Option<Task<()>>,
-    satellite_window: gpui::AsyncWindowContext,
     orbit: Entity<Orbit>,
     drag_target_active: bool,
     last_drag_over: Option<Instant>,
@@ -101,9 +100,6 @@ impl Capsule {
             |capsule, _, event: &super::modules::dashboard::DashboardEvent, cx| match event {
                 super::modules::dashboard::DashboardEvent::CloseRequested => {
                     if capsule.mode == CapsuleMode::Dashboard {
-                        capsule.panel_manager.close_all();
-                        capsule.sync_panel_indices(cx);
-                        capsule.start_satellite_animation(cx);
                         capsule.start_transition_internal(CapsuleMode::Default, None, cx);
                     }
                 }
@@ -211,9 +207,6 @@ impl Capsule {
                 }
 
                 super::modules::dashboard::DashboardEvent::SettingsRequested => {
-                    capsule.panel_manager.close_all();
-                    capsule.sync_panel_indices(cx);
-                    capsule.start_satellite_animation(cx);
                     capsule.start_transition_internal(CapsuleMode::Settings, None, cx);
                 }
             },
@@ -726,7 +719,6 @@ impl Capsule {
             animating: false,
             anim_task: None,
             satellite_anim_task: None,
-            satellite_window: window.to_async(cx),
             orbit,
             drag_target_active: false,
             last_drag_over: None,
@@ -869,50 +861,36 @@ impl Capsule {
         } else {
             None
         };
-        let (frames, mut receiver) = tokio::sync::watch::channel(());
-        tokio::spawn(async move {
+
+        let task = cx.spawn(async move |this, cx| {
             loop {
                 let duration = compositor
                     .as_ref()
-                    .map(|compositor| compositor.get_frame_duration())
+                    .map(|c| c.get_frame_duration())
                     .unwrap_or(Duration::from_millis(16));
-                tokio::select! {
-                    _ = frames.closed() => break,
-                    _ = tokio::time::sleep(duration) => {
-                        if frames.send(()).is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
+                cx.background_executor().timer(duration).await;
 
-        let entity = cx.entity().downgrade();
-        let mut window_context = self.satellite_window.clone();
-        self.satellite_anim_task = Some(cx.foreground_executor().spawn(async move {
-            while receiver.changed().await.is_ok() {
-                let done = window_context
-                    .update(|window, cx| {
-                        let done = entity
-                            .update(cx, |capsule, cx| {
-                                capsule.panel_manager.update_animations();
-                                let done = !capsule.panel_manager.any_animating();
-                                if done {
-                                    capsule.satellite_anim_task = None;
-                                }
-                                cx.notify();
-                                done
-                            })
-                            .unwrap_or(true);
-                        window.refresh();
-                        done
+                let done = this
+                    .update(cx, |capsule, cx| {
+                        capsule.panel_manager.update_animations();
+                        cx.notify();
+                        !capsule.panel_manager.any_animating()
                     })
                     .unwrap_or(true);
+
                 if done {
+                    this.update(cx, |capsule, cx| {
+                        capsule.panel_manager.update_animations();
+                        capsule.sync_panel_indices(cx);
+                        capsule.satellite_anim_task = None;
+                        cx.notify();
+                    })
+                    .ok();
                     break;
                 }
             }
-        }));
+        });
+        self.satellite_anim_task = Some(task);
     }
 
     fn sync_orbit_visibility(&mut self, cx: &mut Context<Self>) {
@@ -1156,6 +1134,11 @@ impl Capsule {
             self.modules
                 .notification_view
                 .update(cx, |view, cx| view.deactivate(cx));
+        }
+        if old_mode == CapsuleMode::Dashboard && mode != CapsuleMode::Dashboard {
+            self.panel_manager.clear();
+            self.sync_panel_indices(cx);
+            self.satellite_anim_task = None;
         }
         self.reset_inactivity_timer();
         self.mode = mode;
@@ -1890,8 +1873,10 @@ impl Render for Capsule {
             )
             .on_drop(cx.listener(Self::drop_on_shelf));
 
-        self.panel_manager
-            .set_animation_duration(ui_config.animation_duration_ms as f32 / 1000.0);
+        if self.mode == CapsuleMode::Dashboard {
+            self.panel_manager
+                .set_animation_duration(ui_config.animation_duration_ms as f32 / 1000.0);
+        }
         let mut satellite_surfaces = Vec::new();
         let mut satellites_layer = div().absolute().inset_0();
 

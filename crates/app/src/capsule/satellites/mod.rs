@@ -229,11 +229,17 @@ impl PanelManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn close_all(&mut self) {
         let now = Instant::now();
         for panel in self.left.iter_mut().chain(self.right.iter_mut()) {
             panel.set_closing_at(true, now);
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.left.clear();
+        self.right.clear();
     }
 
     pub fn prune_invalid(&mut self, valid_tray_len: usize) {
@@ -453,5 +459,15 @@ mod tests {
         assert_near(manager.animation_duration, 2.7);
         manager.set_animation_duration(0.0);
         assert_eq!(manager.left[0].anim_t(), 1.0);
+    }
+
+    #[test]
+    fn clear_removes_all_panels_immediately() {
+        let mut manager = PanelManager::new();
+        manager.toggle(PanelKind::Wifi, 120.0, 200.0);
+        assert_eq!(manager.left.len(), 1);
+        manager.clear();
+        assert!(manager.left.is_empty() && manager.right.is_empty());
+        assert!(!manager.any_animating());
     }
 }
