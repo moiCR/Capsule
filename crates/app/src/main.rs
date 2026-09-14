@@ -5,21 +5,11 @@ pub mod panel;
 use assets::Assets;
 use gpui_platform::application;
 
-unsafe fn daemonize() {
-    unsafe {
-        libc::setsid();
-        libc::signal(libc::SIGHUP, libc::SIG_IGN);
-        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
-    }
-}
 
 #[tokio::main]
 async fn main() {
     #[cfg(not(target_os = "linux"))]
     compile_error!("This application is only supported on Linux.");
-    unsafe {
-        daemonize();
-    }
 
     if let Some(home) = dirs::home_dir() {
         let _ = std::env::set_current_dir(home);
