@@ -25,12 +25,14 @@ pub fn resolve_art_path(track: &MediaTrack) -> Option<String> {
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_media_player_widget(
     active_track: &MediaTrack,
     total_players: usize,
     selected_player_idx: usize,
     prev_art_path: Option<&str>,
     anim_progress: f32,
+    is_media_open: bool,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> gpui::AnyElement {
@@ -60,6 +62,14 @@ pub fn render_media_player_widget(
             .border_1()
             .border_color(theme.surface().opacity(0.25))
             .gap_1p5()
+            .cursor_pointer()
+            .hover(|s| s.bg(theme.surface().opacity(0.55)))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|_, _, _window, cx| {
+                    cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
+                }),
+            )
             .child(
                 div()
                     .flex()
@@ -226,7 +236,7 @@ pub fn render_media_player_widget(
         active_track.artist.clone()
     };
 
-    // Centered track info (no badge)
+    // Centered track info (clickable to toggle satellite)
     let track_info = div()
         .flex()
         .flex_col()
@@ -235,6 +245,13 @@ pub fn render_media_player_widget(
         .pt(px(text_slide_y))
         .opacity(text_opacity)
         .overflow_hidden()
+        .cursor_pointer()
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|_, _, _window, cx| {
+                cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
+            }),
+        )
         .child(
             div()
                 .font_weight(FontWeight::SEMIBOLD)
@@ -376,6 +393,40 @@ pub fn render_media_player_widget(
         .child(controls)
         .when_some(player_dots, |parent, dots| parent.child(dots));
 
+    let expand_btn = div()
+        .id("mpris-expand-btn")
+        .absolute()
+        .top(px(6.0))
+        .right(px(6.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(20.0))
+        .rounded_full()
+        .bg(if is_media_open {
+            theme.accent().opacity(0.3)
+        } else {
+            theme.surface().opacity(0.35)
+        })
+        .hover(|s| s.bg(theme.surface().opacity(0.65)))
+        .cursor_pointer()
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|_, _, _window, cx| {
+                cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
+            }),
+        )
+        .child(
+            svg()
+                .path("scale.svg")
+                .size(px(10.0))
+                .text_color(if is_media_open {
+                    theme.accent()
+                } else {
+                    theme.foreground_muted()
+                }),
+        );
+
     card.child(
         div()
             .relative()
@@ -385,6 +436,7 @@ pub fn render_media_player_widget(
             .items_center()
             .size_full()
             .p_2p5()
+            .child(expand_btn)
             .child(track_info)
             .child(bottom_section),
     )

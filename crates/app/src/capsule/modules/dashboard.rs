@@ -24,6 +24,7 @@ pub enum DashboardEvent {
     VolumeChevronClicked,
     WallpaperRequested,
     SettingsRequested,
+    MediaClicked,
 }
 
 pub struct DashboardModule {
@@ -46,6 +47,8 @@ pub struct DashboardModule {
     pub current_art_path: Option<String>,
     pub prev_art_path: Option<String>,
     pub track_anim_start: Option<Instant>,
+    pub is_media_panel_open: bool,
+    pub media_slider_tracker: DimensionTracker,
 }
 
 fn format_dashboard_date(
@@ -180,6 +183,26 @@ impl DashboardModule {
             current_art_path: None,
             prev_art_path: None,
             track_anim_start: None,
+            is_media_panel_open: false,
+            media_slider_tracker: DimensionTracker::new(),
+        }
+    }
+
+    pub fn next_player(&mut self) {
+        if !self.media_players.is_empty() {
+            self.selected_player_idx = (self.selected_player_idx + 1) % self.media_players.len();
+            self.touch_user_action();
+        }
+    }
+
+    pub fn prev_player(&mut self) {
+        if !self.media_players.is_empty() {
+            if self.selected_player_idx == 0 {
+                self.selected_player_idx = self.media_players.len() - 1;
+            } else {
+                self.selected_player_idx -= 1;
+            }
+            self.touch_user_action();
         }
     }
 
@@ -473,6 +496,7 @@ impl Render for DashboardModule {
                 self.selected_player_idx,
                 self.prev_art_path.as_deref(),
                 anim_progress,
+                self.is_media_panel_open,
                 &theme,
                 cx,
             ))

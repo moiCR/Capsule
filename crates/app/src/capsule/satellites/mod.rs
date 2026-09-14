@@ -1,5 +1,6 @@
 pub mod bluetooth;
 pub mod calendar;
+pub mod media;
 pub mod surface;
 pub mod tray;
 pub mod volume;
@@ -29,6 +30,7 @@ pub enum PanelKind {
     Bluetooth,
     Calendar,
     Volume,
+    Media,
 }
 
 #[derive(Clone, Debug)]
@@ -469,5 +471,18 @@ mod tests {
         manager.clear();
         assert!(manager.left.is_empty() && manager.right.is_empty());
         assert!(!manager.any_animating());
+    }
+
+    #[test]
+    fn media_panel_toggle_and_height() {
+        let mut manager = PanelManager::new();
+        let height = media::compute_media_panel_height();
+        assert_eq!(height, 195.0);
+        manager.toggle(PanelKind::Media, height, 300.0);
+        assert_eq!(manager.left.len(), 1);
+        assert_eq!(manager.left[0].kind, PanelKind::Media);
+        assert_eq!(manager.left[0].height, 195.0);
+        manager.toggle(PanelKind::Media, height, 300.0);
+        assert!(manager.left[0].is_closing());
     }
 }

@@ -75,6 +75,28 @@ impl MprisService {
     pub async fn previous_bus(bus_name: &str) -> bool {
         call_mpris_method(bus_name, "Previous").await
     }
+
+    pub async fn seek_to(bus_name: &str, position_seconds: f64) -> bool {
+        let raw_player = bus_name
+            .strip_prefix("org.mpris.MediaPlayer2.")
+            .unwrap_or(bus_name)
+            .split('.')
+            .next()
+            .unwrap_or(bus_name);
+
+        let clean_player = raw_player.trim();
+        let pos_str = format!("{:.2}", position_seconds.max(0.0));
+        let mut cmd = tokio::process::Command::new("playerctl");
+        if !clean_player.is_empty() && clean_player != "player" {
+            cmd.args(["-p", clean_player, "position", &pos_str]);
+        } else {
+            cmd.args(["position", &pos_str]);
+        }
+        match tokio::time::timeout(Duration::from_millis(400), cmd.status()).await {
+            Ok(Ok(st)) => st.success(),
+            _ => false,
+        }
+    }
 }
 
 async fn run_playerctl_fallback(requested_bus: &str, method: &str) -> bool {

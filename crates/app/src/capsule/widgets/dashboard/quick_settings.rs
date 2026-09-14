@@ -4,12 +4,14 @@ use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::{DashboardEvent, DashboardModule};
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_quick_settings_section(
     active_track: &MediaTrack,
     total_players: usize,
     selected_player_idx: usize,
     prev_art_path: Option<&str>,
     anim_progress: f32,
+    is_media_open: bool,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
@@ -27,6 +29,7 @@ pub fn render_quick_settings_section(
         selected_player_idx,
         prev_art_path,
         anim_progress,
+        is_media_open,
         theme,
         cx,
     );

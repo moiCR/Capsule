@@ -199,6 +199,18 @@ impl Capsule {
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
+                super::modules::dashboard::DashboardEvent::MediaClicked => {
+                    let max_h = CapsuleMode::Dashboard.dimensions().1;
+                    let panel_h = super::satellites::media::compute_media_panel_height();
+                    capsule.panel_manager.toggle(
+                        super::satellites::PanelKind::Media,
+                        panel_h,
+                        max_h,
+                    );
+                    capsule.sync_panel_indices(cx);
+                    capsule.start_satellite_animation(cx);
+                    cx.notify();
+                }
                 super::modules::dashboard::DashboardEvent::WallpaperRequested => {
                     capsule.modules.wallpaper_view.update(cx, |wallpaper, cx| {
                         wallpaper.reload_items(cx);
@@ -746,8 +758,15 @@ impl Capsule {
                 _ => None,
             })
             .collect();
+        let is_media_open = self
+            .panel_manager
+            .left
+            .iter()
+            .chain(self.panel_manager.right.iter())
+            .any(|p| matches!(p.kind, super::satellites::PanelKind::Media));
         self.modules.dashboard_view.update(cx, |module, _cx| {
             module.open_panel_indices = open_indices;
+            module.is_media_panel_open = is_media_open;
         });
     }
 
@@ -1977,6 +1996,9 @@ impl Render for Capsule {
                         }
                         PM::PanelKind::Volume => self.modules.dashboard_view.update(cx, |_, cx| {
                             PM::volume::render_volume_mini_panel(panel_h, &active_theme, cx)
+                        }),
+                        PM::PanelKind::Media => self.modules.dashboard_view.update(cx, |module, cx| {
+                            PM::media::render_media_mini_panel(panel_h, module, &active_theme, cx)
                         }),
                     };
                     let surface = PM::surface::PanelSurface {
