@@ -120,6 +120,13 @@ no_emojis = "No se encontraron emojis"
 category_all = "Todos"
 
 [notifications_module]
+open = "Abrir"
+reply = "Responder"
+reply_placeholder = "Escribe una respuesta…"
+send = "Enviar"
+sending = "Enviando…"
+cancel = "Cancelar"
+reply_failed = "No se pudo enviar. Inténtalo de nuevo."
 title = "Notificaciones"
 default_title = "Notificación"
 default_summary = "Resumen"

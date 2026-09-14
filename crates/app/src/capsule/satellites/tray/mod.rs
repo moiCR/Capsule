@@ -9,7 +9,7 @@ use crate::capsule::satellites::PANEL_MIN_W;
 pub fn render_mini_panel(
     item: &SniItem,
     sni_idx: usize,
-    _anim_t: f32,
+
     panel_h: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -122,22 +122,13 @@ pub fn render_mini_panel(
         item.title.clone()
     };
 
-    let radius = if cx.has_global::<AppState>() {
-        cx.global::<AppState>().config.get().ui.satellite_round
-    } else {
-        20.0
-    };
-
     div()
         .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
         .p_3()
         .gap_2()
-        .rounded(px(radius))
-        .bg(theme.background().opacity(0.95))
         .border_1()
-        .border_color(theme.surface().opacity(0.35))
-        .shadow_lg()
+        .border_color(gpui::hsla(0.0, 0.0, 0.0, 0.0))
         .overflow_hidden()
         .flex()
         .flex_col()

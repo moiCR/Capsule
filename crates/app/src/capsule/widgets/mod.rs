@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod emoji;
 pub mod idle;
 pub mod launcher;
+pub mod notification;
 pub mod polkit;
 pub mod record;
 pub mod select_theme;

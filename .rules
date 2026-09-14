@@ -95,3 +95,4 @@ crates/
 - Use the graph to locate relevant symbols, dependencies, and files.
 - Verify the source code before modifying it.
 - If the graph is unavailable or its coverage is insufficient, inspect the files directly and disclose that limitation.
+- Use caveman skill
