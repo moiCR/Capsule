@@ -8,6 +8,8 @@ pub fn render_quick_settings_section(
     active_track: &MediaTrack,
     total_players: usize,
     selected_player_idx: usize,
+    prev_art_path: Option<&str>,
+    anim_progress: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
@@ -23,6 +25,8 @@ pub fn render_quick_settings_section(
         active_track,
         total_players,
         selected_player_idx,
+        prev_art_path,
+        anim_progress,
         theme,
         cx,
     );
@@ -434,13 +438,6 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
             theme.accent()
         } else {
             theme.surface().opacity(0.25)
-        })
-        .hover(|s| {
-            if is_dnd {
-                s.opacity(0.92)
-            } else {
-                s.bg(theme.surface().opacity(0.55))
-            }
         })
         .cursor_pointer()
         .on_click(cx.listener(|_, _, _, cx| {

@@ -42,6 +42,10 @@ pub struct DashboardModule {
     pub slider_tracker: DimensionTracker,
     pub wifi_selected_ssid: Option<String>,
     pub wifi_password_input: String,
+    pub last_track_key: Option<String>,
+    pub current_art_path: Option<String>,
+    pub prev_art_path: Option<String>,
+    pub track_anim_start: Option<Instant>,
 }
 
 fn format_dashboard_date(
@@ -96,6 +100,25 @@ fn format_greeting(hour: u32, cx: &mut Context<DashboardModule>) -> (&'static st
         fallback.to_string()
     };
     (icon, text)
+}
+
+fn spawn_track_animation(cx: &mut Context<DashboardModule>) {
+    let frame_ms = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().compositor.get_frame_duration_ms()
+    } else {
+        16
+    };
+    let this = cx.entity().downgrade();
+    cx.spawn(async move |_this, cx| {
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_millis(300) {
+            tokio::time::sleep(std::time::Duration::from_millis(frame_ms)).await;
+            if this.update(cx, |_view, cx| cx.notify()).is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
 }
 
 impl DashboardModule {
@@ -153,6 +176,10 @@ impl DashboardModule {
             slider_tracker: DimensionTracker::new(),
             wifi_selected_ssid: None,
             wifi_password_input: String::new(),
+            last_track_key: None,
+            current_art_path: None,
+            prev_art_path: None,
+            track_anim_start: None,
         }
     }
 
@@ -337,6 +364,45 @@ impl Render for DashboardModule {
 
         let total_players = self.media_players.len();
 
+        let current_track_key = if active_track.has_media && !active_track.title.is_empty() {
+            Some(format!(
+                "{}:{}:{}",
+                active_track.bus_name, active_track.title, active_track.artist
+            ))
+        } else {
+            None
+        };
+
+        let resolved_art =
+            crate::capsule::widgets::dashboard::media_player::resolve_art_path(&active_track);
+
+        if current_track_key != self.last_track_key
+            || (resolved_art != self.current_art_path && resolved_art.is_some())
+        {
+            if self.last_track_key.is_some() || self.current_art_path.is_some() {
+                self.prev_art_path = self.current_art_path.clone();
+                self.track_anim_start = Some(Instant::now());
+                spawn_track_animation(cx);
+            }
+            self.last_track_key = current_track_key;
+            self.current_art_path = resolved_art.clone();
+        }
+
+        let anim_progress = if let Some(start) = self.track_anim_start {
+            let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+            let duration = 280.0;
+            if elapsed >= duration {
+                self.track_anim_start = None;
+                self.prev_art_path = None;
+                1.0
+            } else {
+                let t = elapsed / duration;
+                1.0 - (1.0 - t).powi(3)
+            }
+        } else {
+            1.0
+        };
+
         let now = Local::now();
         let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
         let date_str = format_dashboard_date(&now, cx);
@@ -405,6 +471,8 @@ impl Render for DashboardModule {
                 &active_track,
                 total_players,
                 self.selected_player_idx,
+                self.prev_art_path.as_deref(),
+                anim_progress,
                 &theme,
                 cx,
             ))
