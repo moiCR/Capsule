@@ -82,6 +82,8 @@ no_themes = "No themes found"
 apply_hint = "↵ Enter to apply"
 
 [wallpaper]
+search_placeholder = "Search wallpapers..."
+apply_hint = "↵ Enter to apply"
 title = "WALLPAPERS"
 no_wallpapers = "No images in ~/Wallpapers"
 

@@ -1,13 +1,12 @@
 use gpui::{
-    Context, ElementId, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
-    Task, Window, div, img, prelude::*, px, svg,
+    Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement,
+    KeyDownEvent, Render, Task, Window, div, img, prelude::*, px, svg,
 };
 use services::AppState;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{Duration, Instant};
 use ui::theme::Theme;
-
-use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WallpaperItem {
@@ -16,7 +15,7 @@ pub struct WallpaperItem {
     pub thumb_path: PathBuf,
 }
 
-fn get_or_create_thumbnail(original_path: &PathBuf) -> PathBuf {
+fn get_or_create_thumbnail(original_path: &Path) -> PathBuf {
     let thumbs_dir = PathBuf::from("/tmp/capsule_thumbs");
     let _ = std::fs::create_dir_all(&thumbs_dir);
 
@@ -38,20 +37,22 @@ fn get_or_create_thumbnail(original_path: &PathBuf) -> PathBuf {
         .args([&orig_str, "-resize", "300x", &thumb_str])
         .status();
 
-    if let Ok(st) = res {
-        if st.success() && thumb_path.exists() {
-            return thumb_path;
-        }
+    if let Ok(st) = res
+        && st.success()
+        && thumb_path.exists()
+    {
+        return thumb_path;
     }
 
     let res_ff = Command::new("ffmpeg")
         .args(["-y", "-i", &orig_str, "-vf", "scale=300:-1", &thumb_str])
         .status();
 
-    if let Ok(st) = res_ff {
-        if st.success() && thumb_path.exists() {
-            return thumb_path;
-        }
+    if let Ok(st) = res_ff
+        && st.success()
+        && thumb_path.exists()
+    {
+        return thumb_path;
     }
 
     // Both tools failed: create a minimal 1x1 placeholder PNG to avoid loading
@@ -66,7 +67,7 @@ fn get_or_create_thumbnail(original_path: &PathBuf) -> PathBuf {
             0xD7, 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0xF6, 0x17, 0x8A,
             0x44, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
         ];
-        let _ = std::fs::write(&placeholder_path, &png_data);
+        let _ = std::fs::write(&placeholder_path, png_data);
     }
     placeholder_path
 }
@@ -80,6 +81,7 @@ pub enum WallpaperEvent {
 pub struct WallpaperModule {
     pub focus_handle: FocusHandle,
     pub items: Vec<WallpaperItem>,
+    pub query: String,
     pub selected_idx: usize,
     pub anim_progress: f32,
     pub anim_direction: f32,
@@ -90,6 +92,12 @@ pub struct WallpaperModule {
 
 impl EventEmitter<WallpaperEvent> for WallpaperModule {}
 
+impl Focusable for WallpaperModule {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
@@ -98,32 +106,106 @@ fn ease_out_cubic(t: f32) -> f32 {
     1.0 - (1.0 - t).powi(3)
 }
 
-fn get_card_props(abs_pos: f32) -> (f32, f32, f32, f32) {
+pub struct WallpaperCardProps {
+    pub card_w: f32,
+    pub card_h: f32,
+    pub y_offset: f32,
+    pub opacity: f32,
+    pub border_w: f32,
+    pub border_alpha: f32,
+    pub card_bg_alpha: f32,
+    pub corner_radius: f32,
+}
+
+pub fn get_wallpaper_card_props(abs_pos: f32) -> WallpaperCardProps {
     if abs_pos <= 1.0 {
         let t = abs_pos;
-        (
-            lerp(195.0, 120.0, t),
-            lerp(120.0, 75.0, t),
-            lerp(1.0, 0.5, t),
-            lerp(3.0, 0.0, t),
-        )
+        WallpaperCardProps {
+            card_w: lerp(204.0, 152.0, t),
+            card_h: lerp(126.0, 94.0, t),
+            y_offset: lerp(-10.0, 0.0, t),
+            opacity: lerp(1.0, 0.55, t),
+            border_w: lerp(2.0, 1.0, t),
+            border_alpha: lerp(1.0, 0.25, t),
+            card_bg_alpha: lerp(0.6, 0.25, t),
+            corner_radius: lerp(16.0, 14.0, t),
+        }
     } else if abs_pos <= 2.0 {
         let t = abs_pos - 1.0;
-        (
-            lerp(120.0, 90.0, t),
-            lerp(75.0, 55.0, t),
-            lerp(0.5, 0.25, t),
-            0.0,
-        )
+        WallpaperCardProps {
+            card_w: lerp(152.0, 110.0, t),
+            card_h: lerp(94.0, 68.0, t),
+            y_offset: lerp(0.0, 3.0, t),
+            opacity: lerp(0.55, 0.25, t),
+            border_w: lerp(1.0, 0.5, t),
+            border_alpha: lerp(0.25, 0.1, t),
+            card_bg_alpha: lerp(0.25, 0.15, t),
+            corner_radius: lerp(14.0, 12.0, t),
+        }
     } else {
         let t = (abs_pos - 2.0).min(1.0);
-        (
-            lerp(90.0, 60.0, t),
-            lerp(55.0, 35.0, t),
-            lerp(0.25, 0.0, t),
-            0.0,
-        )
+        WallpaperCardProps {
+            card_w: lerp(110.0, 80.0, t),
+            card_h: lerp(68.0, 50.0, t),
+            y_offset: lerp(3.0, 5.0, t),
+            opacity: lerp(0.25, 0.0, t),
+            border_w: lerp(0.5, 0.0, t),
+            border_alpha: lerp(0.1, 0.0, t),
+            card_bg_alpha: lerp(0.15, 0.0, t),
+            corner_radius: lerp(12.0, 10.0, t),
+        }
     }
+}
+
+pub fn render_wallpaper_card(
+    slot_id: ElementId,
+    item: &WallpaperItem,
+    target_idx: usize,
+    offset: i32,
+    props: &WallpaperCardProps,
+    theme: &Theme,
+    cx: &mut Context<WallpaperModule>,
+) -> impl IntoElement {
+    let is_center = offset == 0;
+    let item_path = item.path.clone();
+    let card_radius = px(props.corner_radius);
+
+    let border_color = if is_center {
+        theme.accent().opacity(props.border_alpha)
+    } else {
+        theme.surface().opacity(props.border_alpha.max(0.15))
+    };
+
+    div()
+        .id(slot_id)
+        .relative()
+        .top(px(props.y_offset))
+        .flex_shrink_0()
+        .w(px(props.card_w))
+        .h(px(props.card_h))
+        .rounded(card_radius)
+        .overflow_hidden()
+        .bg(theme.surface().opacity(props.card_bg_alpha))
+        .border(px(props.border_w))
+        .border_color(border_color)
+        .opacity(props.opacity)
+        .when(is_center, |s| s.shadow_lg())
+        .cursor_pointer()
+        .hover(|s| s.bg(theme.surface().opacity(0.45)))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            if is_center {
+                cx.emit(WallpaperEvent::WallpaperSelected(item_path.clone()));
+            } else {
+                let dir = if offset > 0 { 1.0 } else { -1.0 };
+                this.navigate(dir, target_idx, cx);
+            }
+        }))
+        .child(
+            img(item.thumb_path.clone())
+                .size_full()
+                .object_fit(gpui::ObjectFit::Cover)
+                .rounded(card_radius),
+        )
 }
 
 impl WallpaperModule {
@@ -132,6 +214,7 @@ impl WallpaperModule {
         let mut module = Self {
             focus_handle,
             items: Vec::new(),
+            query: String::new(),
             selected_idx: 0,
             anim_progress: 1.0,
             anim_direction: 0.0,
@@ -143,11 +226,29 @@ impl WallpaperModule {
         module
     }
 
-    fn navigate(&mut self, dir: f32, new_idx: usize, cx: &mut Context<Self>) {
-        if self.items.is_empty() {
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle, cx);
+    }
+
+    pub fn filtered_items(&self) -> Vec<WallpaperItem> {
+        if self.query.is_empty() {
+            self.items.clone()
+        } else {
+            let q = self.query.to_lowercase();
+            self.items
+                .iter()
+                .filter(|i| i.name.to_lowercase().contains(&q))
+                .cloned()
+                .collect()
+        }
+    }
+
+    pub fn navigate(&mut self, dir: f32, new_idx: usize, cx: &mut Context<Self>) {
+        let filtered = self.filtered_items();
+        if filtered.is_empty() {
             return;
         }
-        let total = self.items.len();
+        let total = filtered.len();
         self.selected_idx = new_idx % total;
         self.anim_direction = dir;
         self.anim_progress = 0.0;
@@ -196,6 +297,37 @@ impl WallpaperModule {
         self.anim_task = Some(anim_task);
     }
 
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_items();
+        if filtered.len() > 1 {
+            let total = filtered.len();
+            let next_idx = if self.selected_idx == 0 {
+                total - 1
+            } else {
+                self.selected_idx - 1
+            };
+            self.navigate(-1.0, next_idx, cx);
+        }
+    }
+
+    pub fn select_next(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_items();
+        if filtered.len() > 1 {
+            let total = filtered.len();
+            let next_idx = (self.selected_idx + 1) % total;
+            self.navigate(1.0, next_idx, cx);
+        }
+    }
+
+    pub fn apply_selected(&mut self, cx: &mut Context<Self>) {
+        let filtered = self.filtered_items();
+        if !filtered.is_empty() {
+            let idx = self.selected_idx.min(filtered.len() - 1);
+            let path = filtered[idx].path.clone();
+            cx.emit(WallpaperEvent::WallpaperSelected(path));
+        }
+    }
+
     pub fn reload_items(&mut self, cx: &mut Context<Self>) {
         let mut new_items = Vec::new();
 
@@ -205,28 +337,28 @@ impl WallpaperModule {
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.is_file() {
-                    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                        let ext_lower = ext.to_lowercase();
-                        if matches!(ext_lower.as_str(), "jpg" | "jpeg" | "png" | "webp") {
-                            let name = p
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("Wallpaper")
-                                .to_string();
-                            let thumb = get_or_create_thumbnail(&p);
-                            new_items.push(WallpaperItem {
-                                name,
-                                path: p,
-                                thumb_path: thumb,
-                            });
-                        }
+                if p.is_file()
+                    && let Some(ext) = p.extension().and_then(|e| e.to_str())
+                {
+                    let ext_lower = ext.to_lowercase();
+                    if matches!(ext_lower.as_str(), "jpg" | "jpeg" | "png" | "webp") {
+                        let name = p
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("Wallpaper")
+                            .to_string();
+                        let thumb = get_or_create_thumbnail(&p);
+                        new_items.push(WallpaperItem {
+                            name,
+                            path: p,
+                            thumb_path: thumb,
+                        });
                     }
                 }
             }
         }
 
-        new_items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        new_items.sort_by_key(|a| a.name.to_lowercase());
 
         let current_path = if cx.has_global::<AppState>() {
             cx.global::<AppState>().wallpaper.get_current_wallpaper()
@@ -248,10 +380,10 @@ impl WallpaperModule {
             self.is_initialized = true;
             cx.notify();
         } else if !self.is_initialized {
-            if let Some(curr) = current_path {
-                if let Some(pos) = self.items.iter().position(|i| i.path == curr) {
-                    self.selected_idx = pos;
-                }
+            if let Some(curr) = current_path
+                && let Some(pos) = self.items.iter().position(|i| i.path == curr)
+            {
+                self.selected_idx = pos;
             }
             self.is_initialized = true;
             cx.notify();
@@ -260,6 +392,7 @@ impl WallpaperModule {
 
     pub fn clear_cache(&mut self, cx: &mut Context<Self>) {
         self.items.clear();
+        self.query.clear();
         self.anim_task = None;
         self.is_initialized = false;
         self.is_animating = false;
@@ -273,57 +406,179 @@ impl WallpaperModule {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let n = self.items.len();
-        if n == 0 {
-            if event.keystroke.key == "escape" {
-                cx.emit(WallpaperEvent::CloseRequested);
+        let key = event.keystroke.key.as_str();
+        let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+
+        if ctrl {
+            match key {
+                "u" => {
+                    self.query.clear();
+                    self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
+                    cx.notify();
+                    return;
+                }
+                "w" => {
+                    let trimmed = self.query.trim_end();
+                    let new_q = if let Some(idx) = trimmed.rfind(' ') {
+                        trimmed[..idx].to_string()
+                    } else {
+                        String::new()
+                    };
+                    self.query = new_q;
+                    self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
+                    cx.notify();
+                    return;
+                }
+                "v" => {
+                    if let Some(item) = cx.read_from_clipboard()
+                        && let Some(text) = item.text()
+                    {
+                        let clean_text: String = text.chars().filter(|c| !c.is_control()).collect();
+                        if !clean_text.is_empty() {
+                            self.query.push_str(&clean_text);
+                            self.selected_idx = 0;
+                            self.anim_progress = 1.0;
+                            self.anim_direction = 0.0;
+                            self.is_animating = false;
+                            self.anim_task = None;
+                            cx.notify();
+                        }
+                    }
+                    return;
+                }
+                _ => {}
             }
-            return;
         }
 
-        match event.keystroke.key.as_str() {
-            "left" | "h" => {
-                let next_idx = if self.selected_idx == 0 {
-                    n - 1
-                } else {
-                    self.selected_idx - 1
-                };
-                self.navigate(-1.0, next_idx, cx);
-            }
-            "right" | "l" => {
-                let next_idx = (self.selected_idx + 1) % n;
-                self.navigate(1.0, next_idx, cx);
-            }
-            "enter" | "space" => {
-                if let Some(item) = self.items.get(self.selected_idx) {
-                    cx.emit(WallpaperEvent::WallpaperSelected(item.path.clone()));
-                }
-            }
+        match key {
             "escape" => {
                 cx.emit(WallpaperEvent::CloseRequested);
             }
-            _ => {}
+            "left" | "h" => {
+                self.select_prev(cx);
+            }
+            "right" | "l" => {
+                self.select_next(cx);
+            }
+            "enter" | "space" => {
+                self.apply_selected(cx);
+            }
+            "backspace" => {
+                if !self.query.is_empty() {
+                    self.query.pop();
+                    self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
+                    cx.notify();
+                }
+            }
+            _ => {
+                let text = event
+                    .keystroke
+                    .key_char
+                    .as_deref()
+                    .unwrap_or(event.keystroke.key.as_str());
+                if text.chars().count() == 1 && !ctrl {
+                    self.query.push_str(text);
+                    self.selected_idx = 0;
+                    self.anim_progress = 1.0;
+                    self.anim_direction = 0.0;
+                    self.is_animating = false;
+                    self.anim_task = None;
+                    cx.notify();
+                }
+            }
         }
     }
 }
 
 impl Render for WallpaperModule {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        let no_wallpapers = if cx.has_global::<services::AppState>() {
-            cx.global::<services::AppState>()
-                .language
-                .get("wallpaper.no_wallpapers")
-        } else {
-            "No hay imágenes en ~/Wallpapers".to_string()
-        };
-        let total = self.items.len();
 
-        let active_name = self
-            .items
+        let (search_placeholder, no_wallpapers, apply_hint) = if cx.has_global::<services::AppState>() {
+            let lang = &cx.global::<services::AppState>().language;
+            (
+                lang.get("wallpaper.search_placeholder"),
+                lang.get("wallpaper.no_wallpapers"),
+                lang.get("wallpaper.apply_hint"),
+            )
+        } else {
+            (
+                "Buscar fondos...".to_string(),
+                "No hay imágenes en ~/Wallpapers".to_string(),
+                "↵ Aplicar".to_string(),
+            )
+        };
+
+        window.focus(&self.focus_handle, cx);
+
+        let filtered = self.filtered_items();
+        let total = filtered.len();
+        if total > 0 && self.selected_idx >= total {
+            self.selected_idx = 0;
+        }
+        let current_pos = if total == 0 {
+            0
+        } else {
+            (self.selected_idx % total) + 1
+        };
+
+        let has_query = !self.query.is_empty();
+
+        let active_name = filtered
             .get(self.selected_idx)
             .map(|i| i.name.clone())
             .unwrap_or_else(|| no_wallpapers.clone());
+
+        let header = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_2p5()
+                    .child(
+                        svg()
+                            .path("search.svg")
+                            .size(px(14.0))
+                            .text_color(theme.foreground_muted().opacity(0.8)),
+                    )
+                    .child(if has_query {
+                        div()
+                            .text_size(px(13.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.foreground())
+                            .child(self.query.clone())
+                    } else {
+                        div()
+                            .text_size(px(13.0))
+                            .text_color(theme.foreground_muted().opacity(0.5))
+                            .child(search_placeholder)
+                    }),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted().opacity(0.8))
+                    .child(format!("{}/{}", current_pos, total)),
+            );
 
         let mut carousel_row = div()
             .flex()
@@ -331,8 +586,8 @@ impl Render for WallpaperModule {
             .items_center()
             .justify_center()
             .w_full()
-            .gap_3()
-            .h(px(145.0));
+            .gap(px(10.0))
+            .h(px(146.0));
 
         if total == 0 {
             carousel_row = carousel_row.child(
@@ -340,10 +595,24 @@ impl Render for WallpaperModule {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(theme.foreground_muted())
+                    .h(px(120.0))
                     .text_size(px(13.0))
+                    .text_color(theme.foreground_muted())
                     .child(no_wallpapers),
             );
+        } else if total == 1 {
+            let item = &filtered[0];
+            let props = get_wallpaper_card_props(0.0);
+            let card = render_wallpaper_card(
+                ElementId::from("slot-center"),
+                item,
+                0,
+                0,
+                &props,
+                &theme,
+                cx,
+            );
+            carousel_row = carousel_row.child(card);
         } else {
             let eased = if self.is_animating {
                 ease_out_cubic(self.anim_progress)
@@ -355,14 +624,11 @@ impl Render for WallpaperModule {
 
             for offset in -2i32..=2i32 {
                 let idx = (self.selected_idx as i32 + offset).rem_euclid(total as i32) as usize;
-                let item = &self.items[idx];
-                let item_path = item.path.clone();
+                let item = &filtered[idx];
 
                 let vis_pos = offset as f32 + shift;
                 let abs_pos = vis_pos.abs();
-
-                let (card_w, card_h, opacity, border_w) = get_card_props(abs_pos);
-                let is_center = offset == 0;
+                let props = get_wallpaper_card_props(abs_pos);
 
                 let slot_key = match offset {
                     -2 => "slot-prev2",
@@ -373,69 +639,79 @@ impl Render for WallpaperModule {
                     _ => "slot-other",
                 };
 
-                let card = div()
-                    .id(ElementId::from(slot_key))
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if is_center {
-                            cx.emit(WallpaperEvent::WallpaperSelected(item_path.clone()));
-                        } else {
-                            let dir = if offset > 0 { 1.0 } else { -1.0 };
-                            this.navigate(dir, idx, cx);
-                        }
-                    }))
-                    .child(
-                        div()
-                            .w(px(card_w))
-                            .h(px(card_h))
-                            .rounded_xl()
-                            .overflow_hidden()
-                            .bg(theme.surface())
-                            .border(px(border_w))
-                            .border_color(theme.accent().opacity((border_w / 3.0).min(1.0)))
-                            .opacity(opacity)
-                            .shadow_lg()
-                            .child(img(item.thumb_path.clone()).w_full().h_full()),
-                    );
-
+                let card = render_wallpaper_card(
+                    ElementId::from(slot_key),
+                    item,
+                    idx,
+                    offset,
+                    &props,
+                    &theme,
+                    cx,
+                );
                 carousel_row = carousel_row.child(card);
             }
         }
+
+        let footer = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .w_full()
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size(px(6.0))
+                            .rounded_full()
+                            .bg(if total > 0 {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted().opacity(0.4)
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.0))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(theme.foreground())
+                            .max_w(px(380.0))
+                            .truncate()
+                            .child(active_name),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.foreground_muted().opacity(0.6))
+                            .child(apply_hint),
+                    ),
+            );
 
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::handle_key_down))
             .flex()
             .flex_col()
-            .items_center()
-            .justify_center()
+            .justify_between()
             .w(px(700.0))
             .h(px(240.0))
-            .p_4()
-            .gap_2()
+            .px(px(24.0))
+            .py(px(16.0))
+            .overflow_hidden()
+            .child(header)
             .child(carousel_row)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .font_weight(FontWeight::BOLD)
-                            .text_size(px(13.0))
-                            .text_color(theme.foreground())
-                            .child(active_name),
-                    )
-                    .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(12.0))
-                            .text_color(theme.foreground_muted()),
-                    ),
-            )
+            .child(footer)
     }
 }

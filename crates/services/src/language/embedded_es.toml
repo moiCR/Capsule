@@ -82,6 +82,8 @@ no_themes = "No se encontraron temas"
 apply_hint = "↵ Aplicar"
 
 [wallpaper]
+search_placeholder = "Buscar fondos..."
+apply_hint = "↵ Aplicar"
 title = "FONDOS DE PANTALLA"
 no_wallpapers = "No hay imágenes en ~/Wallpapers"
 

@@ -1700,6 +1700,7 @@ impl Render for Capsule {
             if self.mode == CapsuleMode::Wallpaper {
                 self.modules.wallpaper_view.update(cx, |wallpaper, cx| {
                     wallpaper.reload_items(cx);
+                    wallpaper.focus(window, cx);
                 });
             }
             if self.mode == CapsuleMode::Settings {
