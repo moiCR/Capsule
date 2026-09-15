@@ -146,7 +146,10 @@ impl NotificationStore {
         }
         if let Ok(guard) = self.latest_notification.lock() {
             if let Some(item) = guard.item.as_ref() {
-                if guard.hovered_at.is_some() || item.received_at.elapsed() < item.timeout {
+                let is_hover_active = guard.hovered_at.as_ref().is_some_and(|hovered_at| {
+                    hovered_at.elapsed() < Duration::from_secs(60)
+                });
+                if is_hover_active || item.received_at.elapsed() < item.timeout {
                     return Some(item.clone());
                 }
             }
@@ -170,13 +173,15 @@ impl NotificationStore {
             {
                 latest.hovered_at = Some(now);
             }
-        } else if let Some(hovered_at) = latest.hovered_at.take()
-            && let Some(item) = latest.item.as_mut()
-            && let Some(received_at) = item
-                .received_at
-                .checked_add(now.saturating_duration_since(hovered_at))
-        {
-            item.received_at = received_at;
+        } else if let Some(hovered_at) = latest.hovered_at.take() {
+            if let Some(item) = latest.item.as_mut() {
+                let paused_duration = now
+                    .saturating_duration_since(hovered_at)
+                    .min(Duration::from_secs(60));
+                if let Some(received_at) = item.received_at.checked_add(paused_duration) {
+                    item.received_at = received_at;
+                }
+            }
         }
     }
 
@@ -794,6 +799,27 @@ mod tests {
                 .hovered_at
                 .is_none()
         );
+    }
+
+
+    #[test]
+    fn hover_capped_at_maximum_safety_duration() {
+        let store = NotificationStore::new();
+        add_test_notification(&store);
+        let now = Instant::now();
+        let received_at = now - Duration::from_secs(10);
+        store
+            .latest_notification
+            .lock()
+            .unwrap()
+            .item
+            .as_mut()
+            .unwrap()
+            .received_at = received_at;
+        // Hover started 65 seconds ago (exceeding 60s safety cap)
+        let entered_at = now - Duration::from_secs(65);
+        store.set_hovered_at(true, entered_at);
+        assert!(store.get_latest_active_notification().is_none());
     }
 
     #[test]

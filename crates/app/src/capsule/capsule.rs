@@ -1,6 +1,6 @@
 use gpui::{
-    Bounds, Context, Entity, Render, Size, Task, Window, div, layer_shell::KeyboardInteractivity,
-    point, prelude::*, px, svg,
+    Bounds, Context, DispatchPhase, Entity, MouseExitEvent, MouseMoveEvent, Render, Size, Task,
+    Window, div, layer_shell::KeyboardInteractivity, point, prelude::*, px, svg,
 };
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
@@ -1656,6 +1656,62 @@ impl Render for Capsule {
             window.set_input_region(Some(&input_bounds));
         }
 
+        if self.mode == CapsuleMode::Notification {
+            let entity = cx.entity().downgrade();
+            window.on_mouse_event(move |_: &MouseExitEvent, phase, _window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    let _ = entity.update(cx, |capsule, cx| {
+                        if capsule.mode == CapsuleMode::Notification {
+                            capsule.modules.notification_view.update(cx, |view, cx| {
+                                view.set_expanded(false, cx);
+                            });
+                        }
+                    });
+                }
+            });
+
+            let entity = cx.entity().downgrade();
+            let pill_x = (win_w - self.current_width) / 2.0;
+            let pill_y = self.current_y;
+            let pill_w = self.current_width;
+            let pill_h = self.current_height;
+
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    let mx: f32 = event.position.x.into();
+                    let my: f32 = event.position.y.into();
+                    let inside = window.is_window_hovered()
+                        && mx >= pill_x
+                        && mx <= pill_x + pill_w
+                        && my >= pill_y
+                        && my <= pill_y + pill_h;
+
+                    let _ = entity.update(cx, |capsule, cx| {
+                        if capsule.mode == CapsuleMode::Notification {
+                            if capsule.modules.notification_view.read(cx).is_replying() {
+                                return;
+                            }
+                            capsule.modules.notification_view.update(cx, |view, cx| {
+                                view.set_expanded(inside, cx);
+                            });
+                        }
+                    });
+                }
+            });
+
+            if !window.is_window_hovered()
+                && !self.modules.notification_view.read(cx).is_replying()
+                && self.modules.notification_view.read(cx).is_expanded()
+            {
+                let notif_view = self.modules.notification_view.clone();
+                cx.defer(move |cx| {
+                    notif_view.update(cx, |view, cx| {
+                        view.set_expanded(false, cx);
+                    });
+                });
+            }
+        }
+
         let mut content_container = div().relative().size_full();
 
         let anim_t = self
@@ -1865,12 +1921,14 @@ impl Render for Capsule {
         let pill_wrapper = renderer
             .render(content_container.into_any_element(), &params, cx)
             .id("capsule-hover")
-            .on_hover(cx.listener(|capsule, hovered, _, cx| {
+            .on_hover(cx.listener(|capsule, hovered, window, cx| {
                 if capsule.mode == CapsuleMode::Notification {
+                    let win_hovered = window.is_window_hovered();
+                    let actual_hovered = *hovered && win_hovered;
                     capsule
                         .modules
                         .notification_view
-                        .update(cx, |view, cx| view.set_expanded(*hovered, cx));
+                        .update(cx, |view, cx| view.set_expanded(actual_hovered, cx));
                 }
             }))
             .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {

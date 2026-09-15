@@ -45,7 +45,13 @@ impl NotificationModule {
             self.expanded = expanded;
             NotificationStore::global().set_hovered(expanded);
             cx.notify();
+        } else if !expanded {
+            NotificationStore::global().set_hovered(false);
         }
+    }
+
+    pub fn is_expanded(&self) -> bool {
+        self.expanded
     }
 
     pub fn is_replying(&self) -> bool {
@@ -54,7 +60,9 @@ impl NotificationModule {
 
     pub fn deactivate(&mut self, cx: &mut Context<Self>) {
         self.reply = None;
-        self.set_expanded(false, cx);
+        self.hovered = false;
+        self.expanded = false;
+        NotificationStore::global().set_hovered(false);
         cx.notify();
     }
 
@@ -239,14 +247,20 @@ impl NotificationModule {
 
     pub fn set_item(&mut self, item: Option<NotificationItem>, cx: &mut Context<Self>) {
         if self.active_item != item {
-            if self.active_item.as_ref().map(|item| item.id) != item.as_ref().map(|item| item.id) {
+            let is_different_notification = self.active_item.as_ref().map(|item| item.id)
+                != item.as_ref().map(|item| item.id);
+            if is_different_notification {
                 self.reply = None;
+                self.expanded = false;
+                self.hovered = false;
+                NotificationStore::global().set_hovered(false);
             }
             self.active_item = item;
             if self.active_item.is_none() {
                 self.expanded = false;
+                self.hovered = false;
+                NotificationStore::global().set_hovered(false);
             }
-            NotificationStore::global().set_hovered(self.expanded);
             cx.notify();
         }
     }
