@@ -71,37 +71,71 @@ pub fn render_media_player_widget(
         .bg(theme.surface().opacity(0.35));
 
     // Ambient blurred album art background layer (contained strictly within inner bounds)
+    let card_ratio = content_w / 118.0;
+
+    if anim_progress < 1.0 {
+        if let Some(prev) = prev_art_path {
+            let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0) * 0.18;
+            if prev_opacity > 0.005 {
+                card = card.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .rounded(inner_radius)
+                        .overflow_hidden()
+                        .opacity(prev_opacity)
+                        .child(
+                            img(prev.to_string())
+                                .size_full()
+                                .aspect_ratio(card_ratio)
+                                .object_fit(gpui::ObjectFit::Cover)
+                                .rounded(inner_radius),
+                        ),
+                );
+            }
+        }
+    }
+
     if let Some(ref image_path) = art_path {
-        let ambient_opacity = if anim_progress < 1.0 {
+        let ambient_opacity = if prev_art_path.is_some() || anim_progress < 1.0 {
             0.18 * anim_progress.clamp(0.0, 1.0)
         } else {
             0.18
         };
 
-        card = card
-            .child(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .size_full()
-                    .rounded(inner_radius)
-                    .overflow_hidden()
-                    .opacity(ambient_opacity)
-                    .child(
-                        img(image_path.clone())
-                            .size_full()
-                            .object_fit(gpui::ObjectFit::Cover)
-                            .rounded(inner_radius),
-                    ),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .size_full()
-                    .rounded(inner_radius)
-                    .bg(theme.background().opacity(0.65)),
-            );
+        card = card.child(
+            div()
+                .absolute()
+                .inset_0()
+                .size_full()
+                .rounded(inner_radius)
+                .overflow_hidden()
+                .opacity(ambient_opacity)
+                .child(
+                    img(image_path.clone())
+                        .size_full()
+                        .aspect_ratio(card_ratio)
+                        .object_fit(gpui::ObjectFit::Cover)
+                        .rounded(inner_radius),
+                ),
+        );
+    }
+
+    if art_path.is_some() || (prev_art_path.is_some() && anim_progress < 1.0) {
+        let scrim_opacity = if art_path.is_some() {
+            0.65
+        } else {
+            0.65 * (1.0 - anim_progress)
+        };
+        card = card.child(
+            div()
+                .absolute()
+                .inset_0()
+                .size_full()
+                .rounded(inner_radius)
+                .bg(theme.background().opacity(scrim_opacity)),
+        );
     }
 
     // Left Column: Square Album Art or Placeholder Box
