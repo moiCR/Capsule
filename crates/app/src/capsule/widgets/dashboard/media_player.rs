@@ -1,7 +1,8 @@
-use gpui::{Context, FontWeight, IntoElement, StyledImage, div, img, prelude::*, px, svg};
-use services::{MediaTrack, MprisService};
+use gpui::{Context, FontWeight, IntoElement, StyledImage, canvas, div, img, prelude::*, px, svg};
+use services::{AppState, MediaTrack, MprisService};
 use std::path::Path;
 use ui::theme::Theme;
+use ui::tracker::DimensionTracker;
 
 use crate::capsule::modules::dashboard::DashboardModule;
 
@@ -27,269 +28,455 @@ pub fn resolve_art_path(track: &MediaTrack) -> Option<String> {
 
 #[allow(clippy::too_many_arguments)]
 pub fn render_media_player_widget(
+    dashboard_w: f32,
     active_track: &MediaTrack,
     total_players: usize,
     selected_player_idx: usize,
     prev_art_path: Option<&str>,
     anim_progress: f32,
-    is_media_open: bool,
+    media_tracker: &DimensionTracker,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> gpui::AnyElement {
-    let card_w = px(185.0);
-    let card_h = px(102.0);
-    let card_radius = px(if cx.has_global::<services::AppState>() {
-        cx.global::<services::AppState>()
-            .config
-            .get()
-            .ui
-            .cards_round
+    let content_w = (dashboard_w - 32.0).max(100.0);
+    let card_w = px(content_w);
+    let card_radius_val = if cx.has_global::<AppState>() {
+        cx.global::<AppState>().config.get().ui.cards_round
     } else {
         22.0
-    });
+    };
+    let card_radius = px(card_radius_val);
+    let inner_radius = px((card_radius_val - 1.0).max(0.0));
 
-    if !active_track.has_media || active_track.title.is_empty() {
-        return div()
-            .id("media-player-card")
+    let has_media = active_track.has_media && !active_track.title.is_empty();
+    let is_playing = has_media && active_track.is_playing;
+    let art_path = if has_media {
+        resolve_art_path(active_track)
+    } else {
+        None
+    };
+    let card_h = px(118.0);
+    let art_size = px(94.0);
+
+    // Outer Hero Card (identical dimensions and style whether playing or idle)
+    let mut card = div()
+        .id("media-player-hero-card")
+        .relative()
+        .w(card_w)
+        .h(card_h)
+        .rounded(card_radius)
+        .border_1()
+        .border_color(theme.surface().opacity(0.18))
+        .overflow_hidden()
+        .bg(theme.surface().opacity(0.35));
+
+    // Ambient blurred album art background layer (contained strictly within inner bounds)
+    if let Some(ref image_path) = art_path {
+        let ambient_opacity = if anim_progress < 1.0 {
+            0.18 * anim_progress.clamp(0.0, 1.0)
+        } else {
+            0.18
+        };
+
+        card = card
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .rounded(inner_radius)
+                    .overflow_hidden()
+                    .opacity(ambient_opacity)
+                    .child(
+                        img(image_path.clone())
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Cover)
+                            .rounded(inner_radius),
+                    ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .rounded(inner_radius)
+                    .bg(theme.background().opacity(0.65)),
+            );
+    }
+
+    // Left Column: Square Album Art or Placeholder Box
+    let mut art_box = div()
+        .id("media-art-container")
+        .relative()
+        .size(art_size)
+        .rounded(px(16.0))
+        .overflow_hidden()
+        .border_1()
+        .border_color(theme.surface().opacity(0.25))
+        .bg(theme.surface().opacity(0.5));
+
+    if has_media {
+        // Crossfade previous art if still animating
+        if anim_progress < 1.0 {
+            if let Some(prev) = prev_art_path {
+                let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0);
+                if prev_opacity > 0.01 {
+                    art_box = art_box.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .size_full()
+                            .opacity(prev_opacity)
+                            .child(
+                                img(prev.to_string())
+                                    .size(art_size)
+                                    .aspect_ratio(1.0)
+                                    .object_fit(gpui::ObjectFit::Cover)
+                                    .rounded(px(16.0)),
+                            ),
+                    );
+                }
+            }
+        }
+
+        // Current art
+        if let Some(ref image_path) = art_path {
+            let current_opacity = if prev_art_path.is_some() || anim_progress < 1.0 {
+                anim_progress.clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+
+            art_box = art_box.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .opacity(current_opacity)
+                    .child(
+                        img(image_path.clone())
+                            .size(art_size)
+                            .aspect_ratio(1.0)
+                            .object_fit(gpui::ObjectFit::Cover)
+                            .rounded(px(16.0)),
+                    ),
+            );
+        } else {
+            // Fallback icon if no art
+            art_box = art_box.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size_full()
+                    .child(
+                        svg()
+                            .path("music.svg")
+                            .size(px(32.0))
+                            .text_color(theme.foreground_muted().opacity(0.6)),
+                    ),
+            );
+        }
+
+        // Playing indicator badge on cover art
+        if is_playing {
+            art_box = art_box.child(
+                div()
+                    .absolute()
+                    .right(px(6.0))
+                    .bottom(px(6.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(22.0))
+                    .rounded_full()
+                    .bg(theme.accent())
+                    .child(
+                        svg()
+                            .path("music.svg")
+                            .size(px(11.0))
+                            .text_color(theme.background()),
+                    ),
+            );
+        }
+    } else {
+        // Standby art placeholder icon with same dimensions
+        art_box = art_box.child(
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size_full()
+                .child(
+                    svg()
+                        .path("music.svg")
+                        .size(px(32.0))
+                        .text_color(theme.foreground_muted().opacity(0.45)),
+                ),
+        );
+    }
+
+    // Optional player switcher arrows if multiple media players are active
+    let player_switcher = if has_media && total_players > 1 {
+        div()
             .flex()
-            .flex_col()
+            .flex_row()
             .items_center()
-            .justify_center()
-            .w(card_w)
-            .h(card_h)
-            .rounded(card_radius)
-            .bg(theme.surface().opacity(0.45))
-            .border_1()
-            .border_color(theme.surface().opacity(0.25))
-            .gap_1p5()
-            .cursor_pointer()
-            .hover(|s| s.bg(theme.surface().opacity(0.55)))
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|_, _, _window, cx| {
-                    cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
-                }),
+            .gap_1()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(20.0))
+                    .rounded_full()
+                    .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                    .cursor_pointer()
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            this.prev_player();
+                            cx.notify();
+                        }),
+                    )
+                    .child(
+                        svg()
+                            .path("chevron-left.svg")
+                            .size(px(10.0))
+                            .text_color(theme.foreground_muted()),
+                    ),
+            )
+            .child(
+                div()
+                    .text_size(px(10.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted())
+                    .child(format!("{}/{}", selected_player_idx + 1, total_players)),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .w(px(38.0))
-                    .h(px(38.0))
+                    .size(px(20.0))
                     .rounded_full()
-                    .bg(theme.surface().opacity(0.6))
+                    .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                    .cursor_pointer()
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            this.next_player();
+                            cx.notify();
+                        }),
+                    )
                     .child(
                         svg()
-                            .path("music.svg")
-                            .size(px(18.0))
+                            .path("chevron-right.svg")
+                            .size(px(10.0))
                             .text_color(theme.foreground_muted()),
                     ),
             )
-            .child(
-                div()
-                    .text_size(px(11.5))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(theme.foreground_muted())
-                    .child(if cx.has_global::<services::AppState>() {
-                        cx.global::<services::AppState>()
-                            .language
-                            .get("dashboard.no_media")
-                    } else {
-                        "Sin reproducción".to_string()
-                    }),
-            )
-            .into_any_element();
-    }
+    } else {
+        div()
+    };
 
-    let is_playing = active_track.is_playing;
-    let art_path = resolve_art_path(active_track);
-    let ratio = 185.0 / 102.0;
-
-    let mut card = div()
-        .id("media-player-card")
-        .relative()
-        .w(card_w)
-        .h(card_h)
-        .rounded(card_radius)
-        .border_1()
-        .border_color(theme.surface().opacity(0.25))
-        .overflow_hidden()
-        .bg(theme.surface().opacity(0.45));
-
-    // Previous art layer during crossfade
-    if anim_progress < 1.0 {
-        if let Some(prev) = prev_art_path {
-            let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0);
-            if prev_opacity > 0.01 {
-                card = card.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .w(card_w)
-                        .h(card_h)
-                        .opacity(prev_opacity)
-                        .child(
-                            img(prev.to_string())
-                                .w(card_w)
-                                .h(card_h)
-                                .aspect_ratio(ratio)
-                                .object_fit(gpui::ObjectFit::Cover)
-                                .rounded(card_radius),
-                        ),
-                );
-            }
-        }
-    }
-
-    // Current art layer
-    if let Some(ref image_path) = art_path {
-        let current_opacity = if prev_art_path.is_some() || anim_progress < 1.0 {
-            anim_progress.clamp(0.0, 1.0)
+    // Track Title & Artist
+    let (title_text, artist_text) = if has_media {
+        let title = if active_track.title.is_empty() {
+            "Desconocido".to_string()
         } else {
-            1.0
+            active_track.title.clone()
         };
-
-        card = card.child(
-            div()
-                .absolute()
-                .inset_0()
-                .w(card_w)
-                .h(card_h)
-                .opacity(current_opacity)
-                .child(
-                    img(image_path.clone())
-                        .w(card_w)
-                        .h(card_h)
-                        .aspect_ratio(ratio)
-                        .object_fit(gpui::ObjectFit::Cover)
-                        .rounded(card_radius),
-                ),
-        );
-    }
-
-    // Scrim overlay for contrast
-    if art_path.is_some() || prev_art_path.is_some() {
-        let scrim_opacity = if art_path.is_some() {
-            0.65
+        let artist = if active_track.artist.is_empty() {
+            "Artista desconocido".to_string()
+        } else if !active_track.album.is_empty() && active_track.album != active_track.title {
+            format!("{} • {}", active_track.artist, active_track.album)
         } else {
-            0.65 * (1.0 - anim_progress)
+            active_track.artist.clone()
         };
-        card = card.child(
-            div()
-                .absolute()
-                .inset_0()
-                .w(card_w)
-                .h(card_h)
-                .rounded(card_radius)
-                .bg(theme.background().opacity(scrim_opacity)),
-        );
-    }
-
-    // Player indicator dots (if multiple players)
-    let player_dots = if total_players > 1 {
-        let mut dots = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .justify_center()
-            .gap_1();
-        for i in 0..total_players {
-            let is_active = i == selected_player_idx;
-            dots = dots.child(
-                div()
-                    .w(px(if is_active { 8.0 } else { 3.0 }))
-                    .h(px(3.0))
-                    .rounded_full()
-                    .bg(if is_active {
-                        theme.accent()
-                    } else {
-                        theme.foreground_muted()
-                    }),
-            );
-        }
-        Some(dots)
+        (title, artist)
     } else {
-        None
+        let no_media = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().language.get("dashboard.no_media")
+        } else {
+            "Sin reproducción activa".to_string()
+        };
+        let no_player = if cx.has_global::<AppState>() {
+            cx.global::<AppState>()
+                .language
+                .get("dashboard.no_player_active")
+        } else {
+            "Ningún reproductor activo".to_string()
+        };
+        (no_media, no_player)
     };
 
-    // Text slide & fade animation
-    let text_opacity = if anim_progress < 1.0 {
-        anim_progress.clamp(0.2, 1.0)
-    } else {
-        1.0
-    };
-    let text_slide_y = if anim_progress < 1.0 {
-        (1.0 - anim_progress) * 4.0
-    } else {
-        0.0
-    };
-
-    let title_text = if active_track.title.is_empty() {
-        "Desconocido".to_string()
-    } else {
-        active_track.title.clone()
-    };
-    let artist_text = if active_track.artist.is_empty() {
-        "Artista desconocido".to_string()
-    } else {
-        active_track.artist.clone()
-    };
-
-    // Centered track info (clickable to toggle satellite)
     let track_info = div()
         .flex()
         .flex_col()
-        .items_center()
-        .w_full()
-        .pt(px(text_slide_y))
-        .opacity(text_opacity)
+        .flex_1()
         .overflow_hidden()
-        .cursor_pointer()
-        .on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(|_, _, _window, cx| {
-                cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
-            }),
-        )
         .child(
             div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_size(px(12.0))
-                .text_color(theme.foreground())
-                .text_center()
-                .w_full()
+                .font_weight(FontWeight::BOLD)
+                .text_size(px(15.5))
+                .text_color(if has_media {
+                    theme.foreground()
+                } else {
+                    theme.foreground_muted()
+                })
                 .truncate()
                 .child(title_text),
         )
         .child(
             div()
-                .text_size(px(10.0))
-                .text_color(theme.foreground_muted())
-                .text_center()
-                .w_full()
+                .text_size(px(12.0))
+                .text_color(
+                    theme
+                        .foreground_muted()
+                        .opacity(if has_media { 1.0 } else { 0.65 }),
+                )
                 .truncate()
                 .child(artist_text),
         );
 
-    // Centered playback controls
-    let controls = div()
+    let top_row = div()
         .flex()
         .flex_row()
         .items_center()
-        .justify_center()
+        .justify_between()
         .w_full()
-        .gap_2p5()
+        .child(track_info)
+        .child(player_switcher);
+
+    // Scrubber progress & timestamps
+    let (pos_str, dur_str, progress_pct) = if has_media {
+        match (active_track.position_micros, active_track.length_micros) {
+            (Some(pos), Some(len)) if len > 0 => {
+                let p = (pos as f64 / 1_000_000.0).max(0.0);
+                let l = (len as f64 / 1_000_000.0).max(1.0);
+                let pct = (p / l).clamp(0.0, 1.0) as f32;
+                (
+                    format!("{:02}:{:02}", (p as u64) / 60, (p as u64) % 60),
+                    format!("{:02}:{:02}", (l as u64) / 60, (l as u64) % 60),
+                    pct,
+                )
+            }
+            (Some(pos), None) => {
+                let p = (pos as f64 / 1_000_000.0).max(0.0);
+                (
+                    format!("{:02}:{:02}", (p as u64) / 60, (p as u64) % 60),
+                    "--:--".to_string(),
+                    0.0,
+                )
+            }
+            _ => ("--:--".to_string(), "--:--".to_string(), 0.0),
+        }
+    } else {
+        ("--:--".to_string(), "--:--".to_string(), 0.0)
+    };
+
+    let mut progress_bar = div()
+        .id("media-progress-bar")
+        .relative()
+        .flex_1()
+        .h(px(4.0))
+        .rounded_full()
+        .bg(theme.surface().opacity(0.4));
+
+    if has_media && active_track.length_micros.is_some() {
+        let slider_tracker = media_tracker.clone();
+        let bus_name_seek = active_track.bus_name.clone();
+        let length_micros_opt = active_track.length_micros;
+
+        progress_bar = progress_bar
+            .cursor_pointer()
+            .child(
+                canvas(
+                    move |bounds, _, _| slider_tracker.track_bounds(bounds),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                    if let Some(total_micros) = length_micros_opt {
+                        if total_micros > 0 {
+                            let click_x = f32::from(event.position.x);
+                            let start_x = this.media_slider_tracker.left();
+                            let width = this.media_slider_tracker.width(1.0);
+                            if width > 0.0 {
+                                let pct = ((click_x - start_x) / width).clamp(0.0, 1.0);
+                                let target_secs = pct as f64 * (total_micros as f64 / 1_000_000.0);
+                                let bus = bus_name_seek.clone();
+                                tokio::spawn(async move {
+                                    MprisService::seek_to(&bus, target_secs).await;
+                                });
+                                this.touch_user_action();
+                                cx.notify();
+                            }
+                        }
+                    }
+                }),
+            );
+    }
+
+    if progress_pct > 0.0 {
+        progress_bar = progress_bar.child(
+            div()
+                .h_full()
+                .w(gpui::DefiniteLength::Fraction(progress_pct))
+                .rounded_full()
+                .bg(theme.accent()),
+        );
+    }
+
+    let scrubber_row = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .w_full()
+        .gap_2()
+        .child(
+            div()
+                .text_size(px(9.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(theme.foreground_muted())
+                .child(pos_str),
+        )
+        .child(progress_bar)
+        .child(
+            div()
+                .text_size(px(9.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(theme.foreground_muted())
+                .child(dur_str),
+        );
+
+    // Playback buttons: All 3 styled consistently without bg
+    let btn_color = if has_media {
+        theme.foreground()
+    } else {
+        theme.foreground_muted().opacity(0.4)
+    };
+
+    let playback_controls = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap_1()
         .child(
             div()
                 .id("mpris-prev")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(24.0))
-                .h(px(24.0))
+                .size(px(28.0))
                 .rounded_full()
-                .hover(|s| s.bg(theme.surface().opacity(0.45)))
+                .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                .active(|s| s.bg(theme.surface().opacity(0.7)))
                 .cursor_pointer()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
@@ -309,8 +496,8 @@ pub fn render_media_player_widget(
                 .child(
                     svg()
                         .path("skip-back.svg")
-                        .size(px(13.0))
-                        .text_color(theme.foreground_muted()),
+                        .size(px(14.0))
+                        .text_color(btn_color),
                 ),
         )
         .child(
@@ -319,12 +506,10 @@ pub fn render_media_player_widget(
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(30.0))
-                .h(px(30.0))
+                .size(px(28.0))
                 .rounded_full()
-                .bg(theme.accent())
-                .hover(|s| s.opacity(0.85))
-                .active(|s| s.opacity(0.7))
+                .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                .active(|s| s.bg(theme.surface().opacity(0.7)))
                 .cursor_pointer()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
@@ -347,7 +532,7 @@ pub fn render_media_player_widget(
                     svg()
                         .path(if is_playing { "pause.svg" } else { "play.svg" })
                         .size(px(14.0))
-                        .text_color(theme.background()),
+                        .text_color(btn_color),
                 ),
         )
         .child(
@@ -356,10 +541,10 @@ pub fn render_media_player_widget(
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(24.0))
-                .h(px(24.0))
+                .size(px(28.0))
                 .rounded_full()
-                .hover(|s| s.bg(theme.surface().opacity(0.45)))
+                .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                .active(|s| s.bg(theme.surface().opacity(0.7)))
                 .cursor_pointer()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
@@ -379,66 +564,41 @@ pub fn render_media_player_widget(
                 .child(
                     svg()
                         .path("skip-forward.svg")
-                        .size(px(13.0))
-                        .text_color(theme.foreground_muted()),
+                        .size(px(14.0))
+                        .text_color(btn_color),
                 ),
         );
 
     let bottom_section = div()
         .flex()
-        .flex_col()
+        .flex_row()
         .items_center()
+        .justify_between()
         .w_full()
-        .gap_1()
-        .child(controls)
-        .when_some(player_dots, |parent, dots| parent.child(dots));
+        .gap_3()
+        .child(scrubber_row)
+        .child(playback_controls);
 
-    let expand_btn = div()
-        .id("mpris-expand-btn")
-        .absolute()
-        .top(px(6.0))
-        .right(px(6.0))
+    let right_pane = div()
         .flex()
-        .items_center()
-        .justify_center()
-        .size(px(20.0))
-        .rounded_full()
-        .bg(if is_media_open {
-            theme.accent().opacity(0.3)
-        } else {
-            theme.surface().opacity(0.35)
-        })
-        .hover(|s| s.bg(theme.surface().opacity(0.65)))
-        .cursor_pointer()
-        .on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(|_, _, _window, cx| {
-                cx.emit(crate::capsule::modules::dashboard::DashboardEvent::MediaClicked);
-            }),
-        )
-        .child(
-            svg()
-                .path("scale.svg")
-                .size(px(10.0))
-                .text_color(if is_media_open {
-                    theme.accent()
-                } else {
-                    theme.foreground_muted()
-                }),
-        );
+        .flex_col()
+        .justify_between()
+        .flex_1()
+        .h(art_size)
+        .overflow_hidden()
+        .child(top_row)
+        .child(bottom_section);
 
-    card.child(
-        div()
-            .relative()
-            .flex()
-            .flex_col()
-            .justify_between()
-            .items_center()
-            .size_full()
-            .p_2p5()
-            .child(expand_btn)
-            .child(track_info)
-            .child(bottom_section),
-    )
-    .into_any_element()
+    let content_layer = div()
+        .relative()
+        .flex()
+        .flex_row()
+        .items_center()
+        .size_full()
+        .p_3()
+        .gap_3()
+        .child(art_box)
+        .child(right_pane);
+
+    card.child(content_layer).into_any_element()
 }

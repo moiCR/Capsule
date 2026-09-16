@@ -295,7 +295,7 @@ impl Render for LauncherModule {
             }))
             .flex()
             .flex_col()
-            .w(px(380.0))
+            .w(px(480.0))
             .max_h(px(360.0))
             .p_3()
             .gap_2()

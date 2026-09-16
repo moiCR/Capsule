@@ -1,17 +1,11 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
-use services::{AppState, MediaTrack, NetworkStatus, NotificationStore};
+use services::{AppState, NetworkStatus, NotificationStore};
 use ui::theme::Theme;
 
 use crate::capsule::modules::dashboard::{DashboardEvent, DashboardModule};
 
-#[allow(clippy::too_many_arguments)]
 pub fn render_quick_settings_section(
-    active_track: &MediaTrack,
-    total_players: usize,
-    selected_player_idx: usize,
-    prev_art_path: Option<&str>,
-    anim_progress: f32,
-    is_media_open: bool,
+    dashboard_w: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
@@ -21,18 +15,10 @@ pub fn render_quick_settings_section(
         NetworkStatus::default()
     };
 
+    let col_w = ((dashboard_w - 32.0 - 10.0) / 2.0).floor();
+
     let wifi_pill = render_wifi_pill(&status, theme, cx);
     let bt_pill = render_bluetooth_pill(&status, theme, cx);
-    let media_player = super::media_player::render_media_player_widget(
-        active_track,
-        total_players,
-        selected_player_idx,
-        prev_art_path,
-        anim_progress,
-        is_media_open,
-        theme,
-        cx,
-    );
     let peace_pill = render_peace_pill(theme, cx);
     let action_circles = render_action_circles(theme, cx);
 
@@ -48,16 +34,8 @@ pub fn render_quick_settings_section(
                 .flex_row()
                 .w_full()
                 .gap_2p5()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_1()
-                        .gap_2p5()
-                        .child(wifi_pill)
-                        .child(bt_pill),
-                )
-                .child(media_player),
+                .child(div().w(px(col_w)).child(wifi_pill))
+                .child(div().w(px(col_w)).child(bt_pill)),
         )
         .child(
             div()
@@ -65,8 +43,8 @@ pub fn render_quick_settings_section(
                 .flex_row()
                 .w_full()
                 .gap_2p5()
-                .child(div().flex_1().child(peace_pill))
-                .child(action_circles),
+                .child(div().w(px(col_w)).child(peace_pill))
+                .child(div().w(px(col_w)).child(action_circles)),
         )
 }
 
@@ -134,36 +112,39 @@ fn render_wifi_pill(
         .justify_between()
         .w_full()
         .h(px(46.0))
-        .px_1p5()
-        .py_1()
+        .px_2()
         .rounded_full()
         .bg(if is_on {
             theme.accent()
         } else {
-            theme.surface().opacity(0.45)
+            theme.surface().opacity(0.35)
         })
         .border_1()
         .border_color(if is_on {
-            theme.accent()
+            theme.accent().opacity(0.4)
         } else {
-            theme.surface().opacity(0.25)
+            theme.surface().opacity(0.18)
         })
         .hover(|s| {
             if is_on {
                 s.opacity(0.92)
             } else {
-                s.bg(theme.surface().opacity(0.55))
+                s.bg(theme.surface().opacity(0.5))
             }
         })
         .child(
             div()
-                .id("wifi-pill-toggle")
+                .id("wifi-icon-btn")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .size(px(34.0))
                 .rounded_full()
+                .bg(if is_on {
+                    theme.background().opacity(0.18)
+                } else {
+                    theme.surface().opacity(0.45)
+                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     if cx.has_global::<AppState>() {
@@ -171,7 +152,7 @@ fn render_wifi_pill(
                         cx.notify();
                     }
                 }))
-                .child(svg().path(icon_path).size(px(18.0)).text_color(if is_on {
+                .child(svg().path(icon_path).size(px(16.0)).text_color(if is_on {
                     theme.background()
                 } else {
                     theme.foreground_muted()
@@ -183,7 +164,7 @@ fn render_wifi_pill(
                 .flex()
                 .flex_col()
                 .flex_1()
-                .pl_2p5()
+                .pl_2()
                 .overflow_hidden()
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
@@ -191,7 +172,7 @@ fn render_wifi_pill(
                 }))
                 .child(
                     div()
-                        .text_size(px(12.5))
+                        .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(if is_on {
                             theme.background()
@@ -204,7 +185,7 @@ fn render_wifi_pill(
                     div()
                         .text_size(px(10.5))
                         .text_color(if is_on {
-                            theme.background().opacity(0.75)
+                            theme.background().opacity(0.8)
                         } else {
                             theme.foreground_muted()
                         })
@@ -218,14 +199,13 @@ fn render_wifi_pill(
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(26.0))
-                .h(px(26.0))
+                .size(px(24.0))
                 .rounded_full()
                 .hover(|s| {
                     if is_on {
                         s.bg(theme.background().opacity(0.15))
                     } else {
-                        s.bg(theme.surface().opacity(0.7))
+                        s.bg(theme.surface().opacity(0.5))
                     }
                 })
                 .cursor_pointer()
@@ -235,9 +215,9 @@ fn render_wifi_pill(
                 .child(
                     svg()
                         .path("chevron-right.svg")
-                        .size(px(14.0))
+                        .size(px(12.0))
                         .text_color(if is_on {
-                            theme.background().opacity(0.8)
+                            theme.background().opacity(0.85)
                         } else {
                             theme.foreground_muted()
                         }),
@@ -254,18 +234,18 @@ fn render_bluetooth_pill(
     let is_on = status.bluetooth_enabled;
     let is_connected = !status.bluetooth_device_name.is_empty();
 
-    let (bt_title, disabled_str, enabled_str) = if cx.has_global::<AppState>() {
+    let (_connected_str, disabled_str, disconnected_str) = if cx.has_global::<AppState>() {
         let lang = &cx.global::<AppState>().language;
         (
-            lang.get("dashboard.bluetooth"),
+            lang.get("dashboard.connected"),
             lang.get("dashboard.disabled"),
-            lang.get("dashboard.enabled"),
+            lang.get("dashboard.disconnected"),
         )
     } else {
         (
-            "Bluetooth".to_string(),
+            "Conectado".to_string(),
             "Desactivado".to_string(),
-            "Activado".to_string(),
+            "Desconectado".to_string(),
         )
     };
 
@@ -274,7 +254,7 @@ fn render_bluetooth_pill(
     } else if is_connected {
         status.bluetooth_device_name.clone()
     } else {
-        enabled_str
+        disconnected_str
     };
 
     div()
@@ -285,36 +265,39 @@ fn render_bluetooth_pill(
         .justify_between()
         .w_full()
         .h(px(46.0))
-        .px_1p5()
-        .py_1()
+        .px_2()
         .rounded_full()
         .bg(if is_on {
             theme.accent()
         } else {
-            theme.surface().opacity(0.45)
+            theme.surface().opacity(0.35)
         })
         .border_1()
         .border_color(if is_on {
-            theme.accent()
+            theme.accent().opacity(0.4)
         } else {
-            theme.surface().opacity(0.25)
+            theme.surface().opacity(0.18)
         })
         .hover(|s| {
             if is_on {
                 s.opacity(0.92)
             } else {
-                s.bg(theme.surface().opacity(0.55))
+                s.bg(theme.surface().opacity(0.5))
             }
         })
         .child(
             div()
-                .id("bt-pill-toggle")
+                .id("bluetooth-icon-btn")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .size(px(34.0))
                 .rounded_full()
+                .bg(if is_on {
+                    theme.background().opacity(0.18)
+                } else {
+                    theme.surface().opacity(0.45)
+                })
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     if cx.has_global::<AppState>() {
@@ -325,7 +308,7 @@ fn render_bluetooth_pill(
                 .child(
                     svg()
                         .path("bluetooth.svg")
-                        .size(px(18.0))
+                        .size(px(16.0))
                         .text_color(if is_on {
                             theme.background()
                         } else {
@@ -335,11 +318,11 @@ fn render_bluetooth_pill(
         )
         .child(
             div()
-                .id("bt-pill-text")
+                .id("bluetooth-pill-text")
                 .flex()
                 .flex_col()
                 .flex_1()
-                .pl_2p5()
+                .pl_2()
                 .overflow_hidden()
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
@@ -347,20 +330,20 @@ fn render_bluetooth_pill(
                 }))
                 .child(
                     div()
-                        .text_size(px(12.5))
+                        .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(if is_on {
                             theme.background()
                         } else {
                             theme.foreground()
                         })
-                        .child(bt_title),
+                        .child("Bluetooth"),
                 )
                 .child(
                     div()
                         .text_size(px(10.5))
                         .text_color(if is_on {
-                            theme.background().opacity(0.75)
+                            theme.background().opacity(0.8)
                         } else {
                             theme.foreground_muted()
                         })
@@ -370,18 +353,17 @@ fn render_bluetooth_pill(
         )
         .child(
             div()
-                .id("bt-chevron-btn")
+                .id("bluetooth-chevron-btn")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(26.0))
-                .h(px(26.0))
+                .size(px(24.0))
                 .rounded_full()
                 .hover(|s| {
                     if is_on {
                         s.bg(theme.background().opacity(0.15))
                     } else {
-                        s.bg(theme.surface().opacity(0.7))
+                        s.bg(theme.surface().opacity(0.5))
                     }
                 })
                 .cursor_pointer()
@@ -391,9 +373,9 @@ fn render_bluetooth_pill(
                 .child(
                     svg()
                         .path("chevron-right.svg")
-                        .size(px(14.0))
+                        .size(px(12.0))
                         .text_color(if is_on {
-                            theme.background().opacity(0.8)
+                            theme.background().opacity(0.85)
                         } else {
                             theme.foreground_muted()
                         }),
@@ -404,7 +386,8 @@ fn render_bluetooth_pill(
 
 fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyElement {
     let is_dnd = NotificationStore::global().is_dnd_enabled();
-    let (dnd_title, enabled_str, disabled_str) = if cx.has_global::<AppState>() {
+
+    let (dnd_title, activated_str, deactivated_str) = if cx.has_global::<AppState>() {
         let lang = &cx.global::<AppState>().language;
         (
             lang.get("dashboard.dnd"),
@@ -418,7 +401,12 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
             "Desactivado".to_string(),
         )
     };
-    let subtitle = if is_dnd { enabled_str } else { disabled_str };
+
+    let subtitle = if is_dnd {
+        activated_str
+    } else {
+        deactivated_str
+    };
 
     div()
         .id("peace-pill-main")
@@ -428,19 +416,25 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
         .justify_between()
         .w_full()
         .h(px(46.0))
-        .px_1p5()
-        .py_1()
+        .px_2()
         .rounded_full()
         .bg(if is_dnd {
             theme.accent()
         } else {
-            theme.surface().opacity(0.45)
+            theme.surface().opacity(0.35)
         })
         .border_1()
         .border_color(if is_dnd {
-            theme.accent()
+            theme.accent().opacity(0.4)
         } else {
-            theme.surface().opacity(0.25)
+            theme.surface().opacity(0.18)
+        })
+        .hover(|s| {
+            if is_dnd {
+                s.opacity(0.92)
+            } else {
+                s.bg(theme.surface().opacity(0.5))
+            }
         })
         .cursor_pointer()
         .on_click(cx.listener(|_, _, _, cx| {
@@ -449,17 +443,21 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
         }))
         .child(
             div()
-                .id("peace-pill-icon")
+                .id("peace-icon-btn")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(38.0))
-                .h(px(38.0))
+                .size(px(34.0))
                 .rounded_full()
+                .bg(if is_dnd {
+                    theme.background().opacity(0.18)
+                } else {
+                    theme.surface().opacity(0.45)
+                })
                 .child(
                     svg()
                         .path("minus-circle.svg")
-                        .size(px(18.0))
+                        .size(px(16.0))
                         .text_color(if is_dnd {
                             theme.background()
                         } else {
@@ -473,11 +471,11 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                 .flex()
                 .flex_col()
                 .flex_1()
-                .pl_2p5()
+                .pl_2()
                 .overflow_hidden()
                 .child(
                     div()
-                        .text_size(px(12.5))
+                        .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(if is_dnd {
                             theme.background()
@@ -490,7 +488,7 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                     div()
                         .text_size(px(10.5))
                         .text_color(if is_dnd {
-                            theme.background().opacity(0.75)
+                            theme.background().opacity(0.8)
                         } else {
                             theme.foreground_muted()
                         })
@@ -498,33 +496,34 @@ fn render_peace_pill(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyEle
                         .child(subtitle),
                 ),
         )
-        .child(div().w(px(26.0)))
+        .child(div().w(px(24.0)))
         .into_any_element()
 }
 
 fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> AnyElement {
     div()
-        .id("quick-action-circles")
+        .id("quick-action-dock")
         .flex()
         .flex_row()
         .items_center()
         .justify_between()
-        .w(px(185.0))
+        .w_full()
         .h(px(46.0))
+        .px_2()
+        .rounded_full()
+        .bg(theme.surface().opacity(0.35))
+        .border_1()
+        .border_color(theme.surface().opacity(0.18))
         .child(
             div()
                 .id("action-btn-theme")
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(36.0))
-                .h(px(36.0))
+                .size(px(34.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.45))
-                .border_1()
-                .border_color(theme.surface().opacity(0.25))
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.bg(theme.surface()))
+                .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                .active(|s| s.bg(theme.surface().opacity(0.85)))
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(DashboardEvent::SelectThemeRequested);
@@ -532,8 +531,8 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .child(
                     svg()
                         .path("palette_2.svg")
-                        .size(px(16.0))
-                        .text_color(theme.accent()),
+                        .size(px(15.0))
+                        .text_color(theme.foreground()),
                 ),
         )
         .child(
@@ -542,14 +541,10 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(36.0))
-                .h(px(36.0))
+                .size(px(34.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.45))
-                .border_1()
-                .border_color(theme.surface().opacity(0.25))
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.bg(theme.surface()))
+                .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                .active(|s| s.bg(theme.surface().opacity(0.85)))
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(DashboardEvent::WallpaperRequested);
@@ -557,8 +552,8 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .child(
                     svg()
                         .path("wallpaper.svg")
-                        .size(px(16.0))
-                        .text_color(theme.accent()),
+                        .size(px(15.0))
+                        .text_color(theme.foreground()),
                 ),
         )
         .child(
@@ -567,14 +562,10 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(36.0))
-                .h(px(36.0))
+                .size(px(34.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.45))
-                .border_1()
-                .border_color(theme.surface().opacity(0.25))
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.bg(theme.surface()))
+                .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                .active(|s| s.bg(theme.surface().opacity(0.85)))
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(DashboardEvent::SettingsRequested);
@@ -582,8 +573,8 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .child(
                     svg()
                         .path("settings.svg")
-                        .size(px(16.0))
-                        .text_color(theme.accent()),
+                        .size(px(15.0))
+                        .text_color(theme.foreground()),
                 ),
         )
         .child(
@@ -592,14 +583,10 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(36.0))
-                .h(px(36.0))
+                .size(px(34.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.45))
-                .border_1()
-                .border_color(theme.surface().opacity(0.25))
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.bg(theme.surface()))
+                .hover(|s| s.bg(theme.surface().opacity(0.55)))
+                .active(|s| s.bg(theme.surface().opacity(0.85)))
                 .cursor_pointer()
                 .on_click(cx.listener(|_, _, _, cx| {
                     crate::panel::LockScreenPanel::open_all(cx);
@@ -607,8 +594,8 @@ fn render_action_circles(theme: &Theme, cx: &mut Context<DashboardModule>) -> An
                 .child(
                     svg()
                         .path("lock.svg")
-                        .size(px(16.0))
-                        .text_color(theme.accent()),
+                        .size(px(15.0))
+                        .text_color(theme.foreground()),
                 ),
         )
         .into_any_element()

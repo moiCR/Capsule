@@ -30,6 +30,7 @@ pub enum PanelKind {
     Bluetooth,
     Calendar,
     Volume,
+    #[allow(dead_code)]
     Media,
 }
 

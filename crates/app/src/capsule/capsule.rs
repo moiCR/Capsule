@@ -199,18 +199,6 @@ impl Capsule {
                     capsule.start_satellite_animation(cx);
                     cx.notify();
                 }
-                super::modules::dashboard::DashboardEvent::MediaClicked => {
-                    let max_h = CapsuleMode::Dashboard.dimensions().1;
-                    let panel_h = super::satellites::media::compute_media_panel_height();
-                    capsule.panel_manager.toggle(
-                        super::satellites::PanelKind::Media,
-                        panel_h,
-                        max_h,
-                    );
-                    capsule.sync_panel_indices(cx);
-                    capsule.start_satellite_animation(cx);
-                    cx.notify();
-                }
                 super::modules::dashboard::DashboardEvent::WallpaperRequested => {
                     capsule.modules.wallpaper_view.update(cx, |wallpaper, cx| {
                         wallpaper.reload_items(cx);

@@ -24,80 +24,26 @@ pub fn render_volume_widget(
     };
 
     let vol_percentage = volume.min(100);
-
-    let card_radius = px(if cx.has_global::<AppState>() {
-        cx.global::<AppState>().config.get().ui.cards_round
-    } else {
-        22.0
-    });
-
     let slider_tracker = tracker.clone();
-
-    let sound_label = if cx.has_global::<AppState>() {
-        cx.global::<AppState>().language.get("dashboard.sound")
-    } else {
-        "Sonido".to_string()
-    };
 
     div()
         .id("sound-card-main")
         .flex()
-        .flex_col()
+        .flex_row()
+        .items_center()
         .w_full()
-        .p_3()
-        .rounded(card_radius)
-        .bg(theme.surface().opacity(0.45))
-        .border_1()
-        .border_color(theme.surface().opacity(0.25))
-        .gap_2()
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .w_full()
-                .child(
-                    div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_size(px(12.5))
-                        .text_color(theme.foreground())
-                        .child(sound_label),
-                )
-                .child(
-                    div()
-                        .id("volume-chevron-btn")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .w(px(22.0))
-                        .h(px(22.0))
-                        .rounded_full()
-                        .bg(theme.surface().opacity(0.6))
-                        .hover(|s| s.bg(theme.surface().opacity(0.9)))
-                        .active(|s| s.bg(theme.surface()))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|_this, _, _, cx| {
-                            cx.emit(DashboardEvent::VolumeChevronClicked);
-                        }))
-                        .child(
-                            svg()
-                                .path("chevron-right.svg")
-                                .size(px(13.0))
-                                .text_color(theme.foreground_muted()),
-                        ),
-                ),
-        )
+        .h(px(46.0))
+        .gap_2p5()
         .child(
             div()
                 .id("volume-slider-bar")
                 .relative()
-                .flex()
-                .items_center()
-                .w_full()
-                .h(px(42.0))
+                .flex_1()
+                .h(px(46.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.55))
+                .bg(theme.surface().opacity(0.35))
+                .border_1()
+                .border_color(theme.surface().opacity(0.18))
                 .cursor_pointer()
                 .overflow_hidden()
                 .child(
@@ -118,8 +64,8 @@ pub fn render_volume_widget(
                             (slider_x, slider_w)
                         } else {
                             let win_w: f32 = window.bounds().size.width.into();
-                            let pill_x = (win_w - 490.0) / 2.0;
-                            (pill_x + 28.0, 434.0)
+                            let pill_x = (win_w - 540.0) / 2.0;
+                            (pill_x + 16.0, 540.0 - 32.0 - 46.0 - 10.0)
                         };
 
                         let x_val = f32::from(event.position.x);
@@ -149,13 +95,14 @@ pub fn render_volume_widget(
                     div()
                         .id("volume-mute-icon-btn")
                         .absolute()
-                        .left(px(12.0))
-                        .top(px(12.0))
+                        .left(px(6.0))
+                        .top(px(6.0))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .w(px(18.0))
-                        .h(px(18.0))
+                        .size(px(34.0))
+                        .rounded_full()
+                        .hover(|s| s.bg(theme.background().opacity(0.2)))
                         .cursor_pointer()
                         .on_click(cx.listener(|_this, _, _, cx| {
                             if cx.has_global::<AppState>() {
@@ -171,13 +118,54 @@ pub fn render_volume_widget(
                         .child(
                             svg()
                                 .path(icon_path)
-                                .size(px(18.0))
+                                .size(px(16.0))
                                 .text_color(if is_muted {
                                     theme.foreground_muted()
                                 } else {
                                     theme.background()
                                 }),
                         ),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .right(px(14.0))
+                        .top(px(0.0))
+                        .bottom(px(0.0))
+                        .flex()
+                        .items_center()
+                        .text_size(px(11.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(if vol_percentage > 85 {
+                            theme.background()
+                        } else {
+                            theme.foreground_muted()
+                        })
+                        .child(format!("{vol_percentage}%")),
+                ),
+        )
+        .child(
+            div()
+                .id("volume-chevron-btn")
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(46.0))
+                .rounded_full()
+                .bg(theme.surface().opacity(0.35))
+                .border_1()
+                .border_color(theme.surface().opacity(0.18))
+                .hover(|s| s.bg(theme.surface().opacity(0.65)))
+                .active(|s| s.bg(theme.surface().opacity(0.85)))
+                .cursor_pointer()
+                .on_click(cx.listener(|_this, _, _, cx| {
+                    cx.emit(DashboardEvent::VolumeChevronClicked);
+                }))
+                .child(
+                    svg()
+                        .path("chevron-right.svg")
+                        .size(px(14.0))
+                        .text_color(theme.foreground_muted()),
                 ),
         )
 }

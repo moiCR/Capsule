@@ -9,6 +9,7 @@ use crate::capsule::modules::dashboard::DashboardModule;
 use crate::capsule::satellites::PANEL_MIN_W;
 use crate::capsule::widgets::dashboard::media_player::resolve_art_path;
 
+#[allow(dead_code)]
 pub fn compute_media_panel_height() -> f32 {
     195.0
 }

@@ -34,21 +34,23 @@ pub fn render_header(
                 .flex_row()
                 .items_center()
                 .flex_shrink_0()
-                .gap(px(3.0))
+                .gap(px(3.5))
                 .px_2()
-                .py_1()
+                .py(px(2.0))
                 .rounded_full()
-                .bg(theme.surface().opacity(0.45))
+                .bg(theme.surface().opacity(0.35))
+                .border_1()
+                .border_color(theme.surface().opacity(0.15))
                 .text_color(theme.foreground())
                 .text_size(px(11.0))
                 .font_weight(FontWeight::MEDIUM)
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(px(13.0))
-                        .flex_shrink_0()
-                        .text_color(theme.accent()),
-                )
+                .child(svg().path(icon).size(px(12.5)).flex_shrink_0().text_color(
+                    if battery_charging || pct <= 20 {
+                        theme.accent()
+                    } else {
+                        theme.foreground_muted()
+                    },
+                ))
                 .child(
                     div()
                         .text_color(theme.foreground())
@@ -75,24 +77,24 @@ pub fn render_header(
                 .flex_shrink_0()
                 .gap_2()
                 .cursor_pointer()
-                .px_2p5()
+                .px_2()
                 .py_1()
                 .rounded_full()
-                .hover(|s| s.bg(theme.surface().opacity(0.45)))
-                .active(|s| s.bg(theme.surface().opacity(0.7)))
+                .hover(|s| s.bg(theme.surface().opacity(0.35)))
+                .active(|s| s.bg(theme.surface().opacity(0.6)))
                 .on_click(cx.listener(|_this, _, _, cx| {
                     cx.emit(DashboardEvent::CalendarClicked);
                 }))
                 .child(
                     svg()
                         .path("calendar-days.svg")
-                        .size(px(14.0))
-                        .text_color(theme.accent()),
+                        .size(px(13.0))
+                        .text_color(theme.foreground_muted()),
                 )
                 .child(
                     div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_size(px(12.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_size(px(12.0))
                         .text_color(theme.foreground())
                         .child(date_time_text),
                 ),

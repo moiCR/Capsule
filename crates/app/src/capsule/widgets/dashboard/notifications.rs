@@ -38,9 +38,9 @@ pub fn render_notifications_widget(
             .items_center()
             .gap_1()
             .px_2()
-            .py_0p5()
+            .py(px(1.5))
             .rounded_full()
-            .hover(|s| s.bg(theme.surface().opacity(0.45)))
+            .hover(|s| s.bg(theme.surface().opacity(0.4)))
             .on_click(cx.listener(|_, _, _, cx| {
                 NotificationStore::global().clear_all_notifications();
                 cx.notify();
@@ -66,14 +66,15 @@ pub fn render_notifications_widget(
         div()
             .flex()
             .items_center()
+            .justify_center()
             .w_full()
             .max_w(px(content_w))
             .min_w_0()
-            .py_2()
+            .py_2p5()
             .child(
                 div()
-                    .text_size(px(12.0))
-                    .text_color(theme.foreground_muted().opacity(0.7))
+                    .text_size(px(11.5))
+                    .text_color(theme.foreground_muted().opacity(0.6))
                     .child(no_notifs_text),
             )
             .into_any_element()
@@ -85,7 +86,7 @@ pub fn render_notifications_widget(
             .w_full()
             .max_w(px(content_w))
             .min_w_0()
-            .max_h(px(130.0))
+            .max_h(px(150.0))
             .gap_1p5()
             .overflow_y_scroll();
 
@@ -105,11 +106,13 @@ pub fn render_notifications_widget(
                 .max_w(px(content_w))
                 .min_w_0()
                 .overflow_hidden()
-                .px_2p5()
+                .px_3()
                 .py_2()
-                .rounded(px(10.0))
-                .bg(theme.surface().opacity(0.4))
-                .hover(|s| s.bg(theme.surface().opacity(0.6)))
+                .rounded(px(12.0))
+                .bg(theme.surface().opacity(0.35))
+                .border_1()
+                .border_color(theme.surface().opacity(0.15))
+                .hover(|s| s.bg(theme.surface().opacity(0.55)))
                 .gap_1()
                 .child(
                     div()
@@ -123,7 +126,7 @@ pub fn render_notifications_widget(
                             div()
                                 .flex_1()
                                 .min_w_0()
-                                .text_size(px(11.0))
+                                .text_size(px(11.5))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(theme.foreground())
                                 .truncate()
@@ -136,8 +139,7 @@ pub fn render_notifications_widget(
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .w(px(16.0))
-                                .h(px(16.0))
+                                .size(px(18.0))
                                 .rounded_full()
                                 .cursor_pointer()
                                 .hover(|s| s.bg(theme.surface()))
@@ -148,7 +150,7 @@ pub fn render_notifications_widget(
                                 .child(
                                     svg()
                                         .path("close.svg")
-                                        .size(px(10.0))
+                                        .size(px(9.0))
                                         .text_color(theme.foreground_muted()),
                                 ),
                         ),
@@ -177,7 +179,7 @@ pub fn render_notifications_widget(
         .w_full()
         .max_w(px(content_w))
         .min_w_0()
-        .gap_1()
+        .gap_1p5()
         .child(
             div()
                 .flex()
@@ -187,8 +189,8 @@ pub fn render_notifications_widget(
                 .w_full()
                 .child(
                     div()
-                        .text_size(px(12.0))
-                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(11.5))
+                        .font_weight(FontWeight::MEDIUM)
                         .text_color(theme.foreground_muted())
                         .child(notifs_title),
                 )

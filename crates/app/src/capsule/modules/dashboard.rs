@@ -9,8 +9,9 @@ use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
 use crate::capsule::widgets::dashboard::{
-    header::render_header, notifications::render_notifications_widget,
-    quick_settings::render_quick_settings_section, volume::render_volume_widget,
+    header::render_header, media_player::render_media_player_widget,
+    notifications::render_notifications_widget, quick_settings::render_quick_settings_section,
+    volume::render_volume_widget,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,7 +25,6 @@ pub enum DashboardEvent {
     VolumeChevronClicked,
     WallpaperRequested,
     SettingsRequested,
-    MediaClicked,
 }
 
 pub struct DashboardModule {
@@ -223,7 +223,7 @@ impl DashboardModule {
             0.0
         };
         let header_needed_w = 220.0 + tray_w + battery_w + 16.0 + 32.0;
-        490.0_f32.max(header_needed_w)
+        540.0_f32.max(header_needed_w)
     }
 
     pub fn get_selected_player(&self) -> Option<&MediaTrack> {
@@ -491,12 +491,18 @@ impl Render for DashboardModule {
                 cx,
             ))
             .child(render_quick_settings_section(
+                dashboard_w,
+                &theme,
+                cx,
+            ))
+            .child(render_media_player_widget(
+                dashboard_w,
                 &active_track,
                 total_players,
                 self.selected_player_idx,
                 self.prev_art_path.as_deref(),
                 anim_progress,
-                self.is_media_panel_open,
+                &self.media_slider_tracker,
                 &theme,
                 cx,
             ))
