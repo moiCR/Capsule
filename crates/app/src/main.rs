@@ -1,6 +1,7 @@
 mod capsule;
 pub mod lockscreen;
 pub mod panel;
+pub mod settings;
 
 use assets::Assets;
 use gpui_platform::application;

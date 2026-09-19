@@ -6,7 +6,7 @@ use crate::capsule::modules::{
     clipboard::ClipboardModule, dashboard::DashboardModule, default::DefaultModule,
     emoji::EmojiModule, launcher::LauncherModule, notification::NotificationModule,
     polkit::PolkitModule, record::RecordModule, select_theme::SelectThemeModule,
-    settings::SettingsModule, shelf::ShelfModule, volume::VolumeModule, wallpaper::WallpaperModule,
+    shelf::ShelfModule, volume::VolumeModule, wallpaper::WallpaperModule,
 };
 
 pub mod clipboard;
@@ -34,7 +34,6 @@ pub struct CapsuleModules {
     pub wallpaper_view: Entity<WallpaperModule>,
     pub clipboard_view: Entity<ClipboardModule>,
     pub emoji_view: Entity<EmojiModule>,
-    pub settings_view: Entity<SettingsModule>,
     pub record_view: Entity<RecordModule>,
     pub shelf_view: Entity<ShelfModule>,
 }
@@ -52,7 +51,6 @@ impl CapsuleModules {
             wallpaper_view: cx.new(WallpaperModule::new),
             clipboard_view: cx.new(ClipboardModule::new),
             emoji_view: cx.new(EmojiModule::new),
-            settings_view: cx.new(SettingsModule::new),
             record_view: cx.new(RecordModule::new),
             shelf_view: cx.new(ShelfModule::new),
         }
@@ -70,7 +68,6 @@ impl CapsuleModules {
             CapsuleMode::Wallpaper => self.wallpaper_view.clone().into_any_element(),
             CapsuleMode::Clipboard => self.clipboard_view.clone().into_any_element(),
             CapsuleMode::Emoji => self.emoji_view.clone().into_any_element(),
-            CapsuleMode::Settings => self.settings_view.clone().into_any_element(),
             CapsuleMode::Record => self.record_view.clone().into_any_element(),
             CapsuleMode::Shelf => self.shelf_view.clone().into_any_element(),
         }
@@ -87,7 +84,6 @@ impl CapsuleModules {
         self.wallpaper_view.update(cx, |_, cx| cx.notify());
         self.clipboard_view.update(cx, |_, cx| cx.notify());
         self.emoji_view.update(cx, |_, cx| cx.notify());
-        self.settings_view.update(cx, |_, cx| cx.notify());
         self.record_view.update(cx, |_, cx| cx.notify());
         self.shelf_view.update(cx, |_, cx| cx.notify());
     }

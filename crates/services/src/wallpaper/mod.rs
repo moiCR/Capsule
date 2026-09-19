@@ -119,13 +119,13 @@ impl WallpaperService {
             return None;
         }
 
-        let target_w = 640.min(orig_w).max(1);
+        let target_w = 960.min(orig_w).max(1);
         let target_h = ((target_w as f32 * (orig_h as f32 / orig_w as f32)) as u32).max(1);
 
         let downscaled = img
             .resize_exact(target_w, target_h, image::imageops::FilterType::Triangle)
             .to_rgba8();
-        let blurred = image::imageops::blur(&downscaled, 14.0);
+        let blurred = image::imageops::blur(&downscaled, 4.5);
         blurred.save(&cached_path).ok()?;
 
         Some(cached_path)

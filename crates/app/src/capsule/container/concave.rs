@@ -1,10 +1,9 @@
 use gpui::{
-    AnyElement, Context, Div, ElementId, InteractiveElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, px, svg,
+    AnyElement, Context, Div, ElementId, InteractiveElement, ParentElement, Styled, div, px, svg,
 };
 
 use super::{CapsuleContainerRenderer, ContainerParams};
-use crate::capsule::{Capsule, CapsuleMode};
+use crate::capsule::Capsule;
 
 pub struct ConcaveContainer;
 
@@ -25,11 +24,11 @@ impl CapsuleContainerRenderer for ConcaveContainer {
         &self,
         content: AnyElement,
         params: &ContainerParams,
-        cx: &mut Context<Capsule>,
+        _cx: &mut Context<Capsule>,
     ) -> Div {
         let wing_size = (params.radius * 0.6).clamp(12.0, 32.0).min(params.height);
 
-        let mut pill_container = div()
+        let pill_container = div()
             .id(ElementId::NamedInteger("capsule-pill".into(), 0))
             .font_family(params.font_family.clone())
             .w(px(params.width))
@@ -43,12 +42,6 @@ impl CapsuleContainerRenderer for ConcaveContainer {
             .border_color(params.border_color)
             .shadow_lg()
             .overflow_hidden();
-
-        if params.mode == CapsuleMode::Settings {
-            pill_container = pill_container.on_click(cx.listener(|_this, _, _, cx| {
-                cx.stop_propagation();
-            }));
-        }
 
         let left_wing_bg = div()
             .absolute()

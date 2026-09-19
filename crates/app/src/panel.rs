@@ -12,6 +12,7 @@ use services::IpcSubscriber;
 
 use crate::capsule::Capsule;
 use crate::lockscreen::LockScreen;
+use crate::settings::SettingsWindow;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelMode {
@@ -179,6 +180,84 @@ impl LockScreenPanel {
                     window.remove_window();
                 });
             }
+        }
+    }
+}
+
+static IS_SETTINGS_OPEN: AtomicBool = AtomicBool::new(false);
+
+pub struct SettingsPanel;
+
+impl SettingsPanel {
+    pub fn is_open() -> bool {
+        IS_SETTINGS_OPEN.load(Ordering::SeqCst)
+    }
+
+    pub fn mark_closed() {
+        IS_SETTINGS_OPEN.store(false, Ordering::SeqCst);
+    }
+
+    pub fn window_options(cx: &gpui::App) -> WindowOptions {
+        let displays = cx.displays();
+        let display = displays.first();
+        let display_id = display.map(|d| d.id());
+        let display_bounds = display.map(|d| d.bounds());
+
+        WindowOptions {
+            display_id,
+            titlebar: None,
+            window_bounds: display_bounds.map(WindowBounds::Windowed),
+            app_id: Some("capsule-settings".to_string()),
+            window_background: WindowBackgroundAppearance::Transparent,
+            kind: WindowKind::LayerShell(LayerShellOptions {
+                namespace: "capsule-settings".to_string(),
+                layer: Layer::Overlay,
+                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                exclusive_zone: Some(px(-1.0)),
+                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    pub fn open(cx: &mut gpui::App) -> Option<WindowHandle<SettingsWindow>> {
+        if IS_SETTINGS_OPEN
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return None;
+        }
+
+        let options = Self::window_options(cx);
+
+        match cx.open_window(options, |window, cx| {
+            cx.new(|cx| SettingsWindow::new(window, cx))
+        }) {
+            Ok(w) => Some(w),
+            Err(err) => {
+                IS_SETTINGS_OPEN.store(false, Ordering::SeqCst);
+                eprintln!("Failed to open settings window: {err}");
+                None
+            }
+        }
+    }
+
+    pub fn close(cx: &mut gpui::App) {
+        for window in cx.windows() {
+            if let Some(settings_window) = window.downcast::<SettingsWindow>() {
+                let _ = settings_window.update(cx, |this, _, cx| {
+                    this.request_close(cx);
+                });
+            }
+        }
+    }
+
+    pub fn toggle(cx: &mut gpui::App) {
+        if Self::is_open() {
+            Self::close(cx);
+        } else {
+            Self::open(cx);
         }
     }
 }

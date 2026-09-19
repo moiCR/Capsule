@@ -41,10 +41,7 @@ impl CapsuleContainerRenderer for NormalContainer {
             .shadow_lg()
             .overflow_hidden();
 
-        if params.mode == CapsuleMode::Settings
-            || params.mode == CapsuleMode::Shelf
-            || params.mode == CapsuleMode::Default
-        {
+        if params.mode == CapsuleMode::Shelf || params.mode == CapsuleMode::Default {
             pill_container = pill_container.on_click(cx.listener(|_this, _, _, cx| {
                 cx.stop_propagation();
             }));
