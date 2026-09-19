@@ -41,14 +41,10 @@ impl CapsuleContainerRenderer for NormalContainer {
             .shadow_lg()
             .overflow_hidden();
 
-        if params.mode == CapsuleMode::Default {
-            pill_container =
-                pill_container
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.start_transition_internal(CapsuleMode::Dashboard, None, cx);
-                    }));
-        } else if params.mode == CapsuleMode::Settings || params.mode == CapsuleMode::Shelf {
+        if params.mode == CapsuleMode::Settings
+            || params.mode == CapsuleMode::Shelf
+            || params.mode == CapsuleMode::Default
+        {
             pill_container = pill_container.on_click(cx.listener(|_this, _, _, cx| {
                 cx.stop_propagation();
             }));

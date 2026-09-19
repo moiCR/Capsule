@@ -15,6 +15,7 @@ use super::widgets::{record::orb::render_record_orb, shelf::orb::render_shelf_or
 use super::{CapsuleMode, apple_island_morph, apple_island_spring};
 
 use super::modules::clipboard::ClipboardEvent;
+use super::modules::default::DefaultEvent;
 use super::modules::emoji::EmojiEvent;
 use super::modules::record::RecordEvent;
 use super::modules::settings::{SettingsEvent, SettingsTab};
@@ -55,6 +56,8 @@ pub struct Capsule {
     dimension_tracker: DimensionTracker,
     last_rendered_mode: Option<CapsuleMode>,
     is_mode_transition: bool,
+    is_hovered: bool,
+    last_known_workspace: services::WorkspaceInfo,
 }
 
 impl Capsule {
@@ -62,16 +65,16 @@ impl Capsule {
         let modules = CapsuleModules::new(cx);
         let orbit = cx.new(|cx| Orbit::new(window, cx));
         cx.observe(&orbit, |_, _, cx| cx.notify()).detach();
-        let (initial_w, initial_h) = modules.idle_view.read(cx).desired_dimensions();
+        let (initial_w, initial_h) = modules.default_view.read(cx).desired_dimensions();
         let r = if cx.has_global::<AppState>() {
             cx.global::<AppState>().config.get().ui.capsule_round
         } else {
             CapsuleMode::Default.radius()
         };
 
-        cx.observe(&modules.idle_view, |capsule, idle_view, cx| {
+        cx.observe(&modules.default_view, |capsule, default_view, cx| {
             if capsule.mode == CapsuleMode::Default && !capsule.drag_target_active {
-                let (desired_w, desired_h) = idle_view.read(cx).desired_dimensions();
+                let (desired_w, desired_h) = default_view.read(cx).desired_dimensions();
                 capsule.update_target_dimensions(desired_w, desired_h, cx);
             }
             cx.notify();
@@ -79,16 +82,85 @@ impl Capsule {
         .detach();
 
         cx.subscribe(
-            &modules.idle_view,
-            |capsule, _, event: &super::modules::idle::IdleEvent, cx| match event {
-                super::modules::idle::IdleEvent::ExpandRequested => {
-                    if capsule.mode == CapsuleMode::Default {
-                        capsule.start_transition_internal(CapsuleMode::Dashboard, None, cx);
+            &modules.default_view,
+            |capsule, _, event: &DefaultEvent, cx| match event {
+                DefaultEvent::WorkspaceClicked(ws_id) => {
+                    let ws_id = *ws_id;
+                    if cx.has_global::<AppState>() {
+                        cx.global::<AppState>().compositor.switch_workspace(ws_id);
                     }
+                }
+                DefaultEvent::StatusDockClicked => {
+                    capsule.start_transition_internal(CapsuleMode::Dashboard, None, cx);
                 }
             },
         )
         .detach();
+
+        if cx.has_global::<AppState>() {
+            let compositor = cx.global::<AppState>().compositor.clone();
+            let (ws_tx, mut ws_rx) =
+                tokio::sync::mpsc::unbounded_channel::<services::WorkspaceInfo>();
+
+            tokio::spawn(async move {
+                let mut rx = compositor.on_change_workspace();
+                let mut interval = tokio::time::interval(Duration::from_millis(250));
+                let mut last_ws = compositor.get_workspace();
+                loop {
+                    tokio::select! {
+                        result = rx.recv() => {
+                            match result {
+                                Ok(ws) => {
+                                    last_ws = ws.clone();
+                                    if ws_tx.send(ws).is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                                    let ws = compositor.get_workspace();
+                                    last_ws = ws.clone();
+                                    if ws_tx.send(ws).is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                            }
+                        }
+                        _ = interval.tick() => {
+                            let current_ws = compositor.get_workspace();
+                            if current_ws != last_ws {
+                                last_ws = current_ws.clone();
+                                if ws_tx.send(current_ws).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            let entity = cx.entity().downgrade();
+            let mut window_context = window.to_async(cx);
+            cx.foreground_executor()
+                .spawn(async move {
+                    while let Some(ws) = ws_rx.recv().await {
+                        if entity.upgrade().is_none() {
+                            break;
+                        }
+                        let _ = window_context.update(|window, cx| {
+                            let _ = entity.update(cx, |capsule, cx| {
+                                capsule.last_known_workspace = ws.clone();
+                                capsule.modules.default_view.update(cx, |default_mod, cx| {
+                                    default_mod.set_active_workspace(ws, cx);
+                                });
+                                capsule.on_workspace_changed(cx);
+                            });
+                            window.refresh();
+                        });
+                    }
+                })
+                .detach();
+        }
 
         cx.observe(&modules.dashboard_view, |_, _, cx| {
             cx.notify();
@@ -280,6 +352,15 @@ impl Capsule {
                     .await;
                 if this
                     .update(cx, |capsule: &mut Self, cx| {
+                        let current_ws = compositor.get_workspace();
+                        if capsule.last_known_workspace != current_ws {
+                            capsule.last_known_workspace = current_ws.clone();
+                            capsule.modules.default_view.update(cx, |default_mod, cx| {
+                                default_mod.set_active_workspace(current_ws, cx);
+                            });
+                            capsule.on_workspace_changed(cx);
+                        }
+
                         while let Some(cmd) = services::pop_ipc_command() {
                             services::log_info!("IPC", "Processing queued IPC command: {:?}", cmd);
                             capsule.handle_ipc_command(cmd, cx);
@@ -293,29 +374,29 @@ impl Capsule {
                                     "Processing Polkit auth request: '{}'",
                                     req.action_id
                                 );
-                                let _ = capsule.modules.polkit_view.update(cx, |p, cx| {
+                                capsule.modules.polkit_view.update(cx, |p, cx| {
                                     p.set_request(req, responder, cx);
                                 });
                                 capsule.start_transition_internal(CapsuleMode::Polkit, None, cx);
                             }
 
                             while let Some(cancelled_cookie) = polkit.pop_cancelled() {
-                                let _ = capsule.modules.polkit_view.update(cx, |p, cx| {
-                                    if let Some(ref req) = p.request {
-                                        if req.cookie == cancelled_cookie {
-                                            services::log_info!(
-                                                "POLKIT",
-                                                "Polkit authority cancelled active request for cookie='{}'",
-                                                cancelled_cookie
-                                            );
-                                            p.cancel(cx);
-                                        }
+                                capsule.modules.polkit_view.update(cx, |p, cx| {
+                                    if let Some(ref req) = p.request
+                                        && req.cookie == cancelled_cookie
+                                    {
+                                        services::log_info!(
+                                            "POLKIT",
+                                            "Polkit authority cancelled active request for cookie='{}'",
+                                            cancelled_cookie
+                                        );
+                                        p.cancel(cx);
                                     }
                                 });
                             }
                         }
 
-                        let _ = capsule.modules.polkit_view.update(cx, |p, cx| {
+                        capsule.modules.polkit_view.update(cx, |p, cx| {
                             p.poll_result(cx);
                         });
 
@@ -545,7 +626,7 @@ impl Capsule {
                     if latest_id != last_seen_notif_id {
                         last_seen_notif_id = latest_id;
                         if let Some(item) = latest {
-                            let _ = capsule.modules.notification_view.update(cx, |notif, cx| {
+                            capsule.modules.notification_view.update(cx, |notif, cx| {
                                 notif.set_item(Some(item), cx);
                             });
                             if capsule.mode == CapsuleMode::Default
@@ -730,6 +811,12 @@ impl Capsule {
             dimension_tracker: DimensionTracker::new(),
             last_rendered_mode: None,
             is_mode_transition: false,
+            is_hovered: false,
+            last_known_workspace: if cx.has_global::<AppState>() {
+                cx.global::<AppState>().compositor.get_workspace()
+            } else {
+                services::WorkspaceInfo::default()
+            },
         }
     }
 
@@ -752,6 +839,9 @@ impl Capsule {
             .iter()
             .chain(self.panel_manager.right.iter())
             .any(|p| matches!(p.kind, super::satellites::PanelKind::Media));
+        self.modules.default_view.update(cx, |module, _cx| {
+            module.set_open_panel_indices(open_indices.clone());
+        });
         self.modules.dashboard_view.update(cx, |module, _cx| {
             module.open_panel_indices = open_indices;
             module.is_media_panel_open = is_media_open;
@@ -768,13 +858,21 @@ impl Capsule {
             if self.drag_target_active {
                 return;
             }
-            self.target_width = target_w;
-            self.target_height = target_h;
-            if !self.animating {
-                self.current_width = target_w;
-                self.current_height = target_h;
+            let diff_w = (target_w - self.target_width).abs();
+            if diff_w > 1.0 {
+                self.target_width = target_w;
+                self.target_height = target_h;
+                if !self.animating {
+                    self.anim_start_w = self.current_width;
+                    self.anim_start_h = self.current_height;
+                    self.anim_start_r = self.current_radius;
+                    self.anim_start_y = self.current_y;
+                    self.anim_start_progress = self.anim_progress;
+                    self.anim_start_time = Some(Instant::now());
+                    self.animate_dimension_change(cx);
+                }
+                cx.notify();
             }
-            cx.notify();
         } else if matches!(self.mode, CapsuleMode::Record | CapsuleMode::Notification) {
             let diff_w = (target_w - self.target_width).abs();
             let diff_h = (target_h - self.target_height).abs();
@@ -900,6 +998,10 @@ impl Capsule {
         self.satellite_anim_task = Some(task);
     }
 
+    fn on_workspace_changed(&mut self, cx: &mut Context<Self>) {
+        cx.notify();
+    }
+
     fn sync_orbit_visibility(&mut self, cx: &mut Context<Self>) {
         let visible = self.mode == CapsuleMode::Default && !self.drag_target_active;
         self.orbit
@@ -941,7 +1043,7 @@ impl Capsule {
             .update(cx, |shelf, cx| shelf.reload_items(cx));
         self.sync_orbit_visibility(cx);
         if self.mode == CapsuleMode::Default {
-            let (width, _) = self.modules.idle_view.read(cx).desired_dimensions();
+            let (width, _) = self.modules.default_view.read(cx).desired_dimensions();
             self.target_width = width;
             self.target_height = CapsuleMode::Default.dimensions().1;
             self.target_radius = cx.global::<AppState>().config.get().ui.capsule_round;
@@ -1038,80 +1140,80 @@ impl Capsule {
                             return true;
                         }
 
-                        if let Some(last) = capsule.last_drag_over {
-                            if last.elapsed().as_millis() > 140 {
-                                capsule.drag_target_active = false;
-                                capsule.sync_orbit_visibility(cx);
-                                capsule.last_drag_over = None;
-                                capsule.drag_monitor_task = None;
+                        if let Some(last) = capsule.last_drag_over
+                            && last.elapsed().as_millis() > 140
+                        {
+                            capsule.drag_target_active = false;
+                            capsule.sync_orbit_visibility(cx);
+                            capsule.last_drag_over = None;
+                            capsule.drag_monitor_task = None;
 
-                                if capsule.mode == CapsuleMode::Default {
-                                    let (w, h) = {
-                                        let (desired_w, _h) =
-                                            capsule.modules.idle_view.read(cx).desired_dimensions();
-                                        (desired_w, CapsuleMode::Default.dimensions().1)
-                                    };
-                                    let r = if cx.has_global::<AppState>() {
-                                        cx.global::<AppState>().config.get().ui.capsule_round
-                                    } else {
-                                        CapsuleMode::Default.radius()
-                                    };
-                                    capsule.anim_start_w = capsule.current_width;
-                                    capsule.anim_start_h = capsule.current_height;
-                                    capsule.anim_start_r = capsule.current_radius;
-                                    capsule.anim_start_y = capsule.current_y;
-                                    capsule.anim_start_progress = capsule.anim_progress;
-                                    capsule.anim_start_time = Some(Instant::now());
-                                    capsule.animating = true;
-                                    capsule.is_mode_transition = false;
-                                    capsule.target_width = w;
-                                    capsule.target_height = h;
-                                    capsule.target_radius = r;
-
-                                    let compositor = cx.global::<AppState>().compositor.clone();
-                                    let task = cx.spawn(async move |this, cx| {
-                                        loop {
-                                            cx.background_executor()
-                                                .timer(compositor.get_frame_duration())
-                                                .await;
-                                            let done = this
-                                                .update(cx, |capsule, cx| {
-                                                    let duration = if cx.has_global::<AppState>() {
-                                                        cx.global::<AppState>()
-                                                            .config
-                                                            .get()
-                                                            .ui
-                                                            .animation_duration_ms
-                                                            as f32
-                                                            / 1000.0
-                                                    } else {
-                                                        0.28
-                                                    };
-                                                    let finished = capsule.tick_animation(duration);
-                                                    cx.notify();
-                                                    finished
-                                                })
-                                                .unwrap_or(true);
-
-                                            if done {
-                                                this.update(cx, |capsule, cx| {
-                                                    capsule.animating = false;
-                                                    capsule.is_mode_transition = false;
-                                                    capsule.current_width = capsule.target_width;
-                                                    capsule.current_height = capsule.target_height;
-                                                    capsule.anim_task = None;
-                                                    cx.notify();
-                                                })
-                                                .ok();
-                                                break;
-                                            }
-                                        }
-                                    });
-                                    capsule.anim_task = Some(task);
-                                }
-                                cx.notify();
-                                return true;
+                            if capsule.mode == CapsuleMode::Default {
+                                let (w, h) = {
+                                    let (desired_w, _h) =
+                                        capsule.modules.default_view.read(cx).desired_dimensions();
+                                    (desired_w, CapsuleMode::Default.dimensions().1)
+                                };
+                                let r = if cx.has_global::<AppState>() {
+                                    cx.global::<AppState>().config.get().ui.capsule_round
+                                } else {
+                                    CapsuleMode::Default.radius()
+                                };
+                                capsule.anim_start_w = capsule.current_width;
+                                capsule.anim_start_h = capsule.current_height;
+                                capsule.anim_start_r = capsule.current_radius;
+                                capsule.anim_start_y = capsule.current_y;
+                                capsule.anim_start_progress = capsule.anim_progress;
+                                capsule.anim_start_time = Some(Instant::now());
+                                capsule.animating = true;
+                                capsule.is_mode_transition = false;
+                                capsule.target_width = w;
+                                capsule.target_height = h;
+                                capsule.target_radius = r;
                             }
+
+                            let compositor = cx.global::<AppState>().compositor.clone();
+                            let task = cx.spawn(async move |this, cx| {
+                                loop {
+                                    cx.background_executor()
+                                        .timer(compositor.get_frame_duration())
+                                        .await;
+                                    let done = this
+                                        .update(cx, |capsule, cx| {
+                                            let duration = if cx.has_global::<AppState>() {
+                                                cx.global::<AppState>()
+                                                    .config
+                                                    .get()
+                                                    .ui
+                                                    .animation_duration_ms
+                                                    as f32
+                                                    / 1000.0
+                                            } else {
+                                                0.28
+                                            };
+                                            let finished = capsule.tick_animation(duration);
+                                            cx.notify();
+                                            finished
+                                        })
+                                        .unwrap_or(true);
+
+                                    if done {
+                                        this.update(cx, |capsule, cx| {
+                                            capsule.animating = false;
+                                            capsule.is_mode_transition = false;
+                                            capsule.current_width = capsule.target_width;
+                                            capsule.current_height = capsule.target_height;
+                                            capsule.anim_task = None;
+                                            cx.notify();
+                                        })
+                                        .ok();
+                                        break;
+                                    }
+                                }
+                            });
+                            capsule.anim_task = Some(task);
+                            cx.notify();
+                            return true;
                         }
                         false
                     })
@@ -1231,7 +1333,7 @@ impl Capsule {
         }
 
         let (target_w, target_h) = if mode == CapsuleMode::Default {
-            let (w, _h) = self.modules.idle_view.read(cx).desired_dimensions();
+            let (w, _h) = self.modules.default_view.read(cx).desired_dimensions();
             (w, mode.dimensions().1)
         } else if mode == CapsuleMode::Notification {
             self.modules.notification_view.read(cx).desired_dimensions()
@@ -1443,7 +1545,7 @@ impl Capsule {
                     let config = cx.global::<AppState>().config.get();
                     let editor = &config.defaults.editor;
                     let is_terminal_app = matches!(
-                        editor.trim().split_whitespace().next().unwrap_or(""),
+                        editor.split_whitespace().next().unwrap_or(""),
                         "nvim" | "vim" | "vi" | "nano" | "hx" | "helix" | "micro"
                     );
                     let cmd = if is_terminal_app {
@@ -1464,7 +1566,7 @@ impl Capsule {
                     let config = cx.global::<AppState>().config.get();
                     let file_manager = &config.defaults.file_manager;
                     let is_terminal_app = matches!(
-                        file_manager.trim().split_whitespace().next().unwrap_or(""),
+                        file_manager.split_whitespace().next().unwrap_or(""),
                         "yazi" | "ranger" | "lf" | "nnn" | "mc" | "vifm"
                     );
                     let cmd = if is_terminal_app {
@@ -1606,6 +1708,7 @@ impl Render for Capsule {
             || self.mode == CapsuleMode::Clipboard
             || self.mode == CapsuleMode::Emoji
             || self.mode == CapsuleMode::Settings
+            || (self.mode == CapsuleMode::Default && self.panel_manager.has_open())
             || self.drag_target_active;
 
         let needs_exclusive_focus = self.mode == CapsuleMode::Launcher
@@ -1649,11 +1752,10 @@ impl Render for Capsule {
             window.on_mouse_event(move |_: &MouseExitEvent, phase, _window, cx| {
                 if phase == DispatchPhase::Bubble {
                     let _ = entity.update(cx, |capsule, cx| {
-                        if capsule.mode == CapsuleMode::Notification {
-                            capsule.modules.notification_view.update(cx, |view, cx| {
-                                view.set_expanded(false, cx);
-                            });
-                        }
+                        capsule.is_hovered = false;
+                        capsule.modules.notification_view.update(cx, |view, cx| {
+                            view.set_expanded(false, cx);
+                        });
                     });
                 }
             });
@@ -1675,14 +1777,13 @@ impl Render for Capsule {
                         && my <= pill_y + pill_h;
 
                     let _ = entity.update(cx, |capsule, cx| {
-                        if capsule.mode == CapsuleMode::Notification {
-                            if capsule.modules.notification_view.read(cx).is_replying() {
-                                return;
-                            }
-                            capsule.modules.notification_view.update(cx, |view, cx| {
-                                view.set_expanded(inside, cx);
-                            });
+                        capsule.is_hovered = inside;
+                        if capsule.modules.notification_view.read(cx).is_replying() {
+                            return;
                         }
+                        capsule.modules.notification_view.update(cx, |view, cx| {
+                            view.set_expanded(inside, cx);
+                        });
                     });
                 }
             });
@@ -1829,7 +1930,6 @@ impl Render for Capsule {
             content_container = content_container.child(wrapper);
         } else {
             let default_opacity = (1.0 - self.anim_progress).clamp(0.0, 1.0);
-            let hover_opacity = (self.anim_progress).clamp(0.0, 1.0);
 
             if default_opacity > 0.001 {
                 content_container = content_container.child(
@@ -1843,26 +1943,7 @@ impl Render for Capsule {
                         .justify_center()
                         .overflow_hidden()
                         .opacity(default_opacity)
-                        .child(self.modules.idle_view.clone().into_any_element()),
-                );
-            }
-
-            if hover_opacity > 0.001 {
-                let tracked_content = self
-                    .dimension_tracker
-                    .track(self.modules.dashboard_view.clone().into_any_element());
-
-                content_container = content_container.child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .w_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .opacity(hover_opacity)
-                        .child(tracked_content),
+                        .child(self.modules.default_view.clone().into_any_element()),
                 );
             }
         }
@@ -1893,10 +1974,10 @@ impl Render for Capsule {
         };
 
         let renderer: Box<dyn super::container::CapsuleContainerRenderer> =
-            if self.mode == CapsuleMode::Settings {
+            if self.drag_target_active {
                 Box::new(super::container::NormalContainer::new())
             } else {
-                match ui_config.capsule_style {
+                match cx.global::<AppState>().config.get().ui.capsule_style {
                     services::CapsuleStyle::Normal => {
                         Box::new(super::container::NormalContainer::new())
                     }
@@ -1910,13 +1991,17 @@ impl Render for Capsule {
             .render(content_container.into_any_element(), &params, cx)
             .id("capsule-hover")
             .on_hover(cx.listener(|capsule, hovered, window, cx| {
+                let win_hovered = window.is_window_hovered();
+                let actual_hovered = *hovered && win_hovered;
+
                 if capsule.mode == CapsuleMode::Notification {
-                    let win_hovered = window.is_window_hovered();
-                    let actual_hovered = *hovered && win_hovered;
+                    capsule.is_hovered = actual_hovered;
                     capsule
                         .modules
                         .notification_view
                         .update(cx, |view, cx| view.set_expanded(actual_hovered, cx));
+                } else {
+                    capsule.is_hovered = actual_hovered;
                 }
             }))
             .drag_over::<gpui::ExternalPaths>(move |style, _paths, window, cx| {
@@ -1939,7 +2024,7 @@ impl Render for Capsule {
             )
             .on_drop(cx.listener(Self::drop_on_shelf));
 
-        if self.mode == CapsuleMode::Dashboard {
+        if self.mode == CapsuleMode::Dashboard || self.mode == CapsuleMode::Default {
             self.panel_manager
                 .set_animation_duration(ui_config.animation_duration_ms as f32 / 1000.0);
         }
@@ -1948,7 +2033,10 @@ impl Render for Capsule {
 
         let has_panels =
             !self.panel_manager.left.is_empty() || !self.panel_manager.right.is_empty();
-        if self.mode == CapsuleMode::Dashboard && has_panels && cx.has_global::<AppState>() {
+        if (self.mode == CapsuleMode::Dashboard || self.mode == CapsuleMode::Default)
+            && has_panels
+            && cx.has_global::<AppState>()
+        {
             use super::satellites as PM;
 
             let dash_w = self.current_width;
@@ -2044,9 +2132,16 @@ impl Render for Capsule {
                         PM::PanelKind::Volume => self.modules.dashboard_view.update(cx, |_, cx| {
                             PM::volume::render_volume_mini_panel(panel_h, &active_theme, cx)
                         }),
-                        PM::PanelKind::Media => self.modules.dashboard_view.update(cx, |module, cx| {
-                            PM::media::render_media_mini_panel(panel_h, module, &active_theme, cx)
-                        }),
+                        PM::PanelKind::Media => {
+                            self.modules.dashboard_view.update(cx, |module, cx| {
+                                PM::media::render_media_mini_panel(
+                                    panel_h,
+                                    module,
+                                    &active_theme,
+                                    cx,
+                                )
+                            })
+                        }
                     };
                     let surface = PM::surface::PanelSurface {
                         lane,
@@ -2060,8 +2155,26 @@ impl Render for Capsule {
                     };
                     let measured_content = panel.tracker.track(mini).into_any_element();
                     let framed = surface.render(measured_content, content_size, &active_theme);
-                    satellites_layer = satellites_layer
-                        .child(div().absolute().left(px(x)).top(px(y)).child(framed));
+                    let panel_wrapper_id = match &panel.kind {
+                        PM::PanelKind::Tray(i) => *i as u32,
+                        PM::PanelKind::Wifi => 10001,
+                        PM::PanelKind::Bluetooth => 10002,
+                        PM::PanelKind::Calendar => 10003,
+                        PM::PanelKind::Volume => 10004,
+                        PM::PanelKind::Media => 10005,
+                    };
+                    satellites_layer = satellites_layer.child(
+                        div()
+                            .id(("satellite-panel-wrapper", panel_wrapper_id))
+                            .absolute()
+                            .left(px(x))
+                            .top(px(y))
+                            .on_hover(cx.listener(|capsule, hovered: &bool, _window, _cx| {
+                                capsule.is_hovered = *hovered;
+                            }))
+                            .on_click(cx.listener(|_this, _, _, cx| cx.stop_propagation()))
+                            .child(framed),
+                    );
                     if phase < 0.85 {
                         satellite_surfaces.push(surface);
                     }
@@ -2121,9 +2234,18 @@ impl Render for Capsule {
             .pt(px(self.current_y))
             .child(flex_container);
 
-        if self.mode == CapsuleMode::Settings {
+        if self.mode == CapsuleMode::Settings
+            || (self.mode == CapsuleMode::Default && self.panel_manager.has_open())
+        {
             root = root.on_click(cx.listener(|this, _, _, cx| {
-                this.start_transition_internal(CapsuleMode::Default, None, cx);
+                if this.mode == CapsuleMode::Settings {
+                    this.start_transition_internal(CapsuleMode::Default, None, cx);
+                } else if this.panel_manager.has_open() {
+                    this.panel_manager.clear();
+                    this.sync_panel_indices(cx);
+                    this.satellite_anim_task = None;
+                    cx.notify();
+                }
             }));
         }
 

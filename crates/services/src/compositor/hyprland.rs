@@ -119,6 +119,14 @@ struct MonitorWorkspaceData {
 }
 
 #[derive(serde::Deserialize)]
+struct HyprWorkspaceData {
+    #[serde(default)]
+    id: i64,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(serde::Deserialize)]
 struct MonitorData {
     #[serde(default)]
     focused: bool,
@@ -150,6 +158,8 @@ fn query_hypr_command(cmd: &str) -> Option<String> {
 
     use std::io::{Read, Write};
     let mut stream = std::os::unix::net::UnixStream::connect(socket_path).ok()?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
     stream.write_all(cmd.as_bytes()).ok()?;
     let mut resp = String::new();
     stream.read_to_string(&mut resp).ok()?;
@@ -273,6 +283,44 @@ impl Compositor for Hyprland {
             None
         });
         res.ok().flatten()
+    }
+
+    fn get_workspaces(&self) -> Vec<WorkspaceInfo> {
+        let res = catch_unwind(|| {
+            if let Some(json_str) = query_hypr_command("j/workspaces")
+                && let Ok(raw) = serde_json::from_str::<Vec<HyprWorkspaceData>>(&json_str)
+            {
+                let mut list: Vec<WorkspaceInfo> = raw
+                    .into_iter()
+                    .filter(|w| !w.name.starts_with("special:") && w.id > 0)
+                    .map(|w| {
+                        let num = w.name.parse::<i32>().unwrap_or(w.id.max(1) as i32);
+                        WorkspaceInfo {
+                            id: w.id,
+                            num,
+                            name: w.name,
+                            is_special: false,
+                            special_name: None,
+                        }
+                    })
+                    .collect();
+                list.sort_by_key(|w| w.num);
+                return list;
+            }
+            vec![]
+        });
+        res.unwrap_or_default()
+    }
+
+    fn switch_workspace(&self, id: i64) {
+        let _ = catch_unwind(|| {
+            if id < 0 {
+                let _ = query_hypr_command("dispatch togglespecialworkspace");
+            } else {
+                let cmd = format!("dispatch workspace {id}");
+                let _ = query_hypr_command(&cmd);
+            }
+        });
     }
 
     fn request_layer_focus(&self) {}
@@ -475,30 +523,54 @@ pub async fn run_events_listener(
         use tokio::io::AsyncBufReadExt;
         let mut reader = tokio::io::BufReader::new(stream).lines();
 
-        while let Ok(Some(line)) = reader.next_line().await {
-            let parsed = parse_hyprland_event(&line, &current_workspace.load());
-            let ws_opt = if let Some(ws) = parsed {
-                Some(ws)
-            } else if line.starts_with("renameworkspace>>")
-                || line.starts_with("createworkspace>>")
-                || line.starts_with("createworkspacev2>>")
-                || line.starts_with("destroyworkspace>>")
-                || line.starts_with("destroyworkspacev2>>")
-            {
-                tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
-                    .await
-                    .ok()
-                    .flatten()
-            } else {
-                None
+        loop {
+            let res = tokio::select! {
+                line_res = reader.next_line() => line_res,
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                    let active = tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
+                        .await
+                        .ok()
+                        .flatten();
+                    if let Some(ws) = active {
+                        let prev = current_workspace.load();
+                        if **prev != ws {
+                            current_workspace.store(Arc::new(ws.clone()));
+                            let _ = tx.send(ws);
+                        }
+                    }
+                    continue;
+                }
             };
 
-            if let Some(ws) = ws_opt {
-                let prev = current_workspace.load();
-                if **prev != ws {
-                    current_workspace.store(Arc::new(ws.clone()));
-                    let _ = tx.send(ws);
+            match res {
+                Ok(Some(line)) => {
+                    let parsed = parse_hyprland_event(&line, &current_workspace.load());
+                    let ws_opt = if let Some(ws) = parsed {
+                        Some(ws)
+                    } else if line.starts_with("renameworkspace>>")
+                        || line.starts_with("createworkspace>>")
+                        || line.starts_with("createworkspacev2>>")
+                        || line.starts_with("destroyworkspace>>")
+                        || line.starts_with("destroyworkspacev2>>")
+                    {
+                        tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
+                            .await
+                            .ok()
+                            .flatten()
+                    } else {
+                        None
+                    };
+
+                    if let Some(ws) = ws_opt {
+                        let prev = current_workspace.load();
+                        if **prev != ws {
+                            current_workspace.store(Arc::new(ws.clone()));
+                            let _ = tx.send(ws);
+                        }
+                    }
                 }
+                Ok(None) => break,
+                Err(_) => break,
             }
         }
 

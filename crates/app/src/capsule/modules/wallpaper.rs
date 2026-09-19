@@ -506,20 +506,21 @@ impl Render for WallpaperModule {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
-        let (search_placeholder, no_wallpapers, apply_hint) = if cx.has_global::<services::AppState>() {
-            let lang = &cx.global::<services::AppState>().language;
-            (
-                lang.get("wallpaper.search_placeholder"),
-                lang.get("wallpaper.no_wallpapers"),
-                lang.get("wallpaper.apply_hint"),
-            )
-        } else {
-            (
-                "Buscar fondos...".to_string(),
-                "No hay imágenes en ~/Wallpapers".to_string(),
-                "↵ Aplicar".to_string(),
-            )
-        };
+        let (search_placeholder, no_wallpapers, apply_hint) =
+            if cx.has_global::<services::AppState>() {
+                let lang = &cx.global::<services::AppState>().language;
+                (
+                    lang.get("wallpaper.search_placeholder"),
+                    lang.get("wallpaper.no_wallpapers"),
+                    lang.get("wallpaper.apply_hint"),
+                )
+            } else {
+                (
+                    "Buscar fondos...".to_string(),
+                    "No hay imágenes en ~/Wallpapers".to_string(),
+                    "↵ Aplicar".to_string(),
+                )
+            };
 
         window.focus(&self.focus_handle, cx);
 
@@ -664,16 +665,11 @@ impl Render for WallpaperModule {
                     .flex_row()
                     .items_center()
                     .gap_2()
-                    .child(
-                        div()
-                            .size(px(6.0))
-                            .rounded_full()
-                            .bg(if total > 0 {
-                                theme.accent()
-                            } else {
-                                theme.foreground_muted().opacity(0.4)
-                            }),
-                    )
+                    .child(div().size(px(6.0)).rounded_full().bg(if total > 0 {
+                        theme.accent()
+                    } else {
+                        theme.foreground_muted().opacity(0.4)
+                    }))
                     .child(
                         div()
                             .text_size(px(12.0))
@@ -685,18 +681,13 @@ impl Render for WallpaperModule {
                     ),
             )
             .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.foreground_muted().opacity(0.6))
-                            .child(apply_hint),
-                    ),
+                div().flex().flex_row().items_center().gap_3().child(
+                    div()
+                        .text_size(px(11.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(theme.foreground_muted().opacity(0.6))
+                        .child(apply_hint),
+                ),
             );
 
         div()

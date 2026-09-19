@@ -4,8 +4,9 @@ members = ["crates/*"]
 
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/moiCR/zed", branch = "capsule-patch", features = ["wayland"] }
-gpui_platform = { git = "https://github.com/moiCR/zed", branch = "capsule-patch", features = ["wayland"] }
+gpui = { git = "https://github.com/moiCR/gpui-capsule", branch = "capsule-patch", features = ["wayland"] }
+gpui_platform = { git = "https://github.com/moiCR/gpui-capsule", branch = "capsule-patch", features = ["wayland"] }
+
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 anyhow = "1.0.104"

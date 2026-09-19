@@ -11,12 +11,14 @@ path = "src/main.rs"
 gpui.workspace = true
 gpui_platform.workspace = true
 tokio.workspace = true
+anyhow.workspace = true
 assets.workspace = true
 ui = { path = "../ui" }
 services = { path = "../services" }
 chrono.workspace = true
 libc = "0.2"
 dirs.workspace = true
+image = "0.25"
 
 
 

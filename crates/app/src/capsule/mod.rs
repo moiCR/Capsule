@@ -28,7 +28,7 @@ pub enum CapsuleMode {
 impl CapsuleMode {
     pub fn dimensions(&self) -> (f32, f32) {
         match self {
-            CapsuleMode::Default => (138.0, 42.0),
+            CapsuleMode::Default => (300.0, 42.0),
             CapsuleMode::Dashboard => (540.0, 540.0),
             CapsuleMode::Notification => (348.0, 68.0),
             CapsuleMode::Launcher => (380.0, 360.0),

@@ -51,7 +51,7 @@ pub use polkit::{
     PolkitAuthRequest, PolkitService, authenticate_user, pop_polkit_request, push_polkit_request,
     start_polkit_agent,
 };
-pub use power::{PowerProfile, PowerService};
+pub use power::{BatteryStatus, PowerProfile, PowerService};
 pub use record::{
     RecordAudio, RecordBackend, RecordOptions, RecordService, RecordStatus, RecordTarget,
 };

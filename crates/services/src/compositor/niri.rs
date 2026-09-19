@@ -79,6 +79,54 @@ impl Compositor for Niri {
         res.ok().flatten()
     }
 
+    fn get_workspaces(&self) -> Vec<WorkspaceInfo> {
+        let res = catch_unwind(|| {
+            let Ok(mut socket) = Socket::connect() else {
+                return vec![];
+            };
+            let Ok(Ok(Response::Workspaces(workspaces))) = socket.send(Request::Workspaces) else {
+                return vec![];
+            };
+            let mut list: Vec<WorkspaceInfo> = workspaces
+                .iter()
+                .map(|ws| {
+                    let name = match &ws.name {
+                        Some(n) => n.clone(),
+                        None => ws.idx.to_string(),
+                    };
+                    let (is_special, special_name) = match ws.name.as_deref() {
+                        Some(n) if n.starts_with("special:") => (
+                            true,
+                            Some(n.strip_prefix("special:").unwrap_or(n).to_string()),
+                        ),
+                        _ => (false, None),
+                    };
+                    WorkspaceInfo {
+                        id: ws.id as i64,
+                        num: ws.idx as i32,
+                        name,
+                        is_special,
+                        special_name,
+                    }
+                })
+                .collect();
+            list.sort_by_key(|w| w.num);
+            list
+        });
+        res.unwrap_or_default()
+    }
+
+    fn switch_workspace(&self, id: i64) {
+        let _ = catch_unwind(|| {
+            let Ok(mut socket) = Socket::connect() else {
+                return;
+            };
+            let _ = socket.send(Request::Action(niri_ipc::Action::FocusWorkspace {
+                reference: niri_ipc::WorkspaceReferenceArg::Id(id as u64),
+            }));
+        });
+    }
+
     fn request_layer_focus(&self) {}
 }
 

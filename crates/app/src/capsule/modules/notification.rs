@@ -247,8 +247,8 @@ impl NotificationModule {
 
     pub fn set_item(&mut self, item: Option<NotificationItem>, cx: &mut Context<Self>) {
         if self.active_item != item {
-            let is_different_notification = self.active_item.as_ref().map(|item| item.id)
-                != item.as_ref().map(|item| item.id);
+            let is_different_notification =
+                self.active_item.as_ref().map(|item| item.id) != item.as_ref().map(|item| item.id);
             if is_different_notification {
                 self.reply = None;
                 self.expanded = false;

@@ -1,8 +1,11 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use gpui::{
     AppContext, PlatformDisplay, WindowBackgroundAppearance, WindowBounds, WindowHandle,
     WindowKind, WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
     px,
+    session_lock::SessionLockOptions,
 };
 
 use services::IpcSubscriber;
@@ -69,8 +72,6 @@ impl CapsulePanel {
     }
 }
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 static IS_LOCKSCREEN_OPEN: AtomicBool = AtomicBool::new(false);
 
 pub struct LockScreenPanel;
@@ -91,15 +92,7 @@ impl LockScreenPanel {
             window_bounds: Some(WindowBounds::Windowed(display.bounds())),
             app_id: Some("capsule-lockscreen".to_string()),
             window_background: WindowBackgroundAppearance::Opaque,
-            kind: WindowKind::LayerShell(LayerShellOptions {
-                namespace: "capsule-lockscreen".to_string(),
-                layer: Layer::Overlay,
-                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
-                margin: None,
-                exclusive_zone: Some(px(-1.0)),
-                keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                ..Default::default()
-            }),
+            kind: WindowKind::SessionLock(SessionLockOptions {}),
             ..Default::default()
         }
     }
@@ -109,31 +102,83 @@ impl LockScreenPanel {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            eprintln!("[LockScreenPanel] Lockscreen is already open. Skipping open_all.");
             return Vec::new();
         }
 
-        if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
-            let _ = std::process::Command::new("hyprctl")
-                .args(["eval", "hl.dsp.submap(\"lock\")"])
-                .spawn();
-        }
-
         let displays = cx.displays();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+
+        let blur_paths: Vec<Option<std::path::PathBuf>> = std::thread::scope(|s| {
+            let mut threads = Vec::new();
+            for (index, display) in displays.iter().enumerate() {
+                let bounds = display.bounds();
+                threads.push(s.spawn(move || {
+                    let blur_file = format!("/tmp/capsule_lock_blur_{index}_{timestamp}.jpg");
+                    let x: f32 = bounds.origin.x.into();
+                    let y: f32 = bounds.origin.y.into();
+                    let w: f32 = bounds.size.width.into();
+                    let h: f32 = bounds.size.height.into();
+                    let geom = format!(
+                        "{},{} {}x{}",
+                        x as i32,
+                        y as i32,
+                        w as u32,
+                        h as u32
+                    );
+                    let cmd = format!(
+                        "IM_BIN=magick; command -v magick >/dev/null 2>&1 || IM_BIN=convert; grim -g '{geom}' -t ppm - | $IM_BIN - -scale 20% -blur 0x5 -resize 500% {blur_file}"
+                    );
+                    let ok = std::process::Command::new("sh")
+                        .args(["-c", &cmd])
+                        .status()
+                        .map(|s| s.success())
+                        .unwrap_or(false);
+                    if ok && std::path::Path::new(&blur_file).exists() {
+                        Some(std::path::PathBuf::from(blur_file))
+                    } else {
+                        None
+                    }
+                }));
+            }
+            threads
+                .into_iter()
+                .map(|t| t.join().unwrap_or(None))
+                .collect()
+        });
+
         let mut handles = Vec::new();
 
         for (index, display) in displays.iter().enumerate() {
             let is_primary = index == 0;
             let options = Self::window_options(&**display);
+            let blur_path = blur_paths.get(index).cloned().flatten();
 
             match cx.open_window(options, |_, cx| {
-                cx.new(|cx| LockScreen::new(cx, is_primary))
+                cx.new(|cx| LockScreen::new(cx, is_primary, blur_path))
             }) {
                 Ok(w) => handles.push(w),
                 Err(err) => eprintln!("Failed to open lockscreen on display {index}: {err}"),
             }
         }
 
+        if handles.is_empty() {
+            IS_LOCKSCREEN_OPEN.store(false, Ordering::SeqCst);
+        }
+
         handles
+    }
+
+    pub fn close_all(cx: &mut gpui::App) {
+        IS_LOCKSCREEN_OPEN.store(false, Ordering::SeqCst);
+        for window in cx.windows() {
+            if let Some(lock_window) = window.downcast::<LockScreen>() {
+                let _ = lock_window.update(cx, |_, window, _| {
+                    window.remove_window();
+                });
+            }
+        }
     }
 }

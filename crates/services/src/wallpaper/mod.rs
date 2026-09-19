@@ -82,6 +82,55 @@ impl WallpaperService {
         None
     }
 
+    pub fn get_blurred_wallpaper(&self) -> Option<PathBuf> {
+        let current = self.get_current_wallpaper()?;
+        Self::create_or_get_blur(&current)
+    }
+
+    pub fn create_or_get_blur(src: &Path) -> Option<PathBuf> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let metadata = std::fs::metadata(src).ok()?;
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let mut hasher = DefaultHasher::new();
+        src.hash(&mut hasher);
+        modified.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let cache_dir = PathBuf::from("/tmp/capsule_blur");
+        let _ = std::fs::create_dir_all(&cache_dir);
+        let cached_path = cache_dir.join(format!("{:x}.jpg", hash));
+
+        if cached_path.exists() {
+            return Some(cached_path);
+        }
+
+        let img = image::open(src).ok()?;
+        let orig_w = img.width();
+        let orig_h = img.height();
+        if orig_w == 0 || orig_h == 0 {
+            return None;
+        }
+
+        let target_w = 640.min(orig_w).max(1);
+        let target_h = ((target_w as f32 * (orig_h as f32 / orig_w as f32)) as u32).max(1);
+
+        let downscaled = img
+            .resize_exact(target_w, target_h, image::imageops::FilterType::Triangle)
+            .to_rgba8();
+        let blurred = image::imageops::blur(&downscaled, 14.0);
+        blurred.save(&cached_path).ok()?;
+
+        Some(cached_path)
+    }
+
     /// Checks if the daemon is active.
     fn is_daemon_running(&self) -> bool {
         Command::new(self.engine.cli_cmd())
@@ -183,6 +232,14 @@ impl WallpaperService {
         if let Ok(mut current_guard) = self.current.lock() {
             *current_guard = Some(path_buf);
         }
+
+        let blur_target = path.to_path_buf();
+        tokio::spawn(async move {
+            let _ = tokio::task::spawn_blocking(move || {
+                Self::create_or_get_blur(&blur_target);
+            })
+            .await;
+        });
 
         if save_to_disk {
             let _ = fs::write(&self.config_file, &path_str);

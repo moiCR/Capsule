@@ -164,6 +164,13 @@ impl PanelManager {
         (max_h - used - if has_active { PANEL_GAP } else { 0.0 }).max(0.0)
     }
 
+    pub fn has_open(&self) -> bool {
+        self.left
+            .iter()
+            .chain(self.right.iter())
+            .any(|panel| !panel.is_closing())
+    }
+
     #[allow(dead_code)]
     pub fn is_open(&self, kind: &PanelKind) -> bool {
         self.left
@@ -185,6 +192,16 @@ impl PanelManager {
     }
 
     pub fn toggle(&mut self, kind: PanelKind, panel_h: f32, max_lane_h: f32) {
+        self.toggle_in_lane(kind, panel_h, max_lane_h, None);
+    }
+
+    pub fn toggle_in_lane(
+        &mut self,
+        kind: PanelKind,
+        panel_h: f32,
+        max_lane_h: f32,
+        preferred_lane: Option<Lane>,
+    ) {
         let now = Instant::now();
         if let Some(panel) = self
             .left
@@ -196,12 +213,16 @@ impl PanelManager {
             return;
         }
 
-        let use_left =
-            Self::lane_free(&self.left, max_lane_h) >= Self::lane_free(&self.right, max_lane_h);
-        let (lane, panels) = if use_left {
-            (Lane::Left, &mut self.left)
-        } else {
-            (Lane::Right, &mut self.right)
+        let lane = preferred_lane.unwrap_or_else(|| {
+            if Self::lane_free(&self.left, max_lane_h) >= Self::lane_free(&self.right, max_lane_h) {
+                Lane::Left
+            } else {
+                Lane::Right
+            }
+        });
+        let panels = match lane {
+            Lane::Left => &mut self.left,
+            Lane::Right => &mut self.right,
         };
         while Self::lane_free(panels, max_lane_h) < panel_h {
             if let Some(panel) = panels.iter_mut().find(|panel| !panel.is_closing()) {

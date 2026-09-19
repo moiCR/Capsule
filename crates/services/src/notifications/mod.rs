@@ -146,9 +146,10 @@ impl NotificationStore {
         }
         if let Ok(guard) = self.latest_notification.lock() {
             if let Some(item) = guard.item.as_ref() {
-                let is_hover_active = guard.hovered_at.as_ref().is_some_and(|hovered_at| {
-                    hovered_at.elapsed() < Duration::from_secs(60)
-                });
+                let is_hover_active = guard
+                    .hovered_at
+                    .as_ref()
+                    .is_some_and(|hovered_at| hovered_at.elapsed() < Duration::from_secs(60));
                 if is_hover_active || item.received_at.elapsed() < item.timeout {
                     return Some(item.clone());
                 }
@@ -800,7 +801,6 @@ mod tests {
                 .is_none()
         );
     }
-
 
     #[test]
     fn hover_capped_at_maximum_safety_duration() {

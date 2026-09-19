@@ -73,27 +73,27 @@ pub fn render_media_player_widget(
     // Ambient blurred album art background layer (contained strictly within inner bounds)
     let card_ratio = content_w / 118.0;
 
-    if anim_progress < 1.0 {
-        if let Some(prev) = prev_art_path {
-            let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0) * 0.18;
-            if prev_opacity > 0.005 {
-                card = card.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .size_full()
-                        .rounded(inner_radius)
-                        .overflow_hidden()
-                        .opacity(prev_opacity)
-                        .child(
-                            img(prev.to_string())
-                                .size_full()
-                                .aspect_ratio(card_ratio)
-                                .object_fit(gpui::ObjectFit::Cover)
-                                .rounded(inner_radius),
-                        ),
-                );
-            }
+    if anim_progress < 1.0
+        && let Some(prev) = prev_art_path
+    {
+        let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0) * 0.18;
+        if prev_opacity > 0.005 {
+            card = card.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .rounded(inner_radius)
+                    .overflow_hidden()
+                    .opacity(prev_opacity)
+                    .child(
+                        img(prev.to_string())
+                            .size_full()
+                            .aspect_ratio(card_ratio)
+                            .object_fit(gpui::ObjectFit::Cover)
+                            .rounded(inner_radius),
+                    ),
+            );
         }
     }
 
@@ -151,25 +151,25 @@ pub fn render_media_player_widget(
 
     if has_media {
         // Crossfade previous art if still animating
-        if anim_progress < 1.0 {
-            if let Some(prev) = prev_art_path {
-                let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0);
-                if prev_opacity > 0.01 {
-                    art_box = art_box.child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .size_full()
-                            .opacity(prev_opacity)
-                            .child(
-                                img(prev.to_string())
-                                    .size(art_size)
-                                    .aspect_ratio(1.0)
-                                    .object_fit(gpui::ObjectFit::Cover)
-                                    .rounded(px(16.0)),
-                            ),
-                    );
-                }
+        if anim_progress < 1.0
+            && let Some(prev) = prev_art_path
+        {
+            let prev_opacity = (1.0 - anim_progress).clamp(0.0, 1.0);
+            if prev_opacity > 0.01 {
+                art_box = art_box.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .opacity(prev_opacity)
+                        .child(
+                            img(prev.to_string())
+                                .size(art_size)
+                                .aspect_ratio(1.0)
+                                .object_fit(gpui::ObjectFit::Cover)
+                                .rounded(px(16.0)),
+                        ),
+                );
             }
         }
 
@@ -436,21 +436,21 @@ pub fn render_media_player_widget(
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
-                    if let Some(total_micros) = length_micros_opt {
-                        if total_micros > 0 {
-                            let click_x = f32::from(event.position.x);
-                            let start_x = this.media_slider_tracker.left();
-                            let width = this.media_slider_tracker.width(1.0);
-                            if width > 0.0 {
-                                let pct = ((click_x - start_x) / width).clamp(0.0, 1.0);
-                                let target_secs = pct as f64 * (total_micros as f64 / 1_000_000.0);
-                                let bus = bus_name_seek.clone();
-                                tokio::spawn(async move {
-                                    MprisService::seek_to(&bus, target_secs).await;
-                                });
-                                this.touch_user_action();
-                                cx.notify();
-                            }
+                    if let Some(total_micros) = length_micros_opt
+                        && total_micros > 0
+                    {
+                        let click_x = f32::from(event.position.x);
+                        let start_x = this.media_slider_tracker.left();
+                        let width = this.media_slider_tracker.width(1.0);
+                        if width > 0.0 {
+                            let pct = ((click_x - start_x) / width).clamp(0.0, 1.0);
+                            let target_secs = pct as f64 * (total_micros as f64 / 1_000_000.0);
+                            let bus = bus_name_seek.clone();
+                            tokio::spawn(async move {
+                                MprisService::seek_to(&bus, target_secs).await;
+                            });
+                            this.touch_user_action();
+                            cx.notify();
                         }
                     }
                 }),

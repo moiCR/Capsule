@@ -210,7 +210,7 @@ async fn run_mpris_listener(players: Arc<ArcSwap<Vec<MediaTrack>>>, config: Conf
         let allowed = config.get().mpris.players.clone();
         let current_players = poll_all_players_dbus(&allowed).await;
         players.store(Arc::new(current_players));
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
     }
 }
 

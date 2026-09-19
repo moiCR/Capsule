@@ -32,6 +32,10 @@ impl Default for WorkspaceInfo {
 pub trait Compositor: Send + Sync {
     fn get_refresh_rate(&self) -> f64;
     fn get_workspace(&self) -> Option<WorkspaceInfo>;
+    fn get_workspaces(&self) -> Vec<WorkspaceInfo> {
+        vec![]
+    }
+    fn switch_workspace(&self, _id: i64) {}
     fn request_layer_focus(&self) {}
 }
 
@@ -103,6 +107,14 @@ impl CompositorService {
 
     pub fn request_layer_focus(&self) {
         self.compositor.request_layer_focus();
+    }
+
+    pub fn get_workspaces(&self) -> Vec<WorkspaceInfo> {
+        self.compositor.get_workspaces()
+    }
+
+    pub fn switch_workspace(&self, id: i64) {
+        self.compositor.switch_workspace(id);
     }
 
     async fn run_workspace_events_loop(&self) {

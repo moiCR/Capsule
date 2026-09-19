@@ -1,4 +1,4 @@
 pub mod components;
-pub mod lockscreen;
+pub mod view;
 
-pub use lockscreen::LockScreen;
+pub use view::LockScreen;

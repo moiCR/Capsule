@@ -41,7 +41,7 @@ pub fn render_lyrics(
     let start_idx = active_idx.saturating_sub(1);
     let end_idx = (start_idx + 3).min(lyrics.synced_lines.len());
 
-    let mut lines_col = div().flex().flex_col().items_center().gap(px(4.0)).w_full();
+    let mut lines_col = div().flex().flex_col().items_center().gap(px(6.0)).w_full();
 
     for (i, line) in lyrics.synced_lines[start_idx..end_idx].iter().enumerate() {
         let actual_idx = start_idx + i;
@@ -61,9 +61,9 @@ pub fn render_lyrics(
         };
 
         let font_size = if is_active {
-            12.0 + 1.5 * eased_t
+            14.5 + 1.5 * eased_t
         } else {
-            11.5
+            13.0
         };
 
         let y_offset = if is_active {
@@ -104,12 +104,12 @@ pub fn render_lyrics(
         .flex_col()
         .items_center()
         .w_full()
-        .px(px(14.0))
-        .py(px(8.0))
-        .rounded(px(20.0))
-        .bg(theme.surface().opacity(0.3))
+        .px(px(20.0))
+        .py(px(10.0))
+        .rounded(px(22.0))
+        .bg(theme.surface().opacity(0.35))
         .border_1()
-        .border_color(theme.surface().opacity(0.2))
+        .border_color(theme.surface().opacity(0.25))
         .overflow_hidden()
         .child(lines_col)
         .into_any_element()

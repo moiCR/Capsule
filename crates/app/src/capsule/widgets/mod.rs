@@ -1,7 +1,7 @@
 pub mod clipboard;
 pub mod dashboard;
+pub mod default;
 pub mod emoji;
-pub mod idle;
 pub mod launcher;
 pub mod notification;
 pub mod polkit;

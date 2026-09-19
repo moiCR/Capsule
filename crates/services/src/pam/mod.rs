@@ -134,51 +134,44 @@ impl PamService {
             data_ptr: &auth_data as *const PamAuthData as *mut c_void,
         };
 
-        let mut candidate_services = Vec::new();
-        if let Ok(env_service) = std::env::var("CAPSULE_PAM_SERVICE") {
-            candidate_services.push(env_service);
-        }
-        candidate_services.extend(vec!["capsule".to_string(), "su".to_string()]);
-
-        for service in candidate_services {
-            let mut handle: *mut PamHandle = ptr::null_mut();
-            let start_res = start(&service, Some(username), &conv, &mut handle);
-
-            if start_res != PamReturnCode::SUCCESS || handle.is_null() {
-                eprintln!(
-                    "[PAM] Failed to start service '{}': {:?}",
-                    service, start_res
-                );
-                continue;
-            }
-
-            let mut guard = PamHandleGuard {
-                handle,
-                status: PamReturnCode::SUCCESS,
-            };
-
-            let auth_res = authenticate(unsafe { &mut *guard.handle }, PamFlag::NONE);
-            guard.status = auth_res;
-
-            eprintln!(
-                "[PAM] authenticate for '{}' returned: {:?}",
-                service, auth_res
-            );
-
-            if auth_res == PamReturnCode::SUCCESS {
-                let acct_res = acct_mgmt(unsafe { &mut *guard.handle }, PamFlag::NONE);
-                guard.status = acct_res;
-                eprintln!("[PAM] acct_mgmt for '{}' returned: {:?}", service, acct_res);
-                if acct_res == PamReturnCode::SUCCESS || acct_res == PamReturnCode::NEW_AUTHTOK_REQD
-                {
-                    return Ok(true);
-                }
+        let service = std::env::var("CAPSULE_PAM_SERVICE").unwrap_or_else(|_| {
+            if std::path::Path::new("/etc/pam.d/capsule").is_file()
+                || std::path::Path::new("/usr/lib/pam.d/capsule").is_file()
+            {
+                "capsule".to_string()
             } else {
-                eprintln!(
-                    "[PAM] Auth failed for service '{}': {:?}",
-                    service, auth_res
-                );
+                "su".to_string()
             }
+        });
+        let mut handle: *mut PamHandle = ptr::null_mut();
+        let start_res = start(&service, Some(username), &conv, &mut handle);
+
+        anyhow::ensure!(
+            start_res == PamReturnCode::SUCCESS && !handle.is_null(),
+            "Failed to start PAM service '{}': {:?}",
+            service,
+            start_res
+        );
+
+        let mut guard = PamHandleGuard {
+            handle,
+            status: PamReturnCode::SUCCESS,
+        };
+
+        let auth_res = authenticate(unsafe { &mut *guard.handle }, PamFlag::NONE);
+        guard.status = auth_res;
+        eprintln!(
+            "[PAM] authenticate for '{}' returned: {:?}",
+            service, auth_res
+        );
+
+        if auth_res == PamReturnCode::SUCCESS {
+            let acct_res = acct_mgmt(unsafe { &mut *guard.handle }, PamFlag::NONE);
+            guard.status = acct_res;
+            eprintln!("[PAM] acct_mgmt for '{}' returned: {:?}", service, acct_res);
+            return Ok(
+                acct_res == PamReturnCode::SUCCESS || acct_res == PamReturnCode::NEW_AUTHTOK_REQD
+            );
         }
 
         Ok(false)

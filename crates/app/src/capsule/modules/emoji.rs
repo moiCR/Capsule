@@ -91,10 +91,10 @@ impl EmojiModule {
             .items
             .iter()
             .filter(|item| {
-                if let Some(cat_name) = cat {
-                    if !item.category.eq_ignore_ascii_case(cat_name) {
-                        return false;
-                    }
+                if let Some(cat_name) = cat
+                    && !item.category.eq_ignore_ascii_case(cat_name)
+                {
+                    return false;
                 }
 
                 if q.is_empty() {
@@ -299,7 +299,7 @@ impl Render for EmojiModule {
         let total_pages = if total_items == 0 {
             1
         } else {
-            (total_items + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE
+            total_items.div_ceil(ITEMS_PER_PAGE)
         };
 
         if self.page >= total_pages {

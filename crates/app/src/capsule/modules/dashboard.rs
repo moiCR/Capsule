@@ -490,11 +490,7 @@ impl Render for DashboardModule {
                 &theme,
                 cx,
             ))
-            .child(render_quick_settings_section(
-                dashboard_w,
-                &theme,
-                cx,
-            ))
+            .child(render_quick_settings_section(dashboard_w, &theme, cx))
             .child(render_media_player_widget(
                 dashboard_w,
                 &active_track,

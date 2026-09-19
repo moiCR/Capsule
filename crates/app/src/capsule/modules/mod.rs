@@ -3,16 +3,16 @@ use gpui::{AnyElement, AppContext, Context, Entity, IntoElement};
 use crate::capsule::Capsule;
 use crate::capsule::CapsuleMode;
 use crate::capsule::modules::{
-    clipboard::ClipboardModule, dashboard::DashboardModule, emoji::EmojiModule, idle::IdleModule,
-    launcher::LauncherModule, notification::NotificationModule, polkit::PolkitModule,
-    record::RecordModule, select_theme::SelectThemeModule, settings::SettingsModule,
-    shelf::ShelfModule, volume::VolumeModule, wallpaper::WallpaperModule,
+    clipboard::ClipboardModule, dashboard::DashboardModule, default::DefaultModule,
+    emoji::EmojiModule, launcher::LauncherModule, notification::NotificationModule,
+    polkit::PolkitModule, record::RecordModule, select_theme::SelectThemeModule,
+    settings::SettingsModule, shelf::ShelfModule, volume::VolumeModule, wallpaper::WallpaperModule,
 };
 
 pub mod clipboard;
 pub mod dashboard;
+pub mod default;
 pub mod emoji;
-pub mod idle;
 pub mod launcher;
 pub mod notification;
 pub mod polkit;
@@ -24,7 +24,7 @@ pub mod volume;
 pub mod wallpaper;
 
 pub struct CapsuleModules {
-    pub idle_view: Entity<IdleModule>,
+    pub default_view: Entity<DefaultModule>,
     pub dashboard_view: Entity<DashboardModule>,
     pub notification_view: Entity<NotificationModule>,
     pub launcher_view: Entity<LauncherModule>,
@@ -42,7 +42,7 @@ pub struct CapsuleModules {
 impl CapsuleModules {
     pub fn new(cx: &mut Context<Capsule>) -> Self {
         Self {
-            idle_view: cx.new(IdleModule::new),
+            default_view: cx.new(DefaultModule::new),
             dashboard_view: cx.new(DashboardModule::new),
             notification_view: cx.new(NotificationModule::new),
             launcher_view: cx.new(LauncherModule::new),
@@ -60,7 +60,7 @@ impl CapsuleModules {
 
     pub fn render_active_view(&self, mode: CapsuleMode) -> AnyElement {
         match mode {
-            CapsuleMode::Default => self.idle_view.clone().into_any_element(),
+            CapsuleMode::Default => self.default_view.clone().into_any_element(),
             CapsuleMode::Dashboard => self.dashboard_view.clone().into_any_element(),
             CapsuleMode::Notification => self.notification_view.clone().into_any_element(),
             CapsuleMode::Launcher => self.launcher_view.clone().into_any_element(),
@@ -77,7 +77,7 @@ impl CapsuleModules {
     }
 
     pub fn notify_all(&self, cx: &mut Context<Capsule>) {
-        self.idle_view.update(cx, |_, cx| cx.notify());
+        self.default_view.update(cx, |_, cx| cx.notify());
         self.dashboard_view.update(cx, |_, cx| cx.notify());
         self.notification_view.update(cx, |_, cx| cx.notify());
         self.launcher_view.update(cx, |_, cx| cx.notify());

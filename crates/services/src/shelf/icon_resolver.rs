@@ -24,15 +24,17 @@ fn get_active_themes() -> Vec<String> {
         }
     }
 
-    if let Some(home) = dirs::home_dir() {
-        let gtk3 = home.join(".config/gtk-3.0/settings.ini");
-        if let Ok(content) = std::fs::read_to_string(gtk3) {
-            for line in content.lines() {
-                if let Some((k, v)) = line.split_once('=') {
-                    if k.trim() == "gtk-icon-theme-name" {
-                        let val = v.trim().trim_matches('\'').trim_matches('"').to_string();
-                        if !val.is_empty() && !themes.contains(&val) {
-                            themes.push(val);
+    if themes.is_empty() {
+        if let Some(home) = dirs::home_dir() {
+            let gtk3 = home.join(".config/gtk-3.0/settings.ini");
+            if let Ok(content) = std::fs::read_to_string(gtk3) {
+                for line in content.lines() {
+                    if let Some((k, v)) = line.split_once('=') {
+                        if k.trim() == "gtk-icon-theme-name" {
+                            let val = v.trim().trim_matches('\'').trim_matches('"').to_string();
+                            if !val.is_empty() && !themes.contains(&val) {
+                                themes.push(val);
+                            }
                         }
                     }
                 }
@@ -40,17 +42,22 @@ fn get_active_themes() -> Vec<String> {
         }
     }
 
-    for fallback in [
-        "breeze-dark",
-        "breeze",
-        "Adwaita",
-        "AdwaitaLegacy",
-        "hicolor",
-    ] {
-        let s = fallback.to_string();
-        if !themes.contains(&s) {
-            themes.push(s);
+    if themes.is_empty() {
+        for fallback in ["breeze-dark", "breeze", "Adwaita"] {
+            for base in ["/usr/share/icons", "/usr/local/share/icons"] {
+                if Path::new(base).join(fallback).is_dir() {
+                    themes.push(fallback.to_string());
+                    break;
+                }
+            }
+            if !themes.is_empty() {
+                break;
+            }
         }
+    }
+
+    if !themes.iter().any(|t| t == "hicolor") {
+        themes.push("hicolor".to_string());
     }
 
     themes
@@ -101,9 +108,10 @@ fn scan_theme_dir(dir: &Path, map: &mut HashMap<String, (i32, PathBuf)>) {
             if path.is_dir() {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
-                if !name_str.starts_with('.') {
-                    stack.push(path);
+                if name_str == "cursors" || name_str.starts_with('.') {
+                    continue;
                 }
+                stack.push(path);
             } else if path.is_file() {
                 let path_str = path.to_string_lossy();
                 if path_str.ends_with(".svg") || path_str.ends_with(".png") {
@@ -157,6 +165,10 @@ fn build_icon_map() -> HashMap<String, PathBuf> {
     }
 
     result
+}
+
+pub fn warm_icon_cache() {
+    let _ = get_icon_map();
 }
 
 fn get_icon_map() -> &'static HashMap<String, PathBuf> {

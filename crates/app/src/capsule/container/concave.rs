@@ -44,14 +44,7 @@ impl CapsuleContainerRenderer for ConcaveContainer {
             .shadow_lg()
             .overflow_hidden();
 
-        if params.mode == CapsuleMode::Default {
-            pill_container =
-                pill_container
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.start_transition_internal(CapsuleMode::Dashboard, None, cx);
-                    }));
-        } else if params.mode == CapsuleMode::Settings {
+        if params.mode == CapsuleMode::Settings {
             pill_container = pill_container.on_click(cx.listener(|_this, _, _, cx| {
                 cx.stop_propagation();
             }));

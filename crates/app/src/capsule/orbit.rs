@@ -153,8 +153,9 @@ impl<Kind: Copy + Eq> Layout<Kind> {
     }
 
     fn tick(&mut self, now: Instant) {
-        self.slots
-            .retain(|slot| slot.active || slot.visibility.animating(now));
+        self.slots.retain(|slot| {
+            slot.active || (slot.visibility.animating(now) && slot.visibility.value(now) > 0.005)
+        });
     }
 
     fn animating(&self, now: Instant) -> bool {
@@ -194,16 +195,16 @@ async fn publish_updates(
             result = animation_updates.changed() => {
                 if result.is_err() { break; }
                 animating = *animation_updates.borrow_and_update();
-                continue;
+                true
             }
             _ = tokio::time::sleep(frame_duration()), if animating => true,
             result = status_updates.recv() => {
                 if matches!(result, Err(broadcast::error::RecvError::Closed)) { break; }
-                false
+                true
             }
             result = shelf_updates.recv() => {
                 if matches!(result, Err(broadcast::error::RecvError::Closed)) { break; }
-                false
+                true
             }
             _ = poll.tick() => false,
         };
@@ -348,7 +349,7 @@ impl Layout<OrbKind> {
             .iter()
             .filter_map(|slot| {
                 let factor = slot.visibility.value(now);
-                if factor <= 0.0 {
+                if factor <= 0.005 || (!slot.active && !slot.visibility.animating(now)) {
                     return None;
                 }
                 let distance = (slot.rank.value(now) + 1.0) * (ORB_SIZE + gap.max(8.0));
@@ -574,6 +575,36 @@ mod tests {
                 .geometry(138.0, 42.0, 8.0, stopped + Duration::from_secs(1))
                 .is_empty()
         );
+        drop(receiver);
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), worker).await,
+            Ok(Ok(()))
+        ));
+    }
+
+    #[tokio::test]
+    async fn animation_transition_to_false_triggers_final_frame_to_receiver() {
+        let state = OrbitState {
+            shelf_count: 0,
+            record_status: RecordStatus::Stopped,
+        };
+        let (sender, mut receiver) = watch::channel(state);
+        let (animate, animation_updates) = watch::channel(true);
+        let (_status, status_updates) = broadcast::channel(4);
+        let (_shelf, shelf_updates) = broadcast::channel(4);
+        let worker = tokio::spawn(publish_updates(
+            sender,
+            animation_updates,
+            status_updates,
+            shelf_updates,
+            move || state,
+            || Duration::from_secs(10),
+        ));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = receiver.borrow_and_update();
+        animate.send_replace(false);
+        let changed = tokio::time::timeout(Duration::from_millis(300), receiver.changed()).await;
+        assert!(matches!(changed, Ok(Ok(()))));
         drop(receiver);
         assert!(matches!(
             tokio::time::timeout(Duration::from_secs(1), worker).await,
