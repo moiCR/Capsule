@@ -2,13 +2,14 @@ use chrono::{Local, Timelike};
 use gpui::{Context, EventEmitter, IntoElement, Render, Task, Window, div, prelude::*, px};
 use services::{
     AppState, MediaTrack, MprisService, NetworkService, NotificationStore, PowerService,
-    WorkspaceInfo,
+    SystemService, WorkspaceInfo,
 };
 use std::time::Duration;
 use ui::theme::Theme;
 
 use crate::capsule::widgets::default::{
-    FlipClock, render_clock_widget, render_status_dock, render_workspaces_widget,
+    FlipClock, render_clock_widget, render_media_dock, render_privacy_dock, render_status_dock,
+    render_workspaces_widget,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,11 +25,10 @@ pub struct DefaultModule {
     active_workspace: WorkspaceInfo,
     special_anim_progress: f32,
     special_anim_task: Option<Task<()>>,
-    disc_rotation: f32,
-    disc_anim_task: Option<Task<()>>,
     network: NetworkService,
     mpris: MprisService,
     power: PowerService,
+    system: SystemService,
 }
 
 impl DefaultModule {
@@ -36,13 +36,13 @@ impl DefaultModule {
     const SIDE_WIDTH: f32 = 152.0;
     const ZONE_GAP: f32 = 32.0;
     const CLOCK_WIDTH: f32 = 36.0;
-    const WORKSPACES_WIDTH: f32 = 58.0;
 
     pub fn new(cx: &mut Context<Self>) -> Self {
         let compositor = cx.global::<AppState>().compositor.clone();
         let network = cx.global::<AppState>().network.clone();
         let mpris = cx.global::<AppState>().mpris.clone();
         let power = cx.global::<AppState>().power.clone();
+        let system = cx.global::<AppState>().system.clone();
 
         let initial_ws = compositor.get_workspace();
         let special_anim_progress = if initial_ws.is_special { 1.0 } else { 0.0 };
@@ -54,6 +54,7 @@ impl DefaultModule {
         cx.spawn(async move |this, cx| {
             let mut last_track: Option<MediaTrack> = None;
             let mut last_battery = None;
+            let mut last_capture = None;
             loop {
                 cx.background_executor()
                     .timer(Duration::from_millis(250))
@@ -75,26 +76,19 @@ impl DefaultModule {
 
                     let cur_track = this.mpris.get_current_track();
                     if last_track.as_ref() != Some(&cur_track) {
-                        let was_playing =
-                            last_track.as_ref().map(|t| t.is_playing).unwrap_or(false);
-                        last_track = Some(cur_track.clone());
-                        if cur_track.is_playing != was_playing {
-                            if cur_track.is_playing {
-                                this.start_disc_anim(cx);
-                            } else {
-                                this.disc_anim_task = None;
-                            }
-                        } else if !cur_track.has_media
-                            || (cur_track.title.is_empty() && !cur_track.is_playing)
-                        {
-                            this.disc_anim_task = None;
-                        }
+                        last_track = Some(cur_track);
                         changed = true;
                     }
 
                     let cur_battery = this.power.get_battery();
                     if cur_battery != last_battery {
                         last_battery = cur_battery;
+                        changed = true;
+                    }
+
+                    let capture = this.system.get_capture_status();
+                    if last_capture != Some(capture) {
+                        last_capture = Some(capture);
                         changed = true;
                     }
 
@@ -110,64 +104,18 @@ impl DefaultModule {
         })
         .detach();
 
-        let is_playing = mpris.get_current_track().is_playing;
-
-        let mut module = Self {
+        Self {
             time_str,
             flip_clock,
             flip_anim_task: None,
             active_workspace: initial_ws,
             special_anim_progress,
             special_anim_task: None,
-            disc_rotation: 0.0,
-            disc_anim_task: None,
             network,
             mpris,
             power,
-        };
-
-        if is_playing {
-            module.start_disc_anim(cx);
+            system,
         }
-
-        module
-    }
-
-    fn start_disc_anim(&mut self, cx: &mut Context<Self>) {
-        if self.disc_anim_task.is_some() {
-            return;
-        }
-        let compositor = cx.global::<AppState>().compositor.clone();
-        let anim_task = cx.spawn(async move |this, cx| {
-            let speed = 1.8;
-            loop {
-                let frame_dur = compositor.get_frame_duration();
-                cx.background_executor().timer(frame_dur).await;
-                let step = speed * frame_dur.as_secs_f32();
-                let should_continue = this
-                    .update(cx, |this: &mut Self, cx| {
-                        let cur_track = this.mpris.get_current_track();
-                        if cur_track.is_playing {
-                            this.disc_rotation =
-                                (this.disc_rotation + step) % (2.0 * std::f32::consts::PI);
-                            cx.notify();
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .unwrap_or(false);
-
-                if !should_continue {
-                    let _ = this.update(cx, |this: &mut Self, cx| {
-                        this.disc_anim_task = None;
-                        cx.notify();
-                    });
-                    break;
-                }
-            }
-        });
-        self.disc_anim_task = Some(anim_task);
     }
 
     fn start_flip_clock_anim(&mut self, cx: &mut Context<Self>) {
@@ -300,27 +248,24 @@ impl Render for DefaultModule {
         let is_dnd = NotificationStore::global().is_dnd_enabled();
         let notif_count = NotificationStore::global().get_all_notifications().len();
         let battery = self.power.get_battery();
+        let track = self.mpris.get_current_track();
+        let capture = self.system.get_capture_status();
 
         let left_container = div()
             .flex()
             .flex_row()
             .items_center()
+            .gap(px(6.0))
             .flex_1()
             .min_w_0()
             .overflow_hidden()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .w(px(Self::WORKSPACES_WIDTH))
-                    .flex_shrink_0()
-                    .child(render_workspaces_widget(
-                        &active_ws,
-                        self.special_anim_progress,
-                        &theme,
-                        cx,
-                    )),
-            );
+            .child(render_workspaces_widget(
+                &active_ws,
+                self.special_anim_progress,
+                &theme,
+                cx,
+            ))
+            .children(render_media_dock(&track, &theme, cx));
 
         let center_container = div()
             .w(px(Self::CLOCK_WIDTH))
@@ -335,9 +280,10 @@ impl Render for DefaultModule {
             .flex_row()
             .items_center()
             .justify_end()
+            .gap(px(6.0))
             .flex_1()
             .min_w_0()
-            .overflow_hidden()
+            .children(render_privacy_dock(capture, &theme))
             .child(render_status_dock(
                 &net_status,
                 battery,

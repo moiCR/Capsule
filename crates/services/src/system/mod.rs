@@ -6,6 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+mod capture;
+pub use capture::CaptureStatus;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AudioSink {
     pub name: String,
@@ -34,6 +37,7 @@ pub struct SystemStatus {
 #[derive(Clone)]
 pub struct SystemService {
     status: Arc<ArcSwap<SystemStatus>>,
+    capture_status: Arc<ArcSwap<CaptureStatus>>,
     target_volume: Arc<AtomicU32>,
     volume_pending: Arc<AtomicBool>,
     volume_notify: Arc<tokio::sync::Notify>,
@@ -47,6 +51,7 @@ impl SystemService {
     pub fn new() -> Self {
         let service = Self {
             status: Arc::new(ArcSwap::from_pointee(SystemStatus::default())),
+            capture_status: Arc::new(ArcSwap::from_pointee(CaptureStatus::default())),
             target_volume: Arc::new(AtomicU32::new(50)),
             volume_pending: Arc::new(AtomicBool::new(false)),
             volume_notify: Arc::new(tokio::sync::Notify::new()),
@@ -55,6 +60,8 @@ impl SystemService {
             input_volume_notify: Arc::new(tokio::sync::Notify::new()),
             audio_changed: Arc::new(tokio::sync::Notify::new()),
         };
+
+        tokio::spawn(capture::monitor(service.capture_status.clone()));
 
         let service_clone = service.clone();
         tokio::spawn(async move {
@@ -77,6 +84,10 @@ impl SystemService {
 
     pub fn get_status(&self) -> SystemStatus {
         (**self.status.load()).clone()
+    }
+
+    pub fn get_capture_status(&self) -> CaptureStatus {
+        **self.capture_status.load()
     }
 
     pub fn audio_changed(&self) -> Arc<tokio::sync::Notify> {
