@@ -1,11 +1,10 @@
 use gpui::{
     Context, Entity, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render, Styled, Window,
-    div, prelude::*, px, svg,
+    div, prelude::*, px,
 };
 use std::time::Instant;
 use ui::theme::Theme;
 
-use crate::capsule::apple_island_spring;
 use crate::capsule::modules::settings::{SettingsEvent, SettingsModule};
 use crate::panel::SettingsPanel;
 
@@ -15,6 +14,11 @@ pub struct SettingsWindow {
     entry_start_time: Option<Instant>,
     is_closing: bool,
     close_start_time: Option<Instant>,
+    offset_y: f32,
+    card_opacity: f32,
+    close_offset_y: f32,
+    close_opacity: f32,
+    animation_duration: f32,
 }
 
 impl SettingsWindow {
@@ -32,12 +36,28 @@ impl SettingsWindow {
         )
         .detach();
 
+        let animation_duration = if cx.has_global::<services::AppState>() {
+            cx.global::<services::AppState>()
+                .config
+                .get()
+                .ui
+                .animation_duration_ms
+        } else {
+            services::config::UIConfig::default().animation_duration_ms
+        } as f32
+            / 1000.0;
+
         let window_obj = Self {
             focus_handle,
             settings_module,
             entry_start_time: None,
             is_closing: false,
             close_start_time: None,
+            offset_y: 16.0,
+            card_opacity: 0.0,
+            close_offset_y: 16.0,
+            close_opacity: 0.0,
+            animation_duration,
         };
 
         window.focus(&window_obj.focus_handle, cx);
@@ -48,6 +68,8 @@ impl SettingsWindow {
         if self.is_closing {
             return;
         }
+        self.close_offset_y = self.offset_y;
+        self.close_opacity = self.card_opacity;
         self.is_closing = true;
         self.close_start_time = Some(Instant::now());
         cx.notify();
@@ -73,130 +95,53 @@ impl Render for SettingsWindow {
             24.0
         };
 
-        let win_h: f32 = window.bounds().size.height.into();
-        let initial_offset_y = (win_h * 0.45).clamp(320.0, 520.0);
-
-        let (expand_p, offset_y, card_opacity, should_close_now) = if self.is_closing {
+        if self.is_closing {
             let start = self.close_start_time.get_or_insert_with(Instant::now);
             let elapsed = start.elapsed().as_secs_f32();
-            let dur = 0.42;
-            if elapsed >= dur {
-                (0.0, initial_offset_y, 0.0, true)
-            } else {
-                window.request_animation_frame();
-                let t = (elapsed / dur).clamp(0.0, 1.0);
-                let contract_end = 0.50;
-                let slide_start = 0.44;
-
-                let expand = if t >= contract_end {
-                    0.0
-                } else {
-                    let ct = (t / contract_end).clamp(0.0, 1.0);
-                    (1.0 - apple_island_spring(ct)).max(0.0)
-                };
-
-                let (y, op) = if t <= slide_start {
-                    (0.0, 1.0)
-                } else {
-                    let st = ((t - slide_start) / (1.0 - slide_start)).clamp(0.0, 1.0);
-                    let y = initial_offset_y * st.powf(1.8);
-                    let op = 1.0 - ((st - 0.4) / 0.6).clamp(0.0, 1.0);
-                    (y, op)
-                };
-
-                (expand, y, op, false)
+            let duration = self.animation_duration * 0.6;
+            if elapsed >= duration {
+                window.remove_window();
+                return div().into_any_element();
             }
+
+            let t = (elapsed / duration).clamp(0.0, 1.0);
+            let progress = t * t;
+            self.offset_y = self.close_offset_y + 8.0 * progress;
+            self.card_opacity = self.close_opacity * (1.0 - progress);
+            window.request_animation_frame();
         } else {
             let start = self.entry_start_time.get_or_insert_with(Instant::now);
             let elapsed = start.elapsed().as_secs_f32();
-            let dur = 0.48;
-            let t = (elapsed / dur).clamp(0.0, 1.0);
-            if t < 1.0 {
+            let duration = self.animation_duration * 0.88;
+            if elapsed >= duration {
+                self.offset_y = 0.0;
+                self.card_opacity = 1.0;
+            } else {
+                let t = (elapsed / duration).clamp(0.0, 1.0);
+                let remaining = (1.0 - t).powi(3);
+                self.offset_y = 16.0 * remaining;
+                self.card_opacity = 1.0 - remaining;
                 window.request_animation_frame();
             }
-
-            let slide_end = 0.42;
-            let expand_start = 0.35;
-
-            let y = if t >= slide_end {
-                0.0
-            } else {
-                let st = (t / slide_end).clamp(0.0, 1.0);
-                let sp = apple_island_spring(st);
-                initial_offset_y * (1.0 - sp)
-            };
-
-            let expand = if t <= expand_start {
-                0.0
-            } else {
-                let et = ((t - expand_start) / (1.0 - expand_start)).clamp(0.0, 1.0);
-                apple_island_spring(et)
-            };
-
-            let op = (t / 0.10).clamp(0.0, 1.0);
-
-            (expand, y, op, false)
-        };
-
-        if should_close_now {
-            window.remove_window();
-            return div().into_any_element();
         }
 
-        let initial_size = 56.0_f32;
-        let target_w = 840.0_f32;
-        let target_h = 560.0_f32;
-        let initial_r = initial_size / 2.0;
-        let target_r = capsule_radius;
-
-        let current_w = (initial_size + (target_w - initial_size) * expand_p).max(initial_size);
-        let current_h = (initial_size + (target_h - initial_size) * expand_p).max(initial_size);
-        let current_r = (initial_r + (target_r - initial_r) * expand_p).max(initial_r);
-
-        let icon_opacity = (1.0 - (expand_p / 0.35)).clamp(0.0, 1.0);
-        let content_opacity = ((expand_p - 0.25) / 0.75).clamp(0.0, 1.0);
-
-        let mut card = div()
+        let card = div()
             .id("settings-modal-card")
             .relative()
-            .top(px(offset_y))
-            .w(px(current_w))
-            .h(px(current_h))
-            .rounded(px(current_r))
+            .top(px(self.offset_y))
+            .w(px(840.0))
+            .h(px(560.0))
+            .rounded(px(capsule_radius))
             .bg(theme.background())
             .border_1()
-            .border_color(
-                theme
-                    .surface()
-                    .opacity(0.35 + 0.25 * expand_p.clamp(0.0, 1.0)),
-            )
+            .border_color(theme.surface().opacity(0.6))
             .shadow_xl()
             .overflow_hidden()
-            .opacity(card_opacity)
+            .opacity(self.card_opacity)
             .on_click(cx.listener(|_this, _, _, cx| {
                 cx.stop_propagation();
-            }));
-
-        if icon_opacity > 0.01 {
-            card = card.child(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .opacity(icon_opacity)
-                    .child(
-                        svg()
-                            .path("settings.svg")
-                            .size(px(24.0))
-                            .text_color(theme.accent()),
-                    ),
-            );
-        }
-
-        if content_opacity > 0.01 {
-            card = card.child(
+            }))
+            .child(
                 div()
                     .size_full()
                     .flex()
@@ -205,14 +150,12 @@ impl Render for SettingsWindow {
                     .overflow_hidden()
                     .child(
                         div()
-                            .w(px(target_w))
-                            .h(px(target_h))
+                            .w(px(840.0))
+                            .h(px(560.0))
                             .flex_shrink_0()
-                            .opacity(content_opacity)
                             .child(self.settings_module.clone()),
                     ),
             );
-        }
 
         div()
             .id("settings-window-root")
