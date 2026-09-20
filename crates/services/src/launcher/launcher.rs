@@ -5,6 +5,28 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::{AsRawFd, RawFd};
+use tokio::io::unix::AsyncFd;
+
+struct InotifyFd(RawFd);
+
+impl AsRawFd for InotifyFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0
+    }
+}
+
+impl Drop for InotifyFd {
+    fn drop(&mut self) {
+        if self.0 >= 0 {
+            unsafe {
+                libc::close(self.0);
+            }
+        }
+    }
+}
+
 static ICON_MAP_CACHE: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
 
 #[derive(Clone, Default)]
@@ -13,6 +35,32 @@ pub struct LauncherService {
 }
 
 impl LauncherService {
+    pub fn get_application_dirs() -> Vec<PathBuf> {
+        let mut app_dirs = vec![
+            PathBuf::from("/usr/share/applications"),
+            PathBuf::from("/usr/local/share/applications"),
+            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+            PathBuf::from("/var/lib/snapd/desktop/applications"),
+        ];
+
+        if let Some(home) = dirs::home_dir() {
+            app_dirs.push(home.join(".local/share/applications"));
+            app_dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
+            app_dirs.push(home.join(".local/share/snap/desktop/applications"));
+        }
+
+        if let Ok(xdg_dirs) = std::env::var("XDG_DATA_DIRS") {
+            for dir in xdg_dirs.split(':') {
+                let path = Path::new(dir).join("applications");
+                if !app_dirs.contains(&path) {
+                    app_dirs.push(path);
+                }
+            }
+        }
+
+        app_dirs
+    }
+
     pub fn new() -> Self {
         let service = Self {
             apps: Arc::new(ArcSwap::from_pointee(Vec::new())),
@@ -20,11 +68,67 @@ impl LauncherService {
 
         let service_clone = service.clone();
         tokio::spawn(async move {
-            loop {
-                if let Err(err) = service_clone.refresh().await {
-                    crate::log_warn!("LAUNCHER", "LauncherService refresh warning: {err}");
+            let _ = service_clone.refresh().await;
+
+            let inotify_fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+            if inotify_fd >= 0 {
+                let watcher = InotifyFd(inotify_fd);
+                let dirs_to_watch = Self::get_application_dirs();
+                for dir in &dirs_to_watch {
+                    if dir.exists() {
+                        if let Ok(cpath) = std::ffi::CString::new(dir.as_os_str().as_bytes()) {
+                            unsafe {
+                                libc::inotify_add_watch(
+                                    inotify_fd,
+                                    cpath.as_ptr(),
+                                    libc::IN_CREATE
+                                        | libc::IN_DELETE
+                                        | libc::IN_MOVED_TO
+                                        | libc::IN_MOVED_FROM
+                                        | libc::IN_CLOSE_WRITE,
+                                );
+                            }
+                        }
+                    }
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(25)).await;
+
+                if let Ok(mut async_fd) = AsyncFd::new(watcher) {
+                    let mut buf = [0u8; 4096];
+                    let fd = async_fd.get_ref().as_raw_fd();
+                    loop {
+                        let mut guard = match async_fd.readable_mut().await {
+                            Ok(g) => g,
+                            Err(_) => break,
+                        };
+                        let n = unsafe {
+                            libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+                        };
+                        guard.clear_ready();
+                        if n > 0 {
+                            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                            while unsafe {
+                                libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+                            } > 0
+                            {}
+                            if let Err(err) = service_clone.refresh().await {
+                                crate::log_warn!(
+                                    "LAUNCHER",
+                                    "LauncherService inotify refresh warning: {err}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+                if let Err(err) = service_clone.refresh().await {
+                    crate::log_warn!(
+                        "LAUNCHER",
+                        "LauncherService periodic refresh warning: {err}"
+                    );
+                }
             }
         });
 
@@ -91,27 +195,7 @@ impl LauncherService {
     }
 
     pub async fn refresh(&self) -> Result<()> {
-        let mut app_dirs = vec![
-            PathBuf::from("/usr/share/applications"),
-            PathBuf::from("/usr/local/share/applications"),
-            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
-            PathBuf::from("/var/lib/snapd/desktop/applications"),
-        ];
-
-        if let Some(home) = dirs::home_dir() {
-            app_dirs.push(home.join(".local/share/applications"));
-            app_dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
-            app_dirs.push(home.join(".local/share/snap/desktop/applications"));
-        }
-
-        if let Ok(xdg_dirs) = std::env::var("XDG_DATA_DIRS") {
-            for dir in xdg_dirs.split(':') {
-                let path = Path::new(dir).join("applications");
-                if path.exists() && !app_dirs.contains(&path) {
-                    app_dirs.push(path);
-                }
-            }
-        }
+        let app_dirs = Self::get_application_dirs();
 
         let mut discovered: HashMap<String, Application> = HashMap::new();
 
@@ -163,7 +247,10 @@ impl LauncherService {
         }
         let map = Self::build_icon_map().await;
         let _ = ICON_MAP_CACHE.set(map);
-        ICON_MAP_CACHE.get().unwrap()
+        static EMPTY_MAP: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
+        ICON_MAP_CACHE
+            .get()
+            .unwrap_or_else(|| EMPTY_MAP.get_or_init(HashMap::new))
     }
 
     async fn build_icon_map() -> HashMap<String, PathBuf> {

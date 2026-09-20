@@ -53,6 +53,19 @@ impl LauncherModule {
         self.apps = self.service.search("");
         self.scroll_handle.scroll_to_item(0);
         cx.notify();
+
+        let service = self.service.clone();
+        cx.spawn(async move |this, cx| {
+            if service.refresh().await.is_ok() {
+                let _ = this.update(cx, |this, cx| {
+                    if this.query.is_empty() {
+                        this.apps = this.service.search("");
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
     #[allow(dead_code)]
