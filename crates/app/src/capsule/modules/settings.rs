@@ -807,9 +807,8 @@ impl SettingsModule {
 }
 
 impl Render for SettingsModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-        window.focus(&self.focus_handle, cx);
 
         let content_view: AnyElement = if !self.search_query.trim().is_empty() {
             render_search_results(self, &theme, cx).into_any_element()
@@ -892,10 +891,9 @@ impl Render for SettingsModule {
                             && cx.has_global::<AppState>()
                         {
                             let sys = cx.global::<AppState>().system.clone();
-                            cx.spawn(async move |_this, _cx| {
+                            services::spawn_tokio(async move {
                                 let _ = sys.refresh().await;
-                            })
-                            .detach();
+                            });
                         }
                         cx.notify();
                     }

@@ -120,7 +120,7 @@ pub fn render_lockscreen_media_player(
                         .cursor_pointer()
                         .on_click(cx.listener(move |_, _, _, cx| {
                             let b = bus_prev.clone();
-                            tokio::spawn(async move {
+                            services::spawn_tokio(async move {
                                 MprisService::previous_bus(&b).await;
                             });
                             cx.notify();
@@ -147,7 +147,7 @@ pub fn render_lockscreen_media_player(
                         .justify_center()
                         .on_click(cx.listener(move |_, _, _, cx| {
                             let b = bus_play.clone();
-                            tokio::spawn(async move {
+                            services::spawn_tokio(async move {
                                 MprisService::play_pause_bus(&b).await;
                             });
                             cx.notify();
@@ -173,7 +173,7 @@ pub fn render_lockscreen_media_player(
                         .cursor_pointer()
                         .on_click(cx.listener(move |_, _, _, cx| {
                             let b = bus_next.clone();
-                            tokio::spawn(async move {
+                            services::spawn_tokio(async move {
                                 MprisService::next_bus(&b).await;
                             });
                             cx.notify();

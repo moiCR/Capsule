@@ -135,7 +135,7 @@ impl PolkitModule {
         self.error_msg = None;
         cx.notify();
 
-        tokio::spawn(async move {
+        services::spawn_tokio(async move {
             let res = tokio::time::timeout(
                 std::time::Duration::from_secs(30),
                 authenticate_user(&user_name, &cookie, &password),
@@ -248,13 +248,15 @@ impl PolkitModule {
             }
         }
     }
+
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle, cx);
+    }
 }
 
 impl Render for PolkitModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-
-        window.focus(&self.focus_handle, cx);
 
         let (title, placeholder, default_err) = if cx.has_global::<services::AppState>() {
             let lang = &cx.global::<services::AppState>().language;

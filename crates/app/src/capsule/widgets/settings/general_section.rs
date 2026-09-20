@@ -386,16 +386,14 @@ pub(crate) fn render_audio_device_control(
                         if cx.has_global::<AppState>() {
                             let sys = cx.global::<AppState>().system.clone();
                             let t_name = target_name.clone();
-                            let this = cx.entity().downgrade();
-                            cx.spawn(async move |_this, cx| {
+                            services::spawn_tokio(async move {
                                 if target_field == SettingsField::VolumeOutput {
                                     let _ = sys.set_default_sink(&t_name).await;
                                 } else {
                                     let _ = sys.set_default_source(&t_name).await;
                                 }
-                                let _ = this.update(cx, |_view, cx| cx.notify());
-                            })
-                            .detach();
+                            });
+                            cx.notify();
                         }
                     }))
                     .child(
@@ -520,16 +518,14 @@ pub(crate) fn render_audio_device_control(
                                 .on_click(cx.listener(move |_this, _, _, cx| {
                                     if cx.has_global::<AppState>() {
                                         let sys = cx.global::<AppState>().system.clone();
-                                        let this = cx.entity().downgrade();
-                                        cx.spawn(async move |_this, cx| {
+                                        services::spawn_tokio(async move {
                                             if is_output {
                                                 let _ = sys.toggle_mute().await;
                                             } else {
                                                 let _ = sys.toggle_input_mute().await;
                                             }
-                                            let _ = this.update(cx, |_view, cx| cx.notify());
-                                        })
-                                        .detach();
+                                        });
+                                        cx.notify();
                                     }
                                 }))
                                 .child(svg().path(icon_path).size(px(14.0)).text_color(

@@ -17,12 +17,16 @@ impl EventEmitter<RecordEvent> for RecordModule {}
 
 impl RecordModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let module = Self {
+        let mut module = Self {
             is_starting: false,
             timer_task: None,
         };
 
         if cx.has_global::<AppState>() {
+            let rec = &cx.global::<AppState>().record;
+            if rec.is_recording() || rec.is_paused() {
+                module.start_timer(cx);
+            }
             let mut rx = cx.global::<AppState>().record.subscribe_status();
             cx.spawn(async move |this, cx| {
                 loop {
@@ -65,7 +69,7 @@ impl RecordModule {
         self.is_starting = true;
         self.start_timer(cx);
 
-        tokio::spawn(async move {
+        services::spawn_tokio(async move {
             let _ = record_service.start(options).await;
         });
 
@@ -79,7 +83,9 @@ impl RecordModule {
 
         let task = cx.spawn(async move |this, cx| {
             loop {
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
                 let continue_timer = this
                     .update(cx, |view: &mut Self, cx| {
                         if view.is_starting {
@@ -115,7 +121,7 @@ impl RecordModule {
         }
 
         let record_service = cx.global::<AppState>().record.clone();
-        tokio::spawn(async move {
+        services::spawn_tokio(async move {
             let _ = record_service.toggle_pause().await;
         });
 
@@ -132,7 +138,7 @@ impl RecordModule {
         self.timer_task = None;
         record_service.mark_stopped();
 
-        tokio::spawn(async move {
+        services::spawn_tokio(async move {
             let _ = record_service.stop().await;
         });
 
@@ -208,12 +214,6 @@ impl Render for RecordModule {
         } else {
             status
         };
-
-        if (effective_status == RecordStatus::Recording || effective_status == RecordStatus::Paused)
-            && self.timer_task.is_none()
-        {
-            self.start_timer(cx);
-        }
 
         let duration_str = if duration_secs >= 3600 {
             let hours = duration_secs / 3600;

@@ -87,6 +87,10 @@ impl SelectThemeModule {
         }
     }
 
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle, cx);
+    }
+
     pub fn select_theme(&mut self, theme: Theme, cx: &mut Context<Self>) {
         if cx.has_global::<ThemeManager>() {
             cx.global_mut::<ThemeManager>().set_theme(theme);
@@ -289,7 +293,7 @@ impl Focusable for SelectThemeModule {
 }
 
 impl Render for SelectThemeModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
         let (search_placeholder, no_themes, apply_hint) = if cx.has_global::<services::AppState>() {
@@ -306,8 +310,6 @@ impl Render for SelectThemeModule {
                 "↵ Aplicar".to_string(),
             )
         };
-
-        window.focus(&self.focus_handle, cx);
 
         let filtered = self.filtered_themes();
         let total = filtered.len();

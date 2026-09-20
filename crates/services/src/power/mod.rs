@@ -89,13 +89,14 @@ impl Default for PowerService {
 
 impl PowerService {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         let service = Self {
             active_profile: Arc::new(ArcSwap::from_pointee(PowerProfile::Balanced)),
             battery: Arc::new(ArcSwap::from_pointee(read_system_battery())),
         };
 
         let svc_clone = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             svc_clone.start_polling().await;
         });
 
@@ -113,7 +114,7 @@ impl PowerService {
     pub fn set_active_profile(&self, profile: PowerProfile) {
         self.active_profile.store(Arc::new(profile.clone()));
 
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             if let Some(conn) = get_shared_system_conn().await {
                 if let Ok(builder) =
                     PropertiesProxy::builder(&conn).destination("net.hadess.PowerProfiles")

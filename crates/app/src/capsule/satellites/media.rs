@@ -339,7 +339,7 @@ pub fn render_media_mini_panel(
                     this.touch_user_action();
                     cx.notify();
 
-                    tokio::spawn(async move {
+                    services::spawn_tokio(async move {
                         MprisService::seek_to(&bus, target_secs).await;
                     });
                 }),
@@ -384,7 +384,7 @@ pub fn render_media_mini_panel(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::previous_bus(&bus_name).await;
                         });
                     }),
@@ -420,7 +420,7 @@ pub fn render_media_mini_panel(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::play_pause_bus(&bus_name).await;
                         });
                     }),
@@ -452,7 +452,7 @@ pub fn render_media_mini_panel(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::next_bus(&bus_name).await;
                         });
                     }),

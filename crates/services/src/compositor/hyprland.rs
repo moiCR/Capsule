@@ -177,15 +177,19 @@ impl Compositor for Hyprland {
             if let Some(monitors) = query_hypr_monitors() {
                 let mut fallback_rate = 0.0;
                 for monitor in monitors {
-                    if monitor.focused && monitor.refresh_rate > 0.0 {
-                        return monitor.refresh_rate;
+                    let mut rate = monitor.refresh_rate;
+                    if rate > 1000.0 {
+                        rate /= 1000.0;
                     }
-                    if fallback_rate <= 0.0 && monitor.refresh_rate > 0.0 {
-                        fallback_rate = monitor.refresh_rate;
+                    if monitor.focused && rate > 0.0 {
+                        return rate.clamp(30.0, 360.0);
+                    }
+                    if fallback_rate <= 0.0 && rate > 0.0 {
+                        fallback_rate = rate;
                     }
                 }
                 if fallback_rate > 0.0 {
-                    return fallback_rate;
+                    return fallback_rate.clamp(30.0, 360.0);
                 }
             }
 
@@ -194,15 +198,19 @@ impl Compositor for Hyprland {
             {
                 let mut fallback_rate = 0.0;
                 for monitor in monitors {
-                    if monitor.focused && monitor.refresh_rate > 0.0 {
-                        return monitor.refresh_rate as f64;
+                    let mut rate = monitor.refresh_rate as f64;
+                    if rate > 1000.0 {
+                        rate /= 1000.0;
                     }
-                    if fallback_rate <= 0.0 && monitor.refresh_rate > 0.0 {
-                        fallback_rate = monitor.refresh_rate as f64;
+                    if monitor.focused && rate > 0.0 {
+                        return rate.clamp(30.0, 360.0);
+                    }
+                    if fallback_rate <= 0.0 && rate > 0.0 {
+                        fallback_rate = rate;
                     }
                 }
                 if fallback_rate > 0.0 {
-                    return fallback_rate;
+                    return fallback_rate.clamp(30.0, 360.0);
                 }
             }
             60.0
@@ -645,7 +653,7 @@ mod tests {
             let ws = Hyprland::new().get_workspace();
             assert!(ws.is_some());
             let rate = Hyprland::new().get_refresh_rate();
-            assert!(rate > 0.0);
+            assert!(rate >= 30.0 && rate <= 360.0);
         }
     }
 

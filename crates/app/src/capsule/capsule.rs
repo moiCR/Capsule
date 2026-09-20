@@ -1,5 +1,5 @@
 use gpui::{
-    Bounds, Context, DispatchPhase, Entity, MouseExitEvent, MouseMoveEvent, Render, Size, Task,
+    Bounds, Context, Entity, Pixels, Render, Size, Task,
     Window, div, layer_shell::KeyboardInteractivity, point, prelude::*, px, svg,
 };
 use services::{AppState, NotificationStore};
@@ -57,6 +57,8 @@ pub struct Capsule {
     is_mode_transition: bool,
     is_hovered: bool,
     last_known_workspace: services::WorkspaceInfo,
+    last_keyboard_interactivity: Option<gpui::layer_shell::KeyboardInteractivity>,
+    last_input_region: Option<Option<Vec<Bounds<Pixels>>>>,
 }
 
 impl Capsule {
@@ -101,7 +103,7 @@ impl Capsule {
             let (ws_tx, mut ws_rx) =
                 tokio::sync::mpsc::unbounded_channel::<services::WorkspaceInfo>();
 
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let mut rx = compositor.on_change_workspace();
                 let mut interval = tokio::time::interval(Duration::from_millis(250));
                 let mut last_ws = compositor.get_workspace();
@@ -165,7 +167,7 @@ impl Capsule {
                 tokio::sync::mpsc::unbounded_channel::<std::sync::Arc<services::AppConfig>>();
 
             let cfg_service_clone = config_service.clone();
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let mut rx = cfg_service_clone.subscribe();
                 loop {
                     match rx.recv().await {
@@ -389,10 +391,12 @@ impl Capsule {
 
         let compositor = cx.global::<AppState>().compositor.clone();
         cx.spawn(async move |this, cx| {
+            let mut slow_check_counter: usize = 0;
             loop {
                 cx.background_executor()
                     .timer(compositor.get_frame_duration())
                     .await;
+                slow_check_counter = slow_check_counter.wrapping_add(1);
                 if this
                     .update(cx, |capsule: &mut Self, cx| {
                         let current_ws = compositor.get_workspace();
@@ -443,36 +447,38 @@ impl Capsule {
                             p.poll_result(cx);
                         });
 
-                        if cx.has_global::<ui::theme::theme_manager::ThemeManager>() {
-                            let theme_updated = cx
-                                .global_mut::<ui::theme::theme_manager::ThemeManager>()
-                                .check_and_reload();
-                            if theme_updated {
-                                let new_theme = cx
-                                    .global::<ui::theme::theme_manager::ThemeManager>()
-                                    .current_theme
-                                    .clone();
-                                cx.set_global(new_theme);
-                                services::log_info!(
-                                    "THEME",
-                                    "Reloaded current_theme and applied to GTK/Qt/Ghostty/Fish/Yazi apps!"
-                                );
-                                cx.notify();
+                        if slow_check_counter % 60 == 0 {
+                            if cx.has_global::<ui::theme::theme_manager::ThemeManager>() {
+                                let theme_updated = cx
+                                    .global_mut::<ui::theme::theme_manager::ThemeManager>()
+                                    .check_and_reload();
+                                if theme_updated {
+                                    let new_theme = cx
+                                        .global::<ui::theme::theme_manager::ThemeManager>()
+                                        .current_theme
+                                        .clone();
+                                    cx.set_global(new_theme);
+                                    services::log_info!(
+                                        "THEME",
+                                        "Reloaded current_theme and applied to GTK/Qt/Ghostty/Fish/Yazi apps!"
+                                    );
+                                    cx.notify();
+                                }
                             }
-                        }
 
-                        if cx.has_global::<services::AppState>() {
-                            let lang_updated = cx
-                                .global::<services::AppState>()
-                                .language
-                                .check_and_reload();
-                            if lang_updated {
-                                services::log_info!(
-                                    "LANG",
-                                    "Reloaded language bundle!"
-                                );
-                                capsule.modules.notify_all(cx);
-                                cx.notify();
+                            if cx.has_global::<services::AppState>() {
+                                let lang_updated = cx
+                                    .global::<services::AppState>()
+                                    .language
+                                    .check_and_reload();
+                                if lang_updated {
+                                    services::log_info!(
+                                        "LANG",
+                                        "Reloaded language bundle!"
+                                    );
+                                    capsule.modules.notify_all(cx);
+                                    cx.notify();
+                                }
                             }
                         }
 
@@ -551,13 +557,10 @@ impl Capsule {
         cx.spawn(async move |this, cx| {
             loop {
                 if let Some(ref n) = notify {
-                    tokio::select! {
-                        _ = n.notified() => {},
-                        _ = cx.background_executor().timer(Duration::from_millis(50)) => {},
-                    }
+                    n.notified().await;
                 } else {
                     cx.background_executor()
-                        .timer(Duration::from_millis(50))
+                        .timer(Duration::from_millis(500))
                         .await;
                 }
 
@@ -809,6 +812,8 @@ impl Capsule {
             } else {
                 services::WorkspaceInfo::default()
             },
+            last_keyboard_interactivity: None,
+            last_input_region: None,
         }
     }
 
@@ -1702,7 +1707,6 @@ impl Render for Capsule {
             services::UIConfig::default()
         };
         let anim_duration = (ui_config.animation_duration_ms as f32 / 1000.0).max(0.001);
-        window.set_exclusive_zone(px(ui_config.exclusive_zone()));
 
         let win_w: f32 = window.bounds().size.width.into();
         let win_h: f32 = window.bounds().size.height.into();
@@ -1735,14 +1739,18 @@ impl Render for Capsule {
             || (self.mode == CapsuleMode::Notification
                 && self.modules.notification_view.read(cx).is_replying());
 
-        if needs_exclusive_focus {
-            window.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+        let desired_interactivity = if needs_exclusive_focus {
+            KeyboardInteractivity::Exclusive
         } else {
-            window.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
+            KeyboardInteractivity::OnDemand
+        };
+        if self.last_keyboard_interactivity != Some(desired_interactivity) {
+            window.set_keyboard_interactivity(desired_interactivity);
+            self.last_keyboard_interactivity = Some(desired_interactivity);
         }
 
-        if is_modal {
-            window.set_input_region(None);
+        let desired_input_region = if is_modal {
+            None
         } else {
             let pill_x = (win_w - self.current_width) / 2.0;
             let pill_y = self.current_y.max(0.0);
@@ -1757,61 +1765,12 @@ impl Render for Capsule {
                     size: Size::new(px(ORB_SIZE), px(ORB_SIZE)),
                 });
             }
-            window.set_input_region(Some(&input_bounds));
-        }
+            Some(input_bounds)
+        };
 
-        if self.mode == CapsuleMode::Notification {
-            let entity = cx.entity().downgrade();
-            window.on_mouse_event(move |_: &MouseExitEvent, phase, _window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    let _ = entity.update(cx, |capsule, cx| {
-                        capsule.is_hovered = false;
-                        capsule.modules.notification_view.update(cx, |view, cx| {
-                            view.set_expanded(false, cx);
-                        });
-                    });
-                }
-            });
-
-            let entity = cx.entity().downgrade();
-            let pill_x = (win_w - self.current_width) / 2.0;
-            let pill_y = self.current_y.max(0.0);
-            let pill_w = self.current_width;
-            let pill_h = self.current_height;
-
-            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    let mx: f32 = event.position.x.into();
-                    let my: f32 = event.position.y.into();
-                    let inside = window.is_window_hovered()
-                        && mx >= pill_x
-                        && mx <= pill_x + pill_w
-                        && my >= pill_y
-                        && my <= pill_y + pill_h;
-
-                    let _ = entity.update(cx, |capsule, cx| {
-                        capsule.is_hovered = inside;
-                        if capsule.modules.notification_view.read(cx).is_replying() {
-                            return;
-                        }
-                        capsule.modules.notification_view.update(cx, |view, cx| {
-                            view.set_expanded(inside, cx);
-                        });
-                    });
-                }
-            });
-
-            if !window.is_window_hovered()
-                && !self.modules.notification_view.read(cx).is_replying()
-                && self.modules.notification_view.read(cx).is_expanded()
-            {
-                let notif_view = self.modules.notification_view.clone();
-                cx.defer(move |cx| {
-                    notif_view.update(cx, |view, cx| {
-                        view.set_expanded(false, cx);
-                    });
-                });
-            }
+        if self.last_input_region.as_ref() != Some(&desired_input_region) {
+            window.set_input_region(desired_input_region.as_deref());
+            self.last_input_region = Some(desired_input_region);
         }
 
         let mut content_container = div().relative().size_full();
@@ -1864,6 +1823,16 @@ impl Render for Capsule {
                 self.modules.shelf_view.update(cx, |shelf, cx| {
                     shelf.reload_items(cx);
                     shelf.focus(window, cx);
+                });
+            }
+            if self.mode == CapsuleMode::SelectTheme {
+                self.modules.select_theme_view.update(cx, |st, cx| {
+                    st.focus(window, cx);
+                });
+            }
+            if self.mode == CapsuleMode::Polkit {
+                self.modules.polkit_view.update(cx, |polkit, cx| {
+                    polkit.focus(window, cx);
                 });
             }
         }

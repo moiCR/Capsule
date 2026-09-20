@@ -156,7 +156,7 @@ impl IpcSubscriber {
     pub fn start_listener(&mut self) {
         if let Some(listener) = self.listener.take() {
             let path_clone = self.socket_path.clone();
-            tokio::spawn(async move {
+            crate::spawn_tokio(async move {
                 accept_loop(listener, path_clone).await;
             });
         }
@@ -184,7 +184,7 @@ async fn accept_loop(listener: TokioUnixListener, socket_path: PathBuf) {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(async move {
+                crate::spawn_tokio(async move {
                     handle_connection(stream, &REQUEST_COUNTER).await;
                 });
             }

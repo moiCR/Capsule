@@ -21,16 +21,17 @@ impl Default for IdleService {
 
 impl IdleService {
     pub fn new(config: ConfigService) -> Self {
+        let _guard = crate::tokio_handle().enter();
         let (tx, _) = broadcast::channel(16);
         let service = Self { tx, config };
 
         let svc_dbus = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             svc_dbus.start_dbus_lock_listener().await;
         });
 
         let svc_input = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             svc_input.start_physical_input_tracker().await;
         });
 
@@ -44,7 +45,7 @@ impl IdleService {
     async fn start_physical_input_tracker(&self) {
         let (tx_activity, mut rx_activity) = tokio::sync::mpsc::unbounded_channel::<()>();
 
-        tokio::spawn(start_hyprland_socket2_listener(tx_activity));
+        crate::spawn_tokio(start_hyprland_socket2_listener(tx_activity));
 
         let mut last_activity = std::time::Instant::now();
         let mut last_cursor_pos = String::new();
@@ -105,7 +106,7 @@ impl IdleService {
         if let Some(conn) = crate::dbus_util::get_shared_system_conn().await {
             let tx1 = self.tx.clone();
             let conn1 = conn.clone();
-            tokio::spawn(async move {
+            crate::spawn_tokio(async move {
                 if let Ok(proxy) = zbus::Proxy::new(
                     &conn1,
                     "org.freedesktop.login1",
@@ -129,7 +130,7 @@ impl IdleService {
             });
 
             let tx2 = self.tx.clone();
-            tokio::spawn(async move {
+            crate::spawn_tokio(async move {
                 if let Ok(proxy) = zbus::Proxy::new(
                     &conn,
                     "org.freedesktop.login1",

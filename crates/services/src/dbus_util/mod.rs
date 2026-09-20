@@ -15,7 +15,17 @@ pub async fn get_shared_session_conn() -> Option<Connection> {
         }
     }
 
-    if let Ok(conn) = Connection::session().await {
+    let conn = if tokio::runtime::Handle::try_current().is_ok() {
+        Connection::session().await.ok()
+    } else {
+        crate::tokio_handle()
+            .spawn(async { Connection::session().await.ok() })
+            .await
+            .ok()
+            .flatten()
+    };
+
+    if let Some(conn) = conn {
         if let Ok(mut guard) = SESSION_CONN.lock() {
             *guard = Some(conn.clone());
         }
@@ -36,7 +46,17 @@ pub async fn get_shared_system_conn() -> Option<Connection> {
         }
     }
 
-    if let Ok(conn) = Connection::system().await {
+    let conn = if tokio::runtime::Handle::try_current().is_ok() {
+        Connection::system().await.ok()
+    } else {
+        crate::tokio_handle()
+            .spawn(async { Connection::system().await.ok() })
+            .await
+            .ok()
+            .flatten()
+    };
+
+    if let Some(conn) = conn {
         if let Ok(mut guard) = SYSTEM_CONN.lock() {
             *guard = Some(conn.clone());
         }
@@ -45,3 +65,4 @@ pub async fn get_shared_system_conn() -> Option<Connection> {
 
     None
 }
+

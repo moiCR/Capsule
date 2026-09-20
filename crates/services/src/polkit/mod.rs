@@ -139,6 +139,7 @@ pub struct PolkitService;
 
 impl PolkitService {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         start_polkit_agent();
         Self
     }
@@ -264,12 +265,13 @@ impl PolkitAgentServer {
 }
 
 pub fn start_polkit_agent() {
+    let _guard = crate::tokio_handle().enter();
     static STARTED: OnceLock<()> = OnceLock::new();
     if STARTED.set(()).is_err() {
         return;
     }
 
-    tokio::spawn(async move {
+    crate::spawn_tokio(async move {
         loop {
             crate::log_info!(
                 "POLKIT",

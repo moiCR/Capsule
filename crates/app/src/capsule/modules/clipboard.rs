@@ -119,7 +119,6 @@ impl ClipboardModule {
         }
     }
 
-    #[allow(dead_code)]
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus_handle, cx);
     }
@@ -295,8 +294,9 @@ impl ClipboardModule {
 }
 
 impl Render for ClipboardModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
+
         let (empty_history, empty_snippets) = if cx.has_global::<services::AppState>() {
             let lang = &cx.global::<services::AppState>().language;
             (
@@ -309,8 +309,6 @@ impl Render for ClipboardModule {
                 "No hay plantillas fijadas".to_string(),
             )
         };
-
-        window.focus(&self.focus_handle, cx);
 
         let selected_index = self.selected_index;
 

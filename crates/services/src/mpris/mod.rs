@@ -39,10 +39,11 @@ pub struct MprisService {
 
 impl MprisService {
     pub fn new(config: ConfigService) -> Self {
+        let _guard = crate::tokio_handle().enter();
         let players = Arc::new(ArcSwap::from_pointee(Vec::new()));
         let players_clone = players.clone();
 
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             run_mpris_listener(players_clone, config).await;
         });
 
@@ -59,43 +60,67 @@ impl MprisService {
     }
 
     pub async fn fetch_all_players() -> Vec<MediaTrack> {
-        let config = ConfigService::new();
-        let allowed = config.get().mpris.players.clone();
-        poll_all_players_dbus(&allowed).await
+        crate::spawn_tokio(async move {
+            let config = ConfigService::new();
+            let allowed = config.get().mpris.players.clone();
+            poll_all_players_dbus(&allowed).await
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn play_pause_bus(bus_name: &str) -> bool {
-        call_mpris_method(bus_name, "PlayPause").await
+        let bus = bus_name.to_string();
+        crate::spawn_tokio(async move {
+            call_mpris_method(&bus, "PlayPause").await
+        })
+        .await
+        .unwrap_or(false)
     }
 
     pub async fn next_bus(bus_name: &str) -> bool {
-        call_mpris_method(bus_name, "Next").await
+        let bus = bus_name.to_string();
+        crate::spawn_tokio(async move {
+            call_mpris_method(&bus, "Next").await
+        })
+        .await
+        .unwrap_or(false)
     }
 
     pub async fn previous_bus(bus_name: &str) -> bool {
-        call_mpris_method(bus_name, "Previous").await
+        let bus = bus_name.to_string();
+        crate::spawn_tokio(async move {
+            call_mpris_method(&bus, "Previous").await
+        })
+        .await
+        .unwrap_or(false)
     }
 
     pub async fn seek_to(bus_name: &str, position_seconds: f64) -> bool {
-        let raw_player = bus_name
-            .strip_prefix("org.mpris.MediaPlayer2.")
-            .unwrap_or(bus_name)
-            .split('.')
-            .next()
-            .unwrap_or(bus_name);
+        let bus = bus_name.to_string();
+        crate::spawn_tokio(async move {
+            let raw_player = bus
+                .strip_prefix("org.mpris.MediaPlayer2.")
+                .unwrap_or(&bus)
+                .split('.')
+                .next()
+                .unwrap_or(&bus);
 
-        let clean_player = raw_player.trim();
-        let pos_str = format!("{:.2}", position_seconds.max(0.0));
-        let mut cmd = tokio::process::Command::new("playerctl");
-        if !clean_player.is_empty() && clean_player != "player" {
-            cmd.args(["-p", clean_player, "position", &pos_str]);
-        } else {
-            cmd.args(["position", &pos_str]);
-        }
-        match tokio::time::timeout(Duration::from_millis(400), cmd.status()).await {
-            Ok(Ok(st)) => st.success(),
-            _ => false,
-        }
+            let clean_player = raw_player.trim();
+            let pos_str = format!("{:.2}", position_seconds.max(0.0));
+            let mut cmd = tokio::process::Command::new("playerctl");
+            if !clean_player.is_empty() && clean_player != "player" {
+                cmd.args(["-p", clean_player, "position", &pos_str]);
+            } else {
+                cmd.args(["position", &pos_str]);
+            }
+            match tokio::time::timeout(Duration::from_millis(400), cmd.status()).await {
+                Ok(Ok(st)) => st.success(),
+                _ => false,
+            }
+        })
+        .await
+        .unwrap_or(false)
     }
 }
 
@@ -394,7 +419,7 @@ async fn resolve_art_url(url: &str) -> Option<String> {
         }
 
         let url_owned = url.to_string();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             if let Ok(client) = reqwest::Client::builder()
                 .timeout(Duration::from_secs(3))
                 .build()

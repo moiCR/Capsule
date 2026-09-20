@@ -114,7 +114,6 @@ impl EmojiModule {
             .collect();
     }
 
-    #[allow(dead_code)]
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus_handle, cx);
     }
@@ -286,10 +285,8 @@ impl EmojiModule {
 }
 
 impl Render for EmojiModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
-
-        window.focus(&self.focus_handle, cx);
 
         let query = self.query.clone();
         let selected_index = self.selected_index;

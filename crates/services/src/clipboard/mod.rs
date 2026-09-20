@@ -102,18 +102,28 @@ impl ClipboardService {
             snippets: Arc::new(Mutex::new(snippets::SnippetsConfig::load())),
         };
 
-        service.ensure_watch_daemon();
+        let has_cliphist = Command::new("cliphist")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
 
-        let svc = service.clone();
-        tokio::spawn(async move {
-            svc.start_watcher().await;
-        });
+        if has_cliphist {
+            service.ensure_watch_daemon();
+        } else {
+            let svc = service.clone();
+            crate::spawn_tokio(async move {
+                svc.start_watcher().await;
+            });
+        }
 
         service
     }
 
     fn ensure_watch_daemon(&self) {
-        tokio::spawn(async {
+        crate::spawn_tokio(async {
             let is_running = Command::new("pgrep")
                 .args(["-f", "cliphist store"])
                 .stdout(Stdio::null())
@@ -143,7 +153,7 @@ impl ClipboardService {
     async fn start_watcher(&self) {
         let mut last_text = String::new();
         loop {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
 
             if let Ok(out) = tokio::process::Command::new("wl-paste")
                 .args(["-t", "text"])

@@ -107,12 +107,10 @@ pub fn render_volume_widget(
                         .on_click(cx.listener(|_this, _, _, cx| {
                             if cx.has_global::<AppState>() {
                                 let sys = cx.global::<AppState>().system.clone();
-                                let this = cx.entity().downgrade();
-                                cx.spawn(async move |_this, cx| {
+                                services::spawn_tokio(async move {
                                     let _ = sys.toggle_mute().await;
-                                    let _ = this.update(cx, |_view, cx| cx.notify());
-                                })
-                                .detach();
+                                });
+                                cx.notify();
                             }
                         }))
                         .child(

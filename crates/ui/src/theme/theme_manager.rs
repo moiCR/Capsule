@@ -132,11 +132,22 @@ impl ThemeManager {
         let theme = self.current_theme.clone();
         let apps = self.apps.clone();
 
-        tokio::task::spawn_blocking(move || {
-            for app in &apps {
-                app.apply_current_theme(&theme);
-            }
-        });
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn_blocking(move || {
+                for app in &apps {
+                    app.apply_current_theme(&theme);
+                }
+            });
+        } else {
+            std::thread::Builder::new()
+                .name("capsule-theme-apply".to_string())
+                .spawn(move || {
+                    for app in &apps {
+                        app.apply_current_theme(&theme);
+                    }
+                })
+                .ok();
+        }
     }
 
     pub fn set_theme(&mut self, theme: Theme) {

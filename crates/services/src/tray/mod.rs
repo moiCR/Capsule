@@ -44,7 +44,7 @@ impl TrayService {
     /// Start the StatusNotifierItem tray in a background tokio task.
     pub fn start(&self) {
         let service = self.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let tray = CapsuleTray {
                 service: service.clone(),
             };

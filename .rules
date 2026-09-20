@@ -16,30 +16,50 @@
 - Keep functions focused on a single responsibility.
 - Run `cargo fmt` before finishing changes.
 - Keep `cargo clippy` free of warnings.
-- Don't write comment's in the code
+- Don't write comments in the code.
 
-## Architecture
+## Architecture & Runtime Separation
 
 - Prefer extending existing modules before creating new ones.
 - Do not create new crates or modules unless there is a clear architectural reason.
 - Keep related functionality together.
 - Avoid introducing traits unless multiple implementations are expected.
 - Favor composition over unnecessary abstractions.
+- **Tokio vs. GPUI Executor**:
+  - GPUI worker threads (`Worker-*`, `smol-*`) do NOT run a Tokio reactor.
+  - All D-Bus interactions (`zbus 5.x`), system socket listeners, and background IPC loops MUST run inside Tokio's runtime via `tokio::spawn` or with an entered runtime handle (`let _guard = services::tokio_handle().enter();`).
+  - Never instantiate or await `zbus::Connection` or proxies directly inside bare GPUI tasks (`cx.spawn` / `background_executor().spawn`).
+  - Communicate from background Tokio tasks to GPUI strictly via asynchronous channels (`tokio::sync::mpsc` or `broadcast`), ingesting them in the UI via `window_context.update` or `entity.update`.
 
-## GPUI
+## GPUI & Wayland Protocol Rules
 
-- Keep rendering declarative.
-- Keep business logic outside `render()`.
+- **`render()` Must Be Pure & Side-Effect Free**:
+  - Keep rendering declarative. Never run business logic, background task spawning, or state mutations inside `render()`.
+  - PROHIBITED inside `render()`: `window.focus()`, `window.activate_window()`, `window.refresh()`, and `cx.notify()`.
+  - Focus must ONLY be requested upon explicit window open or mode transition events (`if self.last_rendered_mode != Some(self.mode)`), never during paint passes.
+- **Wayland Layer-Surface Commits**:
+  - In GPUI's Wayland backend, setter methods (`set_keyboard_interactivity`, `set_input_region`, `set_exclusive_zone`) unconditionally commit the layer surface (`surface.commit()`), prompting the compositor to issue `configure` and triggering `request_redraw()`.
+  - NEVER call surface setters inside `render()` without a strict cache diff:
+    ```rust
+    if self.cached_state != Some(desired_state) {
+        self.cached_state = Some(desired_state);
+        window.set_state(desired_state);
+    }
+    ```
+- **Element Reconciliation & Dynamic Loops**:
+  - Any interactive element with `.hover(...)`, `.on_click(...)`, or event handlers created inside an iterator or loop MUST be given a unique, stable ID (e.g., `.id(("cal-day", day as u32))`). Failing to do so invalidates the hit-test tree every frame and causes severe frame drops.
+  - Avoid dynamic heap churn (`Vec<AnyElement>` boxing) inside hot render passes when declarative chaining is possible.
+- **Dimension Oscillation Prevention**:
+  - Computed satellite and popup panel heights (`compute_*_panel_height()`) must match the actual rendered layout height to prevent `DimensionTracker` from triggering layout oscillation loops.
 - Store application state in entities, not UI components.
 - Never block the UI thread.
 - Background work belongs in background tasks.
 - Reuse UI components whenever practical.
-- Use `tokio::spawn` instead of `cx.spawn` because `cx.spawn` stops working when idle 
 
 ## Code Style
 
 - Comments should explain **why**, never **what**.
-- Remove dead code instead of commenting it out.a
+- Remove dead code instead of commenting it out.
 - Avoid TODOs unless explicitly requested.
 - Do not make unrelated refactors while implementing a feature.
 
@@ -50,49 +70,61 @@
 - Avoid speculative abstractions.
 
 ## Codebase Structure
+
 ```
 crates/
-├── app/         Main binary, UI components (capsule, capsule modules, modules widgets)
-├── services/    System integration (D-Bus, compositor, audio, network, etc.)
-├── ui/          Shared components, theme system and language system
-└── assets/      Embedded SVG icons
+├── app/          Main binary, UI components (capsule, capsule modules, modules widgets)
+├── services/     System integration (D-Bus, compositor, audio, network, etc.)
+├── ui/           Shared components, theme system and language system
+└── assets/       Embedded SVG icons
 ```
 
 ## Capsule Modules Widgets
-Each module should have its own widgets. What does this mean? It means you shouldn't cram everything into the module. See the example below.
+
+Each module should have its own widgets. Do not cram everything into the module file.
 
 ```
 crates/
 ├── app/
     ├── modules/
-    |    ├── launcher.rs
+    │   ├── launcher.rs
     ├── widgets/
         ├── launcher/
             ├── search_input.rs
 ```
 
 ## Multiples Instances
-Avoid creating multiple instances of a single object. What does this mean? It means that if it's a utility, manager, service, etc., it should be instantiated and accessed globally (AppState).
+
+Avoid creating multiple instances of a single object. If it is a utility, manager, service, etc., instantiate and access it globally (`AppState`).
 
 ## Components
+
+```
 crates/
 ├── ui/
     ├── components/
-    |    ├── select.rs
-    |    ├── volume_control.rs
-    |    ├── input.rs
-    |    ├── button.rs
-    |    ├── ...
+    │   ├── select.rs
+    │   ├── volume_control.rs
+    │   ├── input.rs
+    │   ├── button.rs
 ```
 
+## Important Conventions
 
-## Capsule UI guidelines
-- Use the config settings
+- **Async Timers in UI**: Use `cx.background_executor().timer(duration).await` (NOT `tokio::time::sleep`). In background services running on Tokio, use `tokio::time::sleep(duration).await`.
+- **Compositor Rates & Timer Floors**:
+  - Always normalize compositor refresh rates: if `rate > 1000.0`, normalize millihertz to hertz (`rate /= 1000.0`) and clamp to `(30.0..=360.0)`.
+  - Never allow zero or microsecond frame durations. Always enforce a defensive minimum floor: `compositor.get_frame_duration().max(Duration::from_millis(2))`.
+- **File System & Process Churn**:
+  - UI interactions, modal openings, and search queries (`reset_search`) must NEVER trigger synchronous disk re-scans (`.desktop` / icon caches). Disk indexing belongs strictly to background watchers (`inotify`).
+- **Icons**: SVGs in `crates/assets/icons/`, loaded via GPUI asset system.
+- **Styling**: Pure GPUI builder patterns (no CSS).
 
 ## Notes
+
 - Before exploring the repository structure, consult codebase-memory-mcp.
 - Check that the index belongs to the current project and is up to date.
 - Use the graph to locate relevant symbols, dependencies, and files.
 - Verify the source code before modifying it.
 - If the graph is unavailable or its coverage is insufficient, inspect the files directly and disclose that limitation.
-- Use caveman skill
+- Use caveman skill.

@@ -446,7 +446,7 @@ pub fn render_media_player_widget(
                             let pct = ((click_x - start_x) / width).clamp(0.0, 1.0);
                             let target_secs = pct as f64 * (total_micros as f64 / 1_000_000.0);
                             let bus = bus_name_seek.clone();
-                            tokio::spawn(async move {
+                            services::spawn_tokio(async move {
                                 MprisService::seek_to(&bus, target_secs).await;
                             });
                             this.touch_user_action();
@@ -522,7 +522,7 @@ pub fn render_media_player_widget(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::previous_bus(&bus_name).await;
                         });
                     }),
@@ -557,7 +557,7 @@ pub fn render_media_player_widget(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::play_pause_bus(&bus_name).await;
                         });
                     }),
@@ -590,7 +590,7 @@ pub fn render_media_player_widget(
                         this.touch_user_action();
                         cx.notify();
 
-                        tokio::spawn(async move {
+                        services::spawn_tokio(async move {
                             MprisService::next_bus(&bus_name).await;
                         });
                     }),

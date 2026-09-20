@@ -35,6 +35,7 @@ impl Default for AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         let config = ConfigService::new();
         let sni_host = SniHostService::new();
         sni_host.start();

@@ -199,7 +199,7 @@ impl NotificationStore {
             return;
         };
         let store = self.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             if connection
                 .emit_signal(
                     None::<&str>,

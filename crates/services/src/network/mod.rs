@@ -151,6 +151,7 @@ impl Default for NetworkService {
 
 impl NetworkService {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         let initial = NetworkStatus::default();
         let status = Arc::new(Mutex::new(initial));
         let service = Self { status };
@@ -169,7 +170,7 @@ impl NetworkService {
     pub fn toggle_wifi(&self) {
         let is_on = self.get_status().wifi_enabled;
         let status_arc = self.status.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("nmcli")
                 .arg("radio")
                 .arg("wifi")
@@ -194,7 +195,7 @@ impl NetworkService {
     pub fn toggle_bluetooth(&self) {
         let is_on = self.get_status().bluetooth_enabled;
         let status_arc = self.status.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("bluetoothctl")
                 .arg("power")
                 .arg(if is_on { "off" } else { "on" })
@@ -220,7 +221,7 @@ impl NetworkService {
         if let Ok(mut lock) = status_arc.lock() {
             lock.is_scanning_wifi = true;
         }
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("nmcli")
                 .arg("dev")
                 .arg("wifi")
@@ -251,7 +252,7 @@ impl NetworkService {
             lock.connecting_wifi_ssid = Some(ssid_string.clone());
             lock.wifi_error = None;
         }
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let mut cmd = tokio::process::Command::new("nmcli");
             cmd.arg("dev").arg("wifi").arg("connect").arg(&ssid_string);
             if let Some(ref pwd) = pwd_string
@@ -301,7 +302,7 @@ impl NetworkService {
     pub fn disconnect_wifi(&self, ssid: &str) {
         let ssid_string = ssid.to_string();
         let status_arc = self.status.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("nmcli")
                 .arg("con")
                 .arg("down")
@@ -325,7 +326,7 @@ impl NetworkService {
         if let Ok(mut lock) = status_arc.lock() {
             lock.is_scanning_bluetooth = true;
         }
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             if let Some(conn) = get_shared_system_conn().await
                 && let Ok(adapter) = BluezAdapterProxy::new(&conn).await
             {
@@ -364,7 +365,7 @@ impl NetworkService {
             lock.connecting_bluetooth_mac = Some(mac_string.clone());
             lock.bluetooth_error = None;
         }
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("bluetoothctl")
                 .arg("pair")
                 .arg(&mac_string)
@@ -411,7 +412,7 @@ impl NetworkService {
     pub fn disconnect_bluetooth(&self, mac: &str) {
         let mac_string = mac.to_string();
         let status_arc = self.status.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = tokio::process::Command::new("bluetoothctl")
                 .arg("disconnect")
                 .arg(&mac_string)
@@ -657,8 +658,9 @@ impl NetworkService {
     }
 
     fn start_polling(&self) {
+        let _guard = crate::tokio_handle().enter();
         let status_arc = self.status.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             loop {
                 if let Some(conn) = get_shared_system_conn().await
                     && let Ok(mut status) =

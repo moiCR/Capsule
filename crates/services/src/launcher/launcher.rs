@@ -67,7 +67,7 @@ impl LauncherService {
         };
 
         let service_clone = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = service_clone.refresh().await;
 
             let inotify_fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
@@ -104,18 +104,26 @@ impl LauncherService {
                             libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
                         };
                         guard.clear_ready();
-                        if n > 0 {
-                            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                            while unsafe {
-                                libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
-                            } > 0
-                            {}
-                            if let Err(err) = service_clone.refresh().await {
-                                crate::log_warn!(
-                                    "LAUNCHER",
-                                    "LauncherService inotify refresh warning: {err}"
-                                );
+                        if n <= 0 {
+                            if n == 0 {
+                                break;
                             }
+                            let err = std::io::Error::last_os_error();
+                            if err.kind() != std::io::ErrorKind::WouldBlock {
+                                break;
+                            }
+                            continue;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        while unsafe {
+                            libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+                        } > 0
+                        {}
+                        if let Err(err) = service_clone.refresh().await {
+                            crate::log_warn!(
+                                "LAUNCHER",
+                                "LauncherService inotify refresh warning: {err}"
+                            );
                         }
                     }
                 }
@@ -206,12 +214,11 @@ impl LauncherService {
                 continue;
             }
 
-            let mut entries = match tokio::fs::read_dir(&dir).await {
-                Ok(e) => e,
-                Err(_) => continue,
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
             };
 
-            while let Ok(Some(entry)) = entries.next_entry().await {
+            for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|ext| ext.to_str()) == Some("desktop") {
                     if let Ok(app) = Self::parse_desktop_file(&path, &icon_map).await {
@@ -274,8 +281,8 @@ impl LauncherService {
         for base in base_dirs {
             for subdir in &subdirs {
                 let dir = base.join(subdir);
-                if let Ok(mut entries) = tokio::fs::read_dir(&dir).await {
-                    while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
                         let path = entry.path();
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             map.entry(stem.to_string()).or_insert(path);
@@ -291,7 +298,7 @@ impl LauncherService {
         path: &Path,
         icon_map: &HashMap<String, PathBuf>,
     ) -> Result<Application> {
-        let content = tokio::fs::read_to_string(path).await?;
+        let content = std::fs::read_to_string(path)?;
         let mut in_desktop_entry = false;
 
         let mut name = None;
