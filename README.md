@@ -153,6 +153,11 @@ Conditionals are also supported:
 curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | bash
 ```
 
+To install the latest beta pre-release instead:
+```bash
+curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | bash -s -- --beta
+```
+
 Or build from source:
 ```bash
 git clone https://github.com/moiCR/Capsule.git

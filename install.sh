@@ -31,6 +31,14 @@ APP_NAME="capsule"
 GITHUB_REPO="moiCR/Capsule"
 INSTALL_DIR="/usr/local/bin"
 DESKTOP_DIR="/usr/share/applications"
+BETA_MODE=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --beta) BETA_MODE=true ;;
+        *) error "Unknown option: $arg. Usage: install.sh [--beta]" ;;
+    esac
+done
 
 if [[ $EUID -eq 0 ]]; then
     error "Please do not run this script as root or with sudo. Run it as your regular user; sudo privileges will be requested when needed."
@@ -83,10 +91,29 @@ if [[ -n "$INSTALLED_BIN" && -x "$INSTALLED_BIN" ]]; then
 fi
 
 LATEST_VERSION=""
+LATEST_TAG=""
 RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/capsule-${TARGET}.tar.gz"
 
 if command -v curl &>/dev/null; then
-    LATEST_TAG=$(curl -sSL -m 5 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "")
+    if [[ "$BETA_MODE" == true ]]; then
+        LATEST_TAG=$(curl -sSL -m 10 "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100" 2>/dev/null | awk '
+            /^  \{$/ { tag = "" }
+            /"tag_name":[[:space:]]*"/ {
+                line = $0
+                sub(/^.*"tag_name":[[:space:]]*"/, "", line)
+                sub(/".*$/, "", line)
+                tag = line
+            }
+            /"prerelease":[[:space:]]*true/ && tag ~ /-beta/ { print tag; exit }
+        ' || echo "")
+        if [[ -n "$LATEST_TAG" ]]; then
+            RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/capsule-${TARGET}.tar.gz"
+        else
+            RELEASE_URL=""
+        fi
+    else
+        LATEST_TAG=$(curl -sSL -m 5 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "")
+    fi
     LATEST_VERSION="${LATEST_TAG#v}"
 fi
 
@@ -268,7 +295,11 @@ if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/Cargo.toml" && -f "$SCRIPT_DIR/crates/
 fi
 
 if [[ "$BINARY_INSTALLED" == false ]]; then
-    info "Attempting to download release binary from ${RELEASE_URL}..."
+    if [[ "$BETA_MODE" == true ]]; then
+        info "Attempting to download beta release ${LATEST_TAG}..."
+    else
+        info "Attempting to download the latest stable release..."
+    fi
     TEMP_BIN_DIR=$(mktemp -d)
     if curl -sSL --fail "$RELEASE_URL" -o "$TEMP_BIN_DIR/capsule.tar.gz" 2>/dev/null; then
         info "Extracting release asset..."
@@ -300,8 +331,19 @@ if [[ "$BINARY_INSTALLED" == false ]]; then
                 success "Capsule binary compiled from local source and installed to $INSTALL_DIR/capsule"
             fi
         else
+            if [[ "$BETA_MODE" == true && -z "$LATEST_TAG" ]]; then
+                error "No published beta release was found."
+            fi
             SRC_TEMP_DIR=$(mktemp -d)
-            if git clone "https://github.com/${GITHUB_REPO}.git" "$SRC_TEMP_DIR"; then
+            CLONE_SUCCESS=false
+            if [[ "$BETA_MODE" == true ]]; then
+                if git clone --branch "$LATEST_TAG" --depth 1 "https://github.com/${GITHUB_REPO}.git" "$SRC_TEMP_DIR"; then
+                    CLONE_SUCCESS=true
+                fi
+            elif git clone "https://github.com/${GITHUB_REPO}.git" "$SRC_TEMP_DIR"; then
+                CLONE_SUCCESS=true
+            fi
+            if [[ "$CLONE_SUCCESS" == true ]]; then
                 info "Compiling Capsule release binary via cargo..."
                 (
                     cd "$SRC_TEMP_DIR"
