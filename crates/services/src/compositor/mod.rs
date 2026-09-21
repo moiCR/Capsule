@@ -1,5 +1,5 @@
 pub mod hyprland;
-pub mod kinetic;
+pub mod kwin;
 pub mod niri;
 
 use arc_swap::ArcSwap;
@@ -45,19 +45,26 @@ pub struct CompositorService {
     current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
     workspace_tx: broadcast::Sender<WorkspaceInfo>,
     compositor: Arc<dyn Compositor>,
+    kwin: Option<kwin::KWin>,
 }
 
 impl CompositorService {
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
-        let compositor: Arc<dyn Compositor> =
-            if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
-                Arc::new(hyprland::Hyprland::new())
-            } else if std::env::var("NIRI_SOCKET").is_ok() {
-                Arc::new(niri::Niri::new())
-            } else {
-                Arc::new(kinetic::KineticWE::new())
-            };
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+        let use_kwin = std::env::var("KWIN_WAYLAND").is_ok()
+            || desktop.contains("KDE")
+            || desktop.contains("Kinetic")
+            || (std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_err()
+                && std::env::var("NIRI_SOCKET").is_err());
+        let kwin = use_kwin.then(kwin::KWin::new);
+        let compositor: Arc<dyn Compositor> = if let Some(backend) = &kwin {
+            Arc::new(backend.clone())
+        } else if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+            Arc::new(hyprland::Hyprland::new())
+        } else {
+            Arc::new(niri::Niri::new())
+        };
         let initial_ws = compositor.get_workspace().unwrap_or_default();
         let current_workspace = Arc::new(ArcSwap::from_pointee(initial_ws));
         let (workspace_tx, _) = broadcast::channel(32);
@@ -67,6 +74,7 @@ impl CompositorService {
             current_workspace,
             workspace_tx,
             compositor,
+            kwin,
         };
 
         let service_clone = service.clone();
@@ -126,21 +134,22 @@ impl CompositorService {
     }
 
     async fn run_workspace_events_loop(&self) {
+        if let Some(backend) = &self.kwin {
+            kwin::run_events_listener(
+                backend.clone(),
+                self.current_workspace.clone(),
+                self.workspace_tx.clone(),
+            )
+            .await;
+            return;
+        }
         let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
         let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
-
-        let initial = crate::spawn_blocking(move || {
-            if use_hyprland {
-                hyprland::Hyprland::new().get_workspace()
-            } else if use_niri {
-                niri::Niri::new().get_workspace()
-            } else {
-                kinetic::KineticWE::new().get_workspace()
-            }
-        })
-        .await
-        .ok()
-        .flatten();
+        let compositor = self.compositor.clone();
+        let initial = crate::spawn_blocking(move || compositor.get_workspace())
+            .await
+            .ok()
+            .flatten();
 
         if let Some(ws) = initial {
             let prev = self.current_workspace.load();
@@ -163,8 +172,9 @@ impl CompositorService {
     }
 
     async fn run_polling_loop(&self) {
-        let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
-        let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
+        let use_hyprland =
+            self.kwin.is_none() && std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+        let use_niri = self.kwin.is_none() && !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
 
         loop {
             let mut rate = crate::spawn_blocking(move || {
