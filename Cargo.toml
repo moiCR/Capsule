@@ -2,6 +2,8 @@
 resolver = "2"
 members = ["crates/*"]
 
+[workspace.package]
+license = "MIT"
 
 [workspace.dependencies]
 gpui = { git = "https://github.com/moiCR/gpui-capsule", branch = "capsule-patch", features = ["wayland"] }

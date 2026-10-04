@@ -2,6 +2,7 @@
 name = "capsule"
 version = "1.2.0"
 edition = "2024"
+license.workspace = true
 
 [[bin]]
 name = "capsule"
