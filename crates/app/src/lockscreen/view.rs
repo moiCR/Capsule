@@ -13,8 +13,7 @@ pub struct LockScreen {
     password: String,
     auth_failed: bool,
     is_checking: bool,
-    auth_result: Arc<Mutex<Option<bool>>>,
-    focus_handle: gpui::FocusHandle,
+    pub focus_handle: gpui::FocusHandle,
     pub entry_start_time: Option<Instant>,
     last_track_key: String,
     last_track_pos_micros: u64,
@@ -59,7 +58,6 @@ impl LockScreen {
             password: String::new(),
             auth_failed: false,
             is_checking: false,
-            auth_result: Arc::new(Mutex::new(None)),
             focus_handle,
             entry_start_time: None,
             last_track_key: String::new(),
@@ -91,12 +89,16 @@ impl LockScreen {
         };
 
         let slot = self.fallback_blur_slot.clone();
-        tokio::task::spawn_blocking(move || {
+        services::spawn_blocking(move || {
             let res = services::wallpaper::WallpaperService::create_or_get_blur(&target);
             if let Ok(mut guard) = slot.lock() {
                 *guard = res;
             }
         });
+    }
+
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle, cx);
     }
 
     pub fn submit_password(&mut self, cx: &mut Context<Self>) {
@@ -107,24 +109,35 @@ impl LockScreen {
         let pass = self.password.clone();
         self.is_checking = true;
         self.auth_failed = false;
-        let result_slot = self.auth_result.clone();
-        if let Ok(mut guard) = result_slot.lock() {
-            *guard = None;
-        }
         cx.notify();
 
-        tokio::task::spawn_blocking(move || {
-            let is_valid = match services::PamService::authenticate_current_user(&pass) {
-                Ok(valid) => valid,
-                Err(error) => {
-                    eprintln!("[PAM] Authentication failed: {error:#}");
-                    false
+        cx.spawn(async move |this, cx| {
+            let is_valid = services::spawn_blocking(move || {
+                match services::PamService::authenticate_current_user(&pass) {
+                    Ok(valid) => valid,
+                    Err(error) => {
+                        eprintln!("[PAM] Authentication failed: {error:#}");
+                        false
+                    }
                 }
-            };
-            if let Ok(mut guard) = result_slot.lock() {
-                *guard = Some(is_valid);
-            }
-        });
+            })
+            .await
+            .unwrap_or(false);
+
+            let _ = this.update(cx, |this: &mut Self, cx| {
+                this.is_checking = false;
+                if is_valid {
+                    cx.defer(|cx| {
+                        crate::panel::LockScreenPanel::close_all(cx);
+                    });
+                } else {
+                    this.auth_failed = true;
+                    this.password.clear();
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 }
 
@@ -137,33 +150,6 @@ impl Render for LockScreen {
             self.blurred_wallpaper = Some(path);
         }
 
-        if self.is_checking {
-            let auth_res = if let Ok(mut guard) = self.auth_result.lock() {
-                guard.take()
-            } else {
-                None
-            };
-
-            if let Some(is_valid) = auth_res {
-                self.is_checking = false;
-                if is_valid {
-                    window.remove_window();
-                    cx.defer(|cx| {
-                        crate::panel::LockScreenPanel::close_all(cx);
-                    });
-                    return div().into_any_element();
-                } else {
-                    self.auth_failed = true;
-                    self.password.clear();
-                }
-            } else {
-                window.request_animation_frame();
-            }
-        }
-
-        if self.is_primary {
-            window.focus(&self.focus_handle, cx);
-        }
         let theme = cx.global::<Theme>().clone();
         let lock_config = if cx.has_global::<AppState>() {
             let app_state = cx.global::<AppState>();
@@ -219,10 +205,6 @@ impl Render for LockScreen {
                         },
                         dur_secs,
                     );
-                }
-
-                if track.is_playing {
-                    window.request_animation_frame();
                 }
             }
         }

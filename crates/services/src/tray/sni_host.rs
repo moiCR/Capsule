@@ -29,6 +29,7 @@ pub struct SniHostService {
 
 impl SniHostService {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         let _ = std::fs::create_dir_all("/tmp/capsule_tray_icons");
         Self {
             items: Arc::new(Mutex::new(Vec::new())),
@@ -63,7 +64,7 @@ impl SniHostService {
         if let Some(item) = items.get(idx) {
             let bus = item.bus_name.clone();
             let path = item.object_path.clone();
-            tokio::spawn(async move {
+            crate::spawn_tokio(async move {
                 let Some(conn) = crate::dbus_util::get_shared_session_conn().await else {
                     return;
                 };
@@ -92,7 +93,7 @@ impl SniHostService {
     }
 
     pub fn trigger_menu(&self, bus_name: String, menu_path: String, item_id: i32) {
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let Some(conn) = crate::dbus_util::get_shared_session_conn().await else {
                 return;
             };
@@ -101,8 +102,9 @@ impl SniHostService {
     }
 
     pub fn start(&self) {
+        let _guard = crate::tokio_handle().enter();
         let svc = self.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             if let Err(e) = run_sni_service(svc).await {
                 eprintln!("[SNI HOST] Error in SNI service: {e}");
             }

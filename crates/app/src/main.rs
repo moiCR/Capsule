@@ -8,6 +8,8 @@ use gpui_platform::application;
 
 #[tokio::main]
 async fn main() {
+    services::init_tokio_handle(tokio::runtime::Handle::current());
+
     #[cfg(not(target_os = "linux"))]
     compile_error!("This application is only supported on Linux.");
 
@@ -48,7 +50,7 @@ async fn main() {
         None => return,
     };
 
-    tokio::spawn(async {
+    services::spawn_tokio(async {
         if let Err(err) = services::start_notification_server().await {
             eprintln!("D-Bus Notification Server warning: {err}");
         }

@@ -1,5 +1,5 @@
 pub mod hyprland;
-pub mod kinetic;
+pub mod kwin;
 pub mod niri;
 
 use arc_swap::ArcSwap;
@@ -45,19 +45,26 @@ pub struct CompositorService {
     current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
     workspace_tx: broadcast::Sender<WorkspaceInfo>,
     compositor: Arc<dyn Compositor>,
+    kwin: Option<kwin::KWin>,
 }
 
 impl CompositorService {
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
-        let compositor: Arc<dyn Compositor> =
-            if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
-                Arc::new(hyprland::Hyprland::new())
-            } else if std::env::var("NIRI_SOCKET").is_ok() {
-                Arc::new(niri::Niri::new())
-            } else {
-                Arc::new(kinetic::KineticWE::new())
-            };
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+        let use_kwin = std::env::var("KWIN_WAYLAND").is_ok()
+            || desktop.contains("KDE")
+            || desktop.contains("Kinetic")
+            || (std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_err()
+                && std::env::var("NIRI_SOCKET").is_err());
+        let kwin = use_kwin.then(kwin::KWin::new);
+        let compositor: Arc<dyn Compositor> = if let Some(backend) = &kwin {
+            Arc::new(backend.clone())
+        } else if std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+            Arc::new(hyprland::Hyprland::new())
+        } else {
+            Arc::new(niri::Niri::new())
+        };
         let initial_ws = compositor.get_workspace().unwrap_or_default();
         let current_workspace = Arc::new(ArcSwap::from_pointee(initial_ws));
         let (workspace_tx, _) = broadcast::channel(32);
@@ -67,15 +74,16 @@ impl CompositorService {
             current_workspace,
             workspace_tx,
             compositor,
+            kwin,
         };
 
         let service_clone = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             service_clone.run_polling_loop().await;
         });
 
         let service_workspace = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             service_workspace.run_workspace_events_loop().await;
         });
 
@@ -87,13 +95,21 @@ impl CompositorService {
     }
 
     pub fn get_frame_duration(&self) -> Duration {
-        let rate = self.get_refresh_rate().max(30.0);
+        let mut rate = self.get_refresh_rate();
+        if rate > 1000.0 {
+            rate /= 1000.0;
+        }
+        let rate = rate.clamp(30.0, 360.0);
         let micros = (1_000_000.0 / rate).round() as u64;
-        Duration::from_micros(micros)
+        Duration::from_micros(micros).max(Duration::from_millis(2))
     }
 
     pub fn get_frame_duration_ms(&self) -> u64 {
-        let rate = self.get_refresh_rate().max(30.0);
+        let mut rate = self.get_refresh_rate();
+        if rate > 1000.0 {
+            rate /= 1000.0;
+        }
+        let rate = rate.clamp(30.0, 360.0);
         (1000.0 / rate).round().max(1.0) as u64
     }
 
@@ -118,21 +134,22 @@ impl CompositorService {
     }
 
     async fn run_workspace_events_loop(&self) {
+        if let Some(backend) = &self.kwin {
+            kwin::run_events_listener(
+                backend.clone(),
+                self.current_workspace.clone(),
+                self.workspace_tx.clone(),
+            )
+            .await;
+            return;
+        }
         let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
         let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
-
-        let initial = tokio::task::spawn_blocking(move || {
-            if use_hyprland {
-                hyprland::Hyprland::new().get_workspace()
-            } else if use_niri {
-                niri::Niri::new().get_workspace()
-            } else {
-                kinetic::KineticWE::new().get_workspace()
-            }
-        })
-        .await
-        .ok()
-        .flatten();
+        let compositor = self.compositor.clone();
+        let initial = crate::spawn_blocking(move || compositor.get_workspace())
+            .await
+            .ok()
+            .flatten();
 
         if let Some(ws) = initial {
             let prev = self.current_workspace.load();
@@ -155,11 +172,12 @@ impl CompositorService {
     }
 
     async fn run_polling_loop(&self) {
-        let use_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
-        let use_niri = !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
+        let use_hyprland =
+            self.kwin.is_none() && std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+        let use_niri = self.kwin.is_none() && !use_hyprland && std::env::var("NIRI_SOCKET").is_ok();
 
         loop {
-            let rate = tokio::task::spawn_blocking(move || {
+            let mut rate = crate::spawn_blocking(move || {
                 std::panic::catch_unwind(|| {
                     if use_hyprland {
                         hyprland::Hyprland::new().get_refresh_rate()
@@ -174,17 +192,20 @@ impl CompositorService {
             .await
             .unwrap_or(60.0);
 
-            if rate > 0.0 {
-                let prev = **self.refresh_rate.load();
-                if (prev - rate).abs() > 0.1 {
-                    crate::log_info!(
-                        "COMPOSITOR",
-                        "Detected active monitor refresh rate: {rate:.2} Hz (frame duration: {:.2} ms)",
-                        1000.0 / rate
-                    );
-                }
-                self.refresh_rate.store(Arc::new(rate));
+            if rate > 1000.0 {
+                rate /= 1000.0;
             }
+            let rate = rate.clamp(30.0, 360.0);
+
+            let prev = **self.refresh_rate.load();
+            if (prev - rate).abs() > 0.1 {
+                crate::log_info!(
+                    "COMPOSITOR",
+                    "Detected active monitor refresh rate: {rate:.2} Hz (frame duration: {:.2} ms)",
+                    1000.0 / rate
+                );
+            }
+            self.refresh_rate.store(Arc::new(rate));
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
@@ -228,9 +249,25 @@ mod tests {
         assert!(rate >= 30.0);
 
         let dur = service.get_frame_duration();
-        assert!(dur.as_micros() > 0);
+        assert!(dur.as_micros() >= 2000);
 
         let ms = service.get_frame_duration_ms();
         assert!(ms >= 1);
+
+        // Test defensive normalization with mHz (144000 mHz = 144 Hz)
+        service.refresh_rate.store(Arc::new(144000.0));
+        let dur_144 = service.get_frame_duration();
+        assert!(
+            dur_144.as_micros() >= 6000 && dur_144.as_micros() <= 8000,
+            "144000 mHz should produce ~6944 us, got: {:?}",
+            dur_144
+        );
+        let ms_144 = service.get_frame_duration_ms();
+        assert_eq!(ms_144, 7);
+
+        // Test safety floor with extreme values
+        service.refresh_rate.store(Arc::new(1_000_000.0));
+        let dur_floor = service.get_frame_duration();
+        assert!(dur_floor.as_micros() >= 2000);
     }
 }

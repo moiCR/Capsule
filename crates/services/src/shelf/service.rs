@@ -19,12 +19,9 @@ impl Default for ShelfService {
 impl ShelfService {
     pub fn new() -> Self {
         let (change_tx, _) = broadcast::channel(16);
-        std::thread::Builder::new()
-            .name("shelf-icon-warmer".to_string())
-            .spawn(|| {
-                super::icon_resolver::warm_icon_cache();
-            })
-            .ok();
+        crate::spawn_blocking(|| {
+            super::icon_resolver::warm_icon_cache();
+        });
         Self {
             items: Arc::new(Mutex::new(Vec::new())),
             change_tx,

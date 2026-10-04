@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WallpaperEngine {
@@ -177,7 +176,7 @@ impl WallpaperService {
     }
 
     pub async fn pick_wallpaper_file() -> Option<PathBuf> {
-        tokio::task::spawn_blocking(|| {
+        crate::spawn_blocking(|| {
             let zenity_output = Command::new("zenity")
                 .arg("--file-selection")
                 .arg("--title=Select Wallpaper")
@@ -234,8 +233,8 @@ impl WallpaperService {
         }
 
         let blur_target = path.to_path_buf();
-        tokio::spawn(async move {
-            let _ = tokio::task::spawn_blocking(move || {
+        crate::spawn_tokio(async move {
+            let _ = crate::spawn_blocking(move || {
                 Self::create_or_get_blur(&blur_target);
             })
             .await;
@@ -245,7 +244,7 @@ impl WallpaperService {
             let _ = fs::write(&self.config_file, &path_str);
         }
 
-        thread::spawn(move || {
+        crate::spawn_blocking(move || {
             let refresh_rate = compositor.get_refresh_rate();
             let current_fps = if refresh_rate.is_finite() && refresh_rate > 0.0 {
                 (refresh_rate.round() as u32).max(30)

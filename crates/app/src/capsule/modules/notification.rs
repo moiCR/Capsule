@@ -50,6 +50,7 @@ impl NotificationModule {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_expanded(&self) -> bool {
         self.expanded
     }
@@ -130,7 +131,7 @@ impl NotificationModule {
         let (sender, receiver) = oneshot::channel();
         reply.pending = Some(receiver);
         reply.failed = false;
-        tokio::spawn(async move {
+        services::spawn_tokio(async move {
             let result = NotificationStore::global()
                 .reply(id, text)
                 .await
@@ -414,7 +415,7 @@ impl Render for NotificationModule {
                     };
                     let progress =
                         (reply.started_at.elapsed().as_secs_f32() / duration.max(0.001)).min(1.0);
-                    if progress < 1.0 || reply.pending.is_some() {
+                    if progress < 1.0 {
                         window.request_animation_frame();
                     }
                     el.child(crate::capsule::widgets::notification::render_reply(

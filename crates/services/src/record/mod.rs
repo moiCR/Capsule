@@ -263,7 +263,7 @@ impl RecordService {
         let status_clone = self.status.clone();
         let tx_clone = self.status_tx.clone();
 
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 let is_alive = unsafe { libc::kill(child_pid as libc::pid_t, 0) == 0 };

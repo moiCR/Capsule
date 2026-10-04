@@ -247,7 +247,7 @@ impl Orbit {
         };
         let (sender, state) = watch::channel(initial);
         let (animate, animation_updates) = watch::channel(false);
-        let worker = tokio::spawn(publish_updates(
+        let worker = services::spawn_tokio(publish_updates(
             sender,
             animation_updates,
             status_updates,

@@ -6,13 +6,21 @@ use ui::theme::Theme;
 use crate::capsule::modules::dashboard::DashboardModule;
 use crate::capsule::satellites::PANEL_MIN_W;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 pub fn compute_calendar_panel_height() -> f32 {
-    250.0
+    274.0
 }
 
+static NAV_ANIM_GEN: AtomicU64 = AtomicU64::new(0);
+
 fn spawn_nav_animation(cx: &mut Context<DashboardModule>) {
+    let generation = NAV_ANIM_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let frame_ms = if cx.has_global::<AppState>() {
-        cx.global::<AppState>().compositor.get_frame_duration_ms()
+        cx.global::<AppState>()
+            .compositor
+            .get_frame_duration_ms()
+            .max(16)
     } else {
         16
     };
@@ -20,7 +28,12 @@ fn spawn_nav_animation(cx: &mut Context<DashboardModule>) {
     cx.spawn(async move |_this, cx| {
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_millis(220) {
-            tokio::time::sleep(std::time::Duration::from_millis(frame_ms)).await;
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(frame_ms))
+                .await;
+            if NAV_ANIM_GEN.load(Ordering::Relaxed) != generation {
+                break;
+            }
             if this.update(cx, |_view, cx| cx.notify()).is_err() {
                 break;
             }
@@ -98,64 +111,11 @@ pub fn render_calendar_mini_panel(
         .map(|d| d.weekday().num_days_from_monday() as usize)
         .unwrap_or(0);
 
-    let mut day_cells: Vec<AnyElement> = Vec::new();
-
-    for _ in 0..start_weekday {
-        day_cells.push(
-            div()
-                .w(px(30.0))
-                .h(px(30.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .into_any_element(),
-        );
-    }
-
-    for day in 1..=days_in_month {
-        let is_today = is_current_month && day == now_day;
-        day_cells.push(
-            div()
-                .w(px(30.0))
-                .h(px(30.0))
-                .rounded_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(if is_today {
-                    theme.accent()
-                } else {
-                    gpui::hsla(0.0, 0.0, 0.0, 0.0)
-                })
-                .hover(|s| {
-                    if is_today {
-                        s
-                    } else {
-                        s.bg(theme.surface().opacity(0.45))
-                    }
-                })
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .font_weight(if is_today {
-                            FontWeight::BOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
-                        .text_color(if is_today {
-                            theme.background()
-                        } else {
-                            theme.foreground()
-                        })
-                        .child(day.to_string()),
-                )
-                .into_any_element(),
-        );
-    }
-
-    let mut grid = div().flex().flex_col().w_full().gap_1();
+    let total_days = start_weekday + days_in_month;
+    let mut grid = div().id("cal-grid").flex().flex_col().w_full().gap_1();
 
     let mut header_row = div()
+        .id("cal-header-row")
         .flex()
         .flex_row()
         .items_center()
@@ -163,9 +123,10 @@ pub fn render_calendar_mini_panel(
         .w_full()
         .px_1();
 
-    for d in day_headers {
+    for (idx, d) in day_headers.into_iter().enumerate() {
         header_row = header_row.child(
             div()
+                .id(("cal-header", idx as u32))
                 .w(px(30.0))
                 .flex()
                 .items_center()
@@ -182,21 +143,9 @@ pub fn render_calendar_mini_panel(
 
     grid = grid.child(header_row);
 
-    let mut chunks = Vec::new();
-    let mut current_chunk = Vec::new();
-    for cell in day_cells {
-        current_chunk.push(cell);
-        if current_chunk.len() == 7 {
-            chunks.push(std::mem::take(&mut current_chunk));
-        }
-    }
-    if !current_chunk.is_empty() {
-        chunks.push(current_chunk);
-    }
-
-    for row_chunk in chunks {
-        let chunk_len = row_chunk.len();
+    for row_idx in 0..6 {
         let mut row = div()
+            .id(("cal-row", row_idx as u32))
             .flex()
             .flex_row()
             .items_center()
@@ -204,14 +153,62 @@ pub fn render_calendar_mini_panel(
             .w_full()
             .px_1();
 
-        for cell in row_chunk {
-            row = row.child(cell);
-        }
-
-        if chunk_len < 7 {
-            for _ in 0..(7 - chunk_len) {
+        for col_idx in 0..7 {
+            let slot_idx = row_idx * 7 + col_idx;
+            if slot_idx < start_weekday {
                 row = row.child(
                     div()
+                        .id(("cal-empty-lead", slot_idx as u32))
+                        .w(px(30.0))
+                        .h(px(30.0))
+                        .flex()
+                        .items_center()
+                        .justify_center(),
+                );
+            } else if slot_idx < total_days {
+                let day = (slot_idx - start_weekday + 1) as u32;
+                let is_today = is_current_month && day == now_day;
+                row = row.child(
+                    div()
+                        .id(("cal-day", day))
+                        .w(px(30.0))
+                        .h(px(30.0))
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(if is_today {
+                            theme.accent()
+                        } else {
+                            gpui::hsla(0.0, 0.0, 0.0, 0.0)
+                        })
+                        .hover(|s| {
+                            if is_today {
+                                s
+                            } else {
+                                s.bg(theme.surface().opacity(0.45))
+                            }
+                        })
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .font_weight(if is_today {
+                                    FontWeight::BOLD
+                                } else {
+                                    FontWeight::NORMAL
+                                })
+                                .text_color(if is_today {
+                                    theme.background()
+                                } else {
+                                    theme.foreground()
+                                })
+                                .child(day.to_string()),
+                        ),
+                );
+            } else {
+                row = row.child(
+                    div()
+                        .id(("cal-empty-trail", slot_idx as u32))
                         .w(px(30.0))
                         .h(px(30.0))
                         .flex()
@@ -232,12 +229,14 @@ pub fn render_calendar_mini_panel(
     };
 
     let animated_grid = div()
+        .id("cal-animated-grid")
         .relative()
         .left(px(slide_offset))
         .opacity(grid_opacity)
         .child(grid);
 
     div()
+        .id("cal-mini-panel")
         .min_w(px(PANEL_MIN_W))
         .max_h(px(panel_h))
         .p_3()

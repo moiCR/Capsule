@@ -157,8 +157,13 @@ impl LockScreenPanel {
             let options = Self::window_options(&**display);
             let blur_path = blur_paths.get(index).cloned().flatten();
 
-            match cx.open_window(options, |_, cx| {
-                cx.new(|cx| LockScreen::new(cx, is_primary, blur_path))
+            match cx.open_window(options, |window, cx| {
+                let view = cx.new(|cx| LockScreen::new(cx, is_primary, blur_path));
+                if is_primary {
+                    let focus = view.read(cx).focus_handle.clone();
+                    window.focus(&focus, cx);
+                }
+                view
             }) {
                 Ok(w) => handles.push(w),
                 Err(err) => eprintln!("Failed to open lockscreen on display {index}: {err}"),

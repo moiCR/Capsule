@@ -122,7 +122,7 @@ impl LyricsService {
         let _raw_title = title.clone();
         let raw_artist = artist.clone();
 
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let result = fetch_lrclib(
                 &client,
                 &clean_title,

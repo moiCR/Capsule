@@ -48,7 +48,7 @@ pub fn render_media_dock(
         .cursor_pointer()
         .on_click(cx.listener(move |_this, _, _, _| {
             let bus = bus_disc.clone();
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let _ = MprisService::play_pause_bus(&bus).await;
             });
         }))
@@ -65,7 +65,7 @@ pub fn render_media_dock(
         .hover(|s| s.bg(theme.surface().opacity(0.5)))
         .on_click(cx.listener(move |_this, _, _, _| {
             let bus = bus_prev.clone();
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let _ = MprisService::previous_bus(&bus).await;
             });
         }))
@@ -93,7 +93,7 @@ pub fn render_media_dock(
         .hover(|s| s.bg(theme.surface().opacity(0.5)))
         .on_click(cx.listener(move |_this, _, _, _| {
             let bus = bus_play.clone();
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let _ = MprisService::play_pause_bus(&bus).await;
             });
         }))
@@ -115,7 +115,7 @@ pub fn render_media_dock(
         .hover(|s| s.bg(theme.surface().opacity(0.5)))
         .on_click(cx.listener(move |_this, _, _, _| {
             let bus = bus_next.clone();
-            tokio::spawn(async move {
+            services::spawn_tokio(async move {
                 let _ = MprisService::next_bus(&bus).await;
             });
         }))
@@ -146,7 +146,7 @@ pub fn render_media_dock(
                     gpui::ScrollDelta::Lines(lines) => lines.y,
                     gpui::ScrollDelta::Pixels(pixels) => pixels.y.into(),
                 };
-                tokio::spawn(async move {
+                services::spawn_tokio(async move {
                     if delta_y > 0.0 {
                         let _ = MprisService::previous_bus(&bus).await;
                     } else if delta_y < 0.0 {

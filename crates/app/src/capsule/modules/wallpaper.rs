@@ -503,7 +503,7 @@ impl WallpaperModule {
 }
 
 impl Render for WallpaperModule {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
         let (search_placeholder, no_wallpapers, apply_hint) =
@@ -521,8 +521,6 @@ impl Render for WallpaperModule {
                     "↵ Aplicar".to_string(),
                 )
             };
-
-        window.focus(&self.focus_handle, cx);
 
         let filtered = self.filtered_items();
         let total = filtered.len();

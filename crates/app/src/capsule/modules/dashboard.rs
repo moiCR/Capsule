@@ -115,7 +115,9 @@ fn spawn_track_animation(cx: &mut Context<DashboardModule>) {
     cx.spawn(async move |_this, cx| {
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_millis(300) {
-            tokio::time::sleep(std::time::Duration::from_millis(frame_ms)).await;
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(frame_ms))
+                .await;
             if this.update(cx, |_view, cx| cx.notify()).is_err() {
                 break;
             }
@@ -155,7 +157,9 @@ impl DashboardModule {
 
         cx.spawn(async move |this, cx| {
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
                 if this.update(cx, |_view, cx| cx.notify()).is_err() {
                     break;
                 }

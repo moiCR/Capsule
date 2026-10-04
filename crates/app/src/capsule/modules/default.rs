@@ -221,28 +221,7 @@ impl EventEmitter<DefaultEvent> for DefaultModule {}
 
 impl Render for DefaultModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let now = Local::now();
-        let current_time_str = format!("{:02}:{:02}", now.hour(), now.minute());
-        if self.time_str != current_time_str {
-            self.time_str = current_time_str.clone();
-            self.flip_clock = FlipClock::new(&current_time_str);
-        }
-
         let theme = cx.global::<Theme>().clone();
-        let active_ws = if cx.has_global::<AppState>() {
-            cx.global::<AppState>().compositor.get_workspace()
-        } else {
-            self.active_workspace.clone()
-        };
-
-        if self.active_workspace != active_ws {
-            let was_special = self.active_workspace.is_special;
-            let is_special = active_ws.is_special;
-            self.active_workspace = active_ws.clone();
-            if was_special != is_special {
-                self.start_special_anim(is_special, cx);
-            }
-        }
 
         let net_status = self.network.get_status();
         let is_dnd = NotificationStore::global().is_dnd_enabled();
@@ -260,7 +239,7 @@ impl Render for DefaultModule {
             .min_w_0()
             .overflow_hidden()
             .child(render_workspaces_widget(
-                &active_ws,
+                &self.active_workspace,
                 self.special_anim_progress,
                 &theme,
                 cx,

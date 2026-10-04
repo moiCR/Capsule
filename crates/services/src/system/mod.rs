@@ -49,6 +49,7 @@ pub struct SystemService {
 
 impl SystemService {
     pub fn new() -> Self {
+        let _guard = crate::tokio_handle().enter();
         let service = Self {
             status: Arc::new(ArcSwap::from_pointee(SystemStatus::default())),
             capture_status: Arc::new(ArcSwap::from_pointee(CaptureStatus::default())),
@@ -61,21 +62,21 @@ impl SystemService {
             audio_changed: Arc::new(tokio::sync::Notify::new()),
         };
 
-        tokio::spawn(capture::monitor(service.capture_status.clone()));
+        crate::spawn_tokio(capture::monitor(service.capture_status.clone()));
 
         let service_clone = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             let _ = service_clone.refresh().await;
             service_clone.listen_pactl_events().await;
         });
 
         let service_volume = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             service_volume.run_volume_worker().await;
         });
 
         let service_input = service.clone();
-        tokio::spawn(async move {
+        crate::spawn_tokio(async move {
             service_input.run_input_volume_worker().await;
         });
 
