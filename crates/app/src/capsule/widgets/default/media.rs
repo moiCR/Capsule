@@ -1,4 +1,6 @@
-use gpui::{AnyElement, Context, IntoElement, ScrollWheelEvent, div, img, prelude::*, px, svg};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, ScrollWheelEvent, div, img, prelude::*, px, svg,
+};
 use services::{MediaTrack, MprisService};
 use ui::theme::Theme;
 

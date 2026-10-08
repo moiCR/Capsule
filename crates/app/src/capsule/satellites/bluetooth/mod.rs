@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::{AppState, NetworkStatus};
 use ui::theme::Theme;
 

@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, Context, FontWeight, IntoElement, MouseButton, canvas, div, img, prelude::*, px,
-    svg,
+    AnyElement, ColorExt, Context, FontWeight, IntoElement, MouseButton, canvas, div, img,
+    prelude::*, px, svg,
 };
 use services::{AppState, MprisService};
 use ui::theme::Theme;
@@ -314,7 +314,7 @@ pub fn render_media_mini_panel(
             .child(
                 div()
                     .h_full()
-                    .w(gpui::DefiniteLength::Fraction(progress_ratio))
+                    .w(gpui::relative(progress_ratio))
                     .rounded_full()
                     .bg(theme.accent()),
             )

@@ -1,6 +1,6 @@
 use gpui::{
-    Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
-    div, prelude::*, px, svg,
+    ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle,
+    Window, div, prelude::*, px, svg,
 };
 use services::{ClipboardItem, ClipboardService, Snippet};
 use ui::theme::Theme;

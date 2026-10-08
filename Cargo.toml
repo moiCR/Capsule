@@ -6,8 +6,8 @@ members = ["crates/*"]
 license = "MIT"
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/moiCR/gpui-capsule", branch = "capsule-patch", features = ["wayland"] }
-gpui_platform = { git = "https://github.com/moiCR/gpui-capsule", branch = "capsule-patch", features = ["wayland"] }
+gpui = { package = "gpui-ce", path = "../gpui-ce/crates/gpui", features = ["wayland"] }
+gpui_platform = { package = "gpui_ce_platform", path = "../gpui-ce/crates/gpui_platform", features = ["wayland"] }
 
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

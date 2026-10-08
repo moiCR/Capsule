@@ -1,5 +1,5 @@
 use chrono::{Datelike, Local, NaiveDate};
-use gpui::{AnyElement, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use services::{AppState, calendar::NavDirection};
 use ui::theme::Theme;
 

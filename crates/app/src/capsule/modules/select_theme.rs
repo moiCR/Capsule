@@ -1,6 +1,6 @@
 use gpui::{
-    Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, KeyDownEvent, Render,
-    Task, Window, div, prelude::*, px, svg,
+    ColorExt, Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, KeyDownEvent,
+    Render, Task, Window, div, prelude::*, px, svg,
 };
 use services::AppState;
 use std::time::{Duration, Instant};

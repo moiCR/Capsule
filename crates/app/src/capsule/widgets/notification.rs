@@ -1,5 +1,5 @@
 use crate::capsule::modules::notification::NotificationModule;
-use gpui::{Context, IntoElement, div, prelude::*, px};
+use gpui::{ColorExt, Context, IntoElement, div, prelude::*, px};
 use services::{AppState, NotificationItem};
 use ui::components::input::TextInputField;
 use ui::theme::Theme;

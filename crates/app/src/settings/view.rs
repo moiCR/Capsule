@@ -1,6 +1,6 @@
 use gpui::{
-    Context, Entity, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render, Styled, Window,
-    div, prelude::*, px,
+    ColorExt, Context, Entity, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render,
+    Styled, Window, div, prelude::*, px,
 };
 use std::time::Instant;
 use ui::theme::Theme;

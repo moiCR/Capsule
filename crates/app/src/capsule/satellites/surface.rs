@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, BoxShadow, Div, Hsla, PathBuilder, Pixels, Point, Size, Window, canvas, div, point,
-    prelude::*, px,
+    AnyElement, BoxShadow, ColorExt, Div, Hsla, PathBuilder, Pixels, Point, Size, Window, canvas,
+    div, point, prelude::*, px,
 };
 use ui::theme::Theme;
 
@@ -83,7 +83,7 @@ impl PanelSurface {
             .border_1()
             .border_color(theme.surface().opacity(0.6 - 0.25 * release))
             .shadow(vec![BoxShadow {
-                color: gpui::black().opacity(0.18 * release),
+                color: gpui::black().opacity(0.18 * release).into(),
                 offset: point(px(0.0), px(4.0)),
                 blur_radius: px(16.0),
                 spread_radius: px(0.0),

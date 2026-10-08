@@ -56,6 +56,19 @@ pub fn render_ui_section(
         )
     };
 
+    let (new_capsule_title, new_capsule_subtitle) = if cx.has_global::<AppState>() {
+        let language = &cx.global::<AppState>().language;
+        (
+            language.get("settings.new_capsule_title"),
+            language.get("settings.new_capsule_subtitle"),
+        )
+    } else {
+        (
+            "Usar nueva Capsule (Experimental)".to_string(),
+            "El cambio se aplicará en el próximo inicio o reinicio de Capsule.".to_string(),
+        )
+    };
+
     let is_concave = module.capsule_style == CapsuleStyle::Concave;
 
     div()
@@ -72,6 +85,17 @@ pub fn render_ui_section(
         ))
         .child(
             render_card_container(theme)
+                .child(render_toggle_row(
+                    ElementId::Name("new-capsule-toggle".into()),
+                    &new_capsule_title,
+                    Some(&new_capsule_subtitle),
+                    module.use_new_capsule,
+                    theme,
+                    cx.listener(|this, _, _, cx| {
+                        this.toggle_new_capsule(cx);
+                    }),
+                ))
+                .child(render_row_divider(theme))
                 .child(render_toggle_row(
                     ElementId::Name("capsule-concave-toggle".into()),
                     &concave_title,

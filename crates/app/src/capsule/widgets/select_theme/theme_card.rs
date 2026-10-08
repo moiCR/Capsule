@@ -1,4 +1,4 @@
-use gpui::{Context, ElementId, FontWeight, IntoElement, div, prelude::*, px};
+use gpui::{ColorExt, Context, ElementId, FontWeight, IntoElement, div, prelude::*, px};
 use ui::theme::{Theme, theme_manager::ThemeItem};
 
 use crate::capsule::modules::select_theme::SelectThemeModule;

@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, canvas, div,
-    prelude::*, px, svg,
+    AnyElement, ColorExt, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled,
+    canvas, div, prelude::*, px, svg,
 };
 use services::{AppState, Application, LanguageInfo, PowerProfile};
 use std::cell::Cell;
@@ -629,9 +629,7 @@ pub(crate) fn render_audio_device_control(
                 .child(
                     div()
                         .h_full()
-                        .w(gpui::DefiniteLength::Fraction(
-                            (vol_pct as f32 / 100.0).clamp(0.0, 1.0),
-                        ))
+                        .w(gpui::relative((vol_pct as f32 / 100.0).clamp(0.0, 1.0)))
                         .rounded_full()
                         .bg(if is_muted {
                             theme.foreground_muted().opacity(0.4)

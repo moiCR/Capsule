@@ -1,6 +1,6 @@
 use gpui::{
-    App, Context, Div, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    Styled, Window, canvas, div, prelude::*, px, svg,
+    App, ColorExt, Context, Div, ElementId, FontWeight, InteractiveElement, IntoElement,
+    ParentElement, Styled, Window, canvas, div, prelude::*, px, svg,
 };
 use std::cell::Cell;
 use std::rc::Rc;
@@ -251,7 +251,7 @@ pub fn render_slider_row(
                         .child(
                             div()
                                 .h_full()
-                                .w(gpui::DefiniteLength::Fraction(pct))
+                                .w(gpui::relative(pct))
                                 .rounded_full()
                                 .bg(theme.accent()),
                         ),
@@ -260,7 +260,7 @@ pub fn render_slider_row(
                     div()
                         .absolute()
                         .top(px(2.0))
-                        .left(gpui::DefiniteLength::Fraction(pct))
+                        .left(gpui::relative(pct))
                         .ml(px(-14.0 * pct))
                         .w(px(14.0))
                         .h(px(14.0))
@@ -383,7 +383,7 @@ pub fn render_int_slider_row(
                         .child(
                             div()
                                 .h_full()
-                                .w(gpui::DefiniteLength::Fraction(pct))
+                                .w(gpui::relative(pct))
                                 .rounded_full()
                                 .bg(theme.accent()),
                         ),
@@ -392,7 +392,7 @@ pub fn render_int_slider_row(
                     div()
                         .absolute()
                         .top(px(2.0))
-                        .left(gpui::DefiniteLength::Fraction(pct))
+                        .left(gpui::relative(pct))
                         .ml(px(-14.0 * pct))
                         .w(px(14.0))
                         .h(px(14.0))

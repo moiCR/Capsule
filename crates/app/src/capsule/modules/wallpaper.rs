@@ -1,5 +1,5 @@
 use gpui::{
-    Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement,
+    ColorExt, Context, ElementId, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement,
     KeyDownEvent, Render, Task, Window, div, img, prelude::*, px, svg,
 };
 use services::AppState;

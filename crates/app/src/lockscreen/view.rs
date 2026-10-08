@@ -1,4 +1,4 @@
-use gpui::{Context, KeyDownEvent, Render, Window, div, img, prelude::*, px, svg};
+use gpui::{ColorExt, Context, KeyDownEvent, Render, Window, div, img, prelude::*, px, svg};
 use services::AppState;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

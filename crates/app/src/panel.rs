@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{
-    AppContext, PlatformDisplay, WindowBackgroundAppearance, WindowBounds, WindowHandle,
-    WindowKind, WindowOptions,
+    AppContext, LinuxWindowBackground, PlatformDisplay, WindowBounds, WindowHandle, WindowKind,
+    WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
     px,
     session_lock::SessionLockOptions,
@@ -37,7 +37,7 @@ impl CapsulePanel {
             titlebar: None,
             window_bounds: display_bounds.map(WindowBounds::Windowed),
             app_id: Some("capsule-panel".to_string()),
-            window_background: WindowBackgroundAppearance::Transparent,
+            linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
                 namespace: "capsule-panel".to_string(),
                 layer: Layer::Top,
@@ -49,6 +49,44 @@ impl CapsulePanel {
             }),
             ..Default::default()
         }
+    }
+
+    pub fn open_new(
+        cx: &mut gpui::App,
+        ipc_subscriber: IpcSubscriber,
+    ) -> Option<WindowHandle<crate::new_capsule::Capsule>> {
+        let module_manager = crate::new_capsule::module::CapsuleModuleManager::new(cx);
+        let mut size = module_manager.maximum_size(cx);
+        size.height += px(cx
+            .global::<services::AppState>()
+            .config
+            .get()
+            .ui
+            .margin_top
+            .max(0.0));
+        let mut options = Self::window_options(cx);
+        options.window_bounds = Some(WindowBounds::Windowed(gpui::Bounds {
+            origin: gpui::point(px(0.0), px(0.0)),
+            size,
+        }));
+        if let WindowKind::LayerShell(layer) = &mut options.kind {
+            layer.anchor = Anchor::TOP;
+        }
+        let window = match cx.open_window(options, |window, cx| {
+            cx.new(|cx| {
+                crate::new_capsule::Capsule::with_module_manager(module_manager, window, cx)
+            })
+        }) {
+            Ok(window) => window,
+            Err(error) => {
+                eprintln!("Failed to open new Capsule window: {error}");
+                return None;
+            }
+        };
+        if let Ok(entity) = window.entity(cx) {
+            ipc_subscriber.start(cx, entity, crate::new_capsule::Capsule::handle_ipc_command);
+        }
+        Some(window)
     }
 
     pub fn open(
@@ -92,7 +130,7 @@ impl LockScreenPanel {
             titlebar: None,
             window_bounds: Some(WindowBounds::Windowed(display.bounds())),
             app_id: Some("capsule-lockscreen".to_string()),
-            window_background: WindowBackgroundAppearance::Opaque,
+            linux_window_background: LinuxWindowBackground::Opaque,
             kind: WindowKind::SessionLock(SessionLockOptions {}),
             ..Default::default()
         }
@@ -213,7 +251,7 @@ impl SettingsPanel {
             titlebar: None,
             window_bounds: display_bounds.map(WindowBounds::Windowed),
             app_id: Some("capsule-settings".to_string()),
-            window_background: WindowBackgroundAppearance::Transparent,
+            linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
                 namespace: "capsule-settings".to_string(),
                 layer: Layer::Overlay,

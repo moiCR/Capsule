@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    Context, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, div, px, svg,
+    ColorExt, Context, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, div, px, svg,
 };
 use services::{AppState, RecordStatus};
 use ui::theme::Theme;

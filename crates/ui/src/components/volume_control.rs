@@ -1,6 +1,6 @@
 use crate::theme::Theme;
 use gpui::{
-    App, DefiniteLength, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, svg,
+    App, ColorExt, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, relative, svg,
 };
 
 #[derive(IntoElement)]
@@ -69,7 +69,7 @@ impl RenderOnce for VolumeControlBar {
                     .child(
                         div()
                             .h_full()
-                            .w(DefiniteLength::Fraction(current_vol / 100.0))
+                            .w(relative(current_vol / 100.0))
                             .rounded_full()
                             .bg(if self.is_muted {
                                 theme.foreground_muted().opacity(0.3)

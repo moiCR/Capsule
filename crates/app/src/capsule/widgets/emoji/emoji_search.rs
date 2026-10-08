@@ -1,4 +1,4 @@
-use gpui::{Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{ColorExt, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
 use crate::capsule::modules::emoji::EmojiModule;

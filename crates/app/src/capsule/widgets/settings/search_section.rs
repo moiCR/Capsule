@@ -1,5 +1,6 @@
 use gpui::{
-    AnyElement, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, div, px, svg,
+    AnyElement, ColorExt, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, div,
+    px, svg,
 };
 use services::{AppState, CapsuleStyle, PowerProfile};
 use std::sync::Arc;

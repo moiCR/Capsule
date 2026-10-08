@@ -1,4 +1,4 @@
-use gpui::{AnyElement, IntoElement, div, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, IntoElement, div, prelude::*, px, svg};
 use services::system::CaptureStatus;
 use ui::theme::Theme;
 

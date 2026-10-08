@@ -1,4 +1,4 @@
-use gpui::{Context, FontWeight, IntoElement, div, img, prelude::*, px, svg};
+use gpui::{ColorExt, Context, FontWeight, IntoElement, div, img, prelude::*, px, svg};
 use services::ClipboardItem;
 use ui::theme::Theme;
 

@@ -12,6 +12,9 @@ pub enum CapsuleStyle {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UIConfig {
     #[serde(default)]
+    pub use_new_capsule: bool,
+
+    #[serde(default)]
     pub capsule_style: CapsuleStyle,
 
     #[serde(default = "default_capsule_round", alias = "capsule_radius")]
@@ -55,6 +58,7 @@ pub type UiConfig = UIConfig;
 impl Default for UIConfig {
     fn default() -> Self {
         Self {
+            use_new_capsule: false,
             capsule_style: CapsuleStyle::Normal,
             capsule_round: default_capsule_round(),
             satellite_round: default_satellite_round(),
