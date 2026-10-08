@@ -1,4 +1,6 @@
-use gpui::{Context, FontWeight, IntoElement, StyledImage, canvas, div, img, prelude::*, px, svg};
+use gpui::{
+    ColorExt, Context, FontWeight, IntoElement, StyledImage, canvas, div, img, prelude::*, px, svg,
+};
 use services::{AppState, MediaTrack, MprisService};
 use std::path::Path;
 use ui::theme::Theme;
@@ -461,7 +463,7 @@ pub fn render_media_player_widget(
         progress_bar = progress_bar.child(
             div()
                 .h_full()
-                .w(gpui::DefiniteLength::Fraction(progress_pct))
+                .w(gpui::relative(progress_pct))
                 .rounded_full()
                 .bg(theme.accent()),
         );

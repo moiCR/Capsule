@@ -1,5 +1,5 @@
 use gpui::{
-    Context, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
+    ColorExt, Context, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render,
     ScrollHandle, Window, div, prelude::*, px, svg,
 };
 use services::{EmojiItem, EmojiService};

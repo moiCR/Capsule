@@ -1,6 +1,6 @@
 pub mod templates;
 pub mod theme_manager;
-use gpui::{Hsla, Rgba, SharedString};
+use gpui::{Hsla, Rgba, SharedString, rgb_to_hsla};
 use serde::{Deserialize, Serialize};
 pub use templates::{
     AppTheme, GtkApps, QtApps, TemplateEngine, TemplatePlugin, TemplatePluginManager,
@@ -148,13 +148,12 @@ pub fn parse_hex_to_hsla(hex: &str) -> Hsla {
         _ => (0, 0, 0, 255),
     };
 
-    Rgba {
-        r: r as f32 / 255.0,
-        g: g as f32 / 255.0,
-        b: b as f32 / 255.0,
-        a: a as f32 / 255.0,
-    }
-    .into()
+    rgb_to_hsla(Rgba::new(
+        r as f32 / 255.0,
+        g as f32 / 255.0,
+        b as f32 / 255.0,
+        a as f32 / 255.0,
+    ))
 }
 
 impl gpui::Global for Theme {}

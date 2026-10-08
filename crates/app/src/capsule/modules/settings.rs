@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
-    Render, ScrollHandle, Styled, Task, Window, canvas, div, prelude::*, px, svg,
+    AnyElement, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent,
+    ParentElement, Render, ScrollHandle, Styled, Task, Window, canvas, div, prelude::*, px, svg,
 };
 use services::{AppState, CapsuleStyle};
 use std::cell::Cell;
@@ -63,6 +63,7 @@ pub struct SettingsModule {
     pub active_tab: SettingsTab,
     pub active_field: Option<SettingsField>,
     pub capsule_style: CapsuleStyle,
+    pub use_new_capsule: bool,
 
     pub terminal_input: String,
     pub browser_input: String,
@@ -132,6 +133,7 @@ impl SettingsModule {
             active_tab: SettingsTab::Capsule,
             active_field: None,
             capsule_style: CapsuleStyle::Normal,
+            use_new_capsule: false,
             terminal_input: String::new(),
             browser_input: String::new(),
             editor_input: String::new(),
@@ -205,6 +207,7 @@ impl SettingsModule {
         let cfg = cx.global::<AppState>().config.get();
 
         self.capsule_style = cfg.ui.capsule_style;
+        self.use_new_capsule = cfg.ui.use_new_capsule;
         self.terminal_input = cfg.defaults.terminal.clone();
         self.browser_input = cfg.defaults.browser.clone();
         self.editor_input = cfg.defaults.editor.clone();
@@ -512,6 +515,12 @@ impl SettingsModule {
         cx.notify();
     }
 
+    pub fn toggle_new_capsule(&mut self, cx: &mut Context<Self>) {
+        self.use_new_capsule = !self.use_new_capsule;
+        self.save_to_app_config(cx);
+        cx.notify();
+    }
+
     pub fn set_capsule_style(&mut self, style: CapsuleStyle, cx: &mut Context<Self>) {
         self.capsule_style = style;
         self.save_to_app_config(cx);
@@ -530,6 +539,7 @@ impl SettingsModule {
         }
 
         let capsule_style = self.capsule_style;
+        let use_new_capsule = self.use_new_capsule;
         let terminal = self.terminal_input.clone();
         let browser = self.browser_input.clone();
         let editor = self.editor_input.clone();
@@ -561,6 +571,7 @@ impl SettingsModule {
 
         let _ = cx.global::<AppState>().config.update(|cfg| {
             cfg.ui.capsule_style = capsule_style;
+            cfg.ui.use_new_capsule = use_new_capsule;
             cfg.defaults.terminal = terminal;
             cfg.defaults.browser = browser;
             cfg.defaults.editor = editor;

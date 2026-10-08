@@ -1,4 +1,6 @@
-use gpui::{Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px};
+use gpui::{
+    ColorExt, Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px,
+};
 use services::AppState;
 use ui::theme::Theme;
 

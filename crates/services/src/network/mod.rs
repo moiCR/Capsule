@@ -24,7 +24,7 @@ pub struct BluetoothDeviceItem {
     pub is_paired: bool,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NetworkStatus {
     pub wifi_enabled: bool,
     pub wifi_ssid: String,

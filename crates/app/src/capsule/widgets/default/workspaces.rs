@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, Context, IntoElement, div, prelude::*, px, svg};
 use services::WorkspaceInfo;
 use ui::theme::Theme;
 

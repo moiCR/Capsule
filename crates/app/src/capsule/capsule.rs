@@ -1,6 +1,6 @@
 use gpui::{
-    Bounds, Context, Entity, Pixels, Render, Size, Task,
-    Window, div, layer_shell::KeyboardInteractivity, point, prelude::*, px, svg,
+    Bounds, ColorExt, Context, Entity, Pixels, Render, Size, Task, Window, div,
+    layer_shell::KeyboardInteractivity, point, prelude::*, px, svg,
 };
 use services::{AppState, NotificationStore};
 use std::time::{Duration, Instant};
@@ -1791,7 +1791,7 @@ impl Render for Capsule {
                 || self.mode == CapsuleMode::Emoji
                 || self.mode == CapsuleMode::Shelf
             {
-                window.activate_window();
+                window.activate();
                 if cx.has_global::<AppState>() {
                     cx.global::<AppState>().compositor.request_layer_focus();
                 }

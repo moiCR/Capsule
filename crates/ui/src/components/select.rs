@@ -1,8 +1,8 @@
 use crate::theme::Theme;
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, canvas, deferred, div,
-    px, svg,
+    AnyElement, App, ClickEvent, ColorExt, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
+    deferred, div, px, svg,
 };
 use std::cell::Cell;
 use std::rc::Rc;

@@ -1,6 +1,6 @@
 use gpui::{
-    Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Styled, div,
-    prelude::*, px, svg,
+    ColorExt, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
+    Styled, div, prelude::*, px, svg,
 };
 use services::AppState;
 use ui::theme::Theme;

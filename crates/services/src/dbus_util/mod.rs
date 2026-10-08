@@ -65,4 +65,3 @@ pub async fn get_shared_system_conn() -> Option<Connection> {
 
     None
 }
-

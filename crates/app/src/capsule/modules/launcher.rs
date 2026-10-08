@@ -1,6 +1,6 @@
 use gpui::{
-    EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window, div,
-    prelude::*, px, svg,
+    ColorExt, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Render, ScrollHandle, Window,
+    div, prelude::*, px, svg,
 };
 use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;

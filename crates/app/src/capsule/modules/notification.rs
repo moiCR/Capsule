@@ -85,7 +85,7 @@ impl NotificationModule {
             return;
         }
         let focus = cx.focus_handle();
-        window.activate_window();
+        window.activate();
         window.focus(&focus, cx);
         if cx.has_global::<AppState>() {
             cx.global::<AppState>().compositor.request_layer_focus();

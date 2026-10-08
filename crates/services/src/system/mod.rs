@@ -23,7 +23,7 @@ pub struct AudioSource {
     pub is_default: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SystemStatus {
     pub volume: u32,
     pub is_muted: bool,

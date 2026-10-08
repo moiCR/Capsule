@@ -1,5 +1,5 @@
 use gpui::{
-    Context, FontWeight, InteractiveElement, IntoElement, ParentElement,
+    ColorExt, Context, FontWeight, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, StyledImage, div, img, px, svg,
 };
 use services::{AppState, MprisService};

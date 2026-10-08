@@ -1,4 +1,4 @@
-use gpui::{ClipboardItem, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
+use gpui::{ClipboardItem, ColorExt, Context, FontWeight, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
 use crate::capsule::modules::launcher::{LauncherEvent, LauncherModule};

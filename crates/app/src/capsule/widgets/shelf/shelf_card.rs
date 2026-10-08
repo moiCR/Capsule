@@ -1,6 +1,6 @@
 use gpui::{
-    Context, ExternalDragPayload, FileDragPaths, FontWeight, IntoElement, Pixels, Point, Render,
-    Window, div, img, prelude::*, px, svg,
+    ColorExt, Context, ExternalDragPayload, FileDragPaths, FontWeight, IntoElement, Pixels, Point,
+    Render, Window, div, img, prelude::*, px, svg,
 };
 use services::{AppState, ShelfItem};
 use ui::theme::Theme;

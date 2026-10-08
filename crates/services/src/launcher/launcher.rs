@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -26,8 +26,6 @@ impl Drop for InotifyFd {
         }
     }
 }
-
-static ICON_MAP_CACHE: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
 
 #[derive(Clone, Default)]
 pub struct LauncherService {
@@ -207,7 +205,9 @@ impl LauncherService {
 
         let mut discovered: HashMap<String, Application> = HashMap::new();
 
-        let icon_map = Self::get_cached_icon_map().await;
+        let icon_map = tokio::task::spawn_blocking(Self::build_icon_map)
+            .await
+            .context("Failed to index launcher icons")?;
 
         for dir in app_dirs {
             if !dir.exists() {
@@ -248,43 +248,62 @@ impl LauncherService {
             .collect::<Vec<_>>()
             .join(" ")
     }
-    async fn get_cached_icon_map() -> &'static HashMap<String, PathBuf> {
-        if let Some(map) = ICON_MAP_CACHE.get() {
-            return map;
+    fn build_icon_map() -> HashMap<String, PathBuf> {
+        let mut base_dirs = vec![
+            PathBuf::from("/usr/share/icons"),
+            PathBuf::from("/usr/share"),
+            PathBuf::from("/usr/local/share/icons"),
+            PathBuf::from("/usr/local/share"),
+            PathBuf::from("/var/lib/flatpak/exports/share/icons"),
+        ];
+        if let Some(home) = dirs::home_dir() {
+            base_dirs.push(home.join(".local/share/icons"));
+            base_dirs.push(home.join(".local/share/flatpak/exports/share/icons"));
         }
-        let map = Self::build_icon_map().await;
-        let _ = ICON_MAP_CACHE.set(map);
-        static EMPTY_MAP: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
-        ICON_MAP_CACHE
-            .get()
-            .unwrap_or_else(|| EMPTY_MAP.get_or_init(HashMap::new))
+        if let Some(data) = dirs::data_dir() {
+            base_dirs.push(data.join("icons"));
+            base_dirs.push(data.join("flatpak/exports/share/icons"));
+        }
+        if let Ok(directories) = std::env::var("XDG_DATA_DIRS") {
+            for directory in directories
+                .split(':')
+                .filter(|directory| !directory.is_empty())
+            {
+                let base = PathBuf::from(directory);
+                for path in [base.join("icons"), base] {
+                    if !base_dirs.contains(&path) {
+                        base_dirs.push(path);
+                    }
+                }
+            }
+        }
+        Self::index_icon_roots(base_dirs)
     }
 
-    async fn build_icon_map() -> HashMap<String, PathBuf> {
+    fn index_icon_roots(base_dirs: Vec<PathBuf>) -> HashMap<String, PathBuf> {
         let mut map = HashMap::new();
         let subdirs = [
             "hicolor/scalable/apps",
             "hicolor/512x512/apps",
             "hicolor/256x256/apps",
             "hicolor/128x128/apps",
+            "hicolor/96x96/apps",
+            "hicolor/64x64/apps",
             "hicolor/48x48/apps",
+            "hicolor/32x32/apps",
+            "hicolor/24x24/apps",
+            "hicolor/16x16/apps",
             "pixmaps",
         ];
-        let mut base_dirs = vec![
-            PathBuf::from("/usr/share/icons"),
-            PathBuf::from("/usr/share"),
-        ];
-        if let Some(home) = dirs::home_dir() {
-            base_dirs.push(home.join(".local/share/icons"));
-        }
-
         for base in base_dirs {
             for subdir in &subdirs {
                 let dir = base.join(subdir);
                 if let Ok(entries) = std::fs::read_dir(&dir) {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        if path.is_file()
+                            && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                        {
                             map.entry(stem.to_string()).or_insert(path);
                         }
                     }
@@ -379,5 +398,44 @@ impl LauncherService {
             keywords,
             terminal,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[tokio::test]
+    async fn flatpak_exported_icons_resolve_and_refresh_after_installation() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "capsule-flatpak-icons-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        ));
+        let icon_root = root.join("exports/share/icons");
+        let icon_dir = icon_root.join("hicolor/64x64/apps");
+        std::fs::create_dir_all(&icon_dir)?;
+        let deployed_icon = root.join("deployed.png");
+        std::fs::write(&deployed_icon, b"fixture")?;
+        let exported_icon = icon_dir.join("org.example.Flatpak.png");
+        symlink(&deployed_icon, &exported_icon)?;
+        let desktop = root.join("org.example.Flatpak.desktop");
+        std::fs::write(
+            &desktop,
+            "[Desktop Entry]\nName=Flatpak fixture\nExec=flatpak run org.example.Flatpak\nIcon=org.example.Flatpak\n",
+        )?;
+        let icons = LauncherService::index_icon_roots(vec![icon_root.clone()]);
+        let app = LauncherService::parse_desktop_file(&desktop, &icons).await?;
+        assert_eq!(app.icon_path, Some(exported_icon));
+        assert!(!icons.contains_key("org.example.NewApp"));
+        let installed = icon_dir.join("org.example.NewApp.png");
+        std::fs::write(&installed, b"fixture")?;
+        let refreshed = LauncherService::index_icon_roots(vec![icon_root]);
+        assert_eq!(refreshed.get("org.example.NewApp"), Some(&installed));
+        std::fs::remove_dir_all(root)?;
+        Ok(())
     }
 }

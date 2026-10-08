@@ -1,4 +1,4 @@
-use gpui::{Context, IntoElement, div, prelude::*, px};
+use gpui::{ColorExt, Context, IntoElement, div, prelude::*, px};
 use services::EmojiItem;
 use ui::theme::Theme;
 

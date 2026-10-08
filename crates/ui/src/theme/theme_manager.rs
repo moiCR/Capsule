@@ -71,6 +71,14 @@ impl ThemeManager {
     }
 
     pub fn list_themes(&self) -> Vec<ThemeItem> {
+        Self::read_presets()
+    }
+
+    pub fn save_current_theme(theme: &Theme) -> Result<(), String> {
+        Self::save(&Self::theme_path(), theme).map_err(|error| error.to_string())
+    }
+
+    pub fn read_presets() -> Vec<ThemeItem> {
         Self::ensure_default_theme_exists();
         let presets_dir = Self::themes_path();
         let mut items = Vec::new();

@@ -1,5 +1,5 @@
 use chrono::Local;
-use gpui::{Element, ParentElement, Styled, div, px};
+use gpui::{ColorExt, Element, ParentElement, Styled, div, px};
 use services::LockScreenConfig;
 use ui::theme::Theme;
 

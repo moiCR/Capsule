@@ -1,4 +1,4 @@
-use gpui::{Context, FontWeight, IntoElement, canvas, div, prelude::*, px, svg};
+use gpui::{ColorExt, Context, FontWeight, IntoElement, canvas, div, prelude::*, px, svg};
 use services::AppState;
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
@@ -81,7 +81,7 @@ pub fn render_volume_widget(
                 .child(
                     div()
                         .h_full()
-                        .w(gpui::DefiniteLength::Fraction(
+                        .w(gpui::relative(
                             (vol_percentage as f32 / 100.0).clamp(0.0, 1.0),
                         ))
                         .rounded_full()
