@@ -7,8 +7,20 @@ pub mod settings;
 use assets::Assets;
 use gpui_platform::application;
 
-#[tokio::main]
-async fn main() {
+fn main() -> std::io::Result<()> {
+    run_with_runtime(run_application)
+}
+
+fn run_with_runtime(run: impl FnOnce()) -> std::io::Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let _runtime_context = runtime.enter();
+    run();
+    Ok(())
+}
+
+fn run_application() {
     services::init_tokio_handle(tokio::runtime::Handle::current());
 
     #[cfg(not(target_os = "linux"))]
@@ -114,4 +126,82 @@ COMMANDS:
     ping                Check if Capsule daemon is running
     help, --help, -h    Print this help message"#
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::task::{Context, Poll, Wake};
+
+    #[derive(Default)]
+    struct WakeCounter(AtomicUsize);
+
+    impl Wake for WakeCounter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn poll_foreign_executor_channel() -> (usize, usize) {
+        let counter = Arc::new(WakeCounter::default());
+        let waker = counter.clone().into();
+        let mut context = Context::from_waker(&waker);
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        for value in 0..512 {
+            sender.send(value).expect("enqueue message");
+        }
+
+        let mut received = 0;
+        for _ in 0..1024 {
+            if let Poll::Ready(Some(_)) = receiver.poll_recv(&mut context) {
+                received += 1;
+            }
+        }
+        (received, counter.0.load(Ordering::Relaxed))
+    }
+
+    #[test]
+    fn nested_event_loop_exhausts_tokio_budget_and_self_wakes() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let (received, wakes) = runtime.block_on(async { poll_foreign_executor_channel() });
+        assert!(
+            received < 512,
+            "nested executor unexpectedly drained its channel"
+        );
+        assert!(
+            wakes > 512,
+            "expected repeated wakes without channel progress"
+        );
+        eprintln!("nested event loop: {received} messages received, {wakes} self-wakes");
+    }
+
+    #[test]
+    fn application_runtime_keeps_channels_idle_without_starving_services() {
+        super::run_with_runtime(|| {
+            let (received, wakes) = poll_foreign_executor_channel();
+            assert_eq!(received, 512);
+            assert_eq!(wakes, 0, "an idle receiver must not reschedule itself");
+
+            let (sender, receiver) = std::sync::mpsc::channel();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                sender.send(()).expect("report timer completion");
+            });
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("services must progress while the main thread runs GPUI");
+        })
+        .expect("application runtime");
+    }
 }
