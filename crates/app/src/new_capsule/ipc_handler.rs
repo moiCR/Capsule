@@ -15,13 +15,17 @@ impl Capsule {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(16))
+                    .timer(Duration::from_millis(32))
                     .await;
                 if this
                     .update(cx, |capsule, cx| {
-                        capsule.sync_window(cx);
+                        let mut received = false;
                         while let Some(command) = services::pop_ipc_command() {
+                            received = true;
                             capsule.handle_ipc_command(command, cx);
+                        }
+                        if received {
+                            capsule.sync_window(cx);
                         }
                     })
                     .is_err()
@@ -40,9 +44,11 @@ impl Capsule {
             | IpcCommand::FileManager) => {
                 launch_apps::launch(command, cx);
             }
+            
             IpcCommand::ShowDashboard => {
                 self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Dashboard), cx)
             }
+
             IpcCommand::ToggleDashboard => {
                 let event = if self.module_manager.current_id() == CapsuleModuleId::Dashboard {
                     CapsuleModuleEvent::Close
@@ -51,9 +57,11 @@ impl Capsule {
                 };
                 self.handle_module_event(&event, cx);
             }
+
             IpcCommand::ShowLauncher => {
                 self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Launcher), cx)
             }
+
             IpcCommand::ToggleLauncher => {
                 let event = if self.module_manager.current_id() == CapsuleModuleId::Launcher {
                     CapsuleModuleEvent::Close

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, Pixels, Render, ScrollHandle, Size,
-    Subscription, Task, Window, div, prelude::*, px,
+    Subscription, Window, div, prelude::*, px,
 };
 use services::{AppState, Application, LauncherService};
 use ui::theme::Theme;
@@ -25,7 +25,6 @@ pub struct LauncherModule {
     focus_handle: FocusHandle,
     scroll: ScrollHandle,
     launch_error: Option<String>,
-    _launch_task: Option<Task<()>>,
     _theme_subscription: Subscription,
 }
 
@@ -43,7 +42,6 @@ impl LauncherModule {
             focus_handle: cx.focus_handle(),
             scroll: ScrollHandle::new(),
             launch_error: None,
-            _launch_task: None,
             _theme_subscription: cx.observe_global::<Theme>(|_, cx| cx.notify()),
         }
     }
@@ -86,9 +84,6 @@ impl LauncherModule {
     }
 
     pub(crate) fn activate_selected(&mut self, cx: &mut Context<Self>) {
-        if self._launch_task.is_some() {
-            return;
-        }
         if self.selected == 0
             && let Some(result) = &self.calculator
         {
@@ -102,29 +97,17 @@ impl LauncherModule {
         let Some(app) = self.apps.get(index).cloned() else {
             return;
         };
-        let launch = services::spawn_tokio(async move {
-            tokio::task::spawn_blocking(move || app.launch()).await
-        });
-        self._launch_task = Some(cx.spawn(async move |this, cx| {
-            let result = launch.await;
-            let succeeded = matches!(&result, Ok(Ok(Ok(()))));
-            if !succeeded {
-                services::log_error!("Launcher", "Failed to launch application: {:?}", result);
-            }
-            let _ = this.update(cx, |module, cx| {
-                module._launch_task = None;
-                if succeeded {
-                    cx.emit(CapsuleModuleEvent::Close);
-                } else {
-                    module.launch_error = Some(
-                        cx.global::<AppState>()
-                            .language
-                            .get("launcher.launch_failed"),
-                    );
-                    cx.notify();
-                }
-            });
-        }));
+        if let Err(e) = app.launch() {
+            services::log_error!("Launcher", "Failed to launch application: {:?}", e);
+            self.launch_error = Some(
+                cx.global::<AppState>()
+                    .language
+                    .get("launcher.launch_failed"),
+            );
+            cx.notify();
+            return;
+        }
+        cx.emit(CapsuleModuleEvent::Close);
     }
 }
 

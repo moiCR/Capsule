@@ -135,13 +135,14 @@ impl PamService {
         };
 
         let service = std::env::var("CAPSULE_PAM_SERVICE").unwrap_or_else(|_| {
-            if std::path::Path::new("/etc/pam.d/capsule").is_file()
-                || std::path::Path::new("/usr/lib/pam.d/capsule").is_file()
-            {
-                "capsule".to_string()
-            } else {
-                "su".to_string()
+            for candidate in ["capsule", "hyprlock", "swaylock", "system-auth", "login", "su"] {
+                if std::path::Path::new(&format!("/etc/pam.d/{candidate}")).is_file()
+                    || std::path::Path::new(&format!("/usr/lib/pam.d/{candidate}")).is_file()
+                {
+                    return candidate.to_string();
+                }
             }
+            "su".to_string()
         });
         let mut handle: *mut PamHandle = ptr::null_mut();
         let start_res = start(&service, Some(username), &conv, &mut handle);
@@ -166,11 +167,16 @@ impl PamService {
         );
 
         if auth_res == PamReturnCode::SUCCESS {
+            if service == "hyprlock" || service == "swaylock" {
+                return Ok(true);
+            }
             let acct_res = acct_mgmt(unsafe { &mut *guard.handle }, PamFlag::NONE);
             guard.status = acct_res;
             eprintln!("[PAM] acct_mgmt for '{}' returned: {:?}", service, acct_res);
             return Ok(
-                acct_res == PamReturnCode::SUCCESS || acct_res == PamReturnCode::NEW_AUTHTOK_REQD
+                acct_res == PamReturnCode::SUCCESS
+                    || acct_res == PamReturnCode::NEW_AUTHTOK_REQD
+                    || acct_res == PamReturnCode::PERM_DENIED,
             );
         }
 

@@ -262,24 +262,61 @@ impl ClipboardService {
         Vec::new()
     }
 
-    pub fn copy_item(&self, item: &ClipboardItem) -> bool {
-        let sh_cmd = format!("cliphist decode '{}' | wl-copy", item.id);
-        if let Ok(st) = Command::new("sh").args(["-c", &sh_cmd]).status() {
-            if st.success() {
-                return true;
+    pub fn get_item_text(&self, item: &ClipboardItem) -> String {
+        if !item.is_image {
+            if let Ok(out) = Command::new("cliphist").args(["decode", &item.id]).output() {
+                if out.status.success() && !out.stdout.is_empty() {
+                    return String::from_utf8_lossy(&out.stdout).to_string();
+                }
             }
         }
+        item.preview.clone()
+    }
 
-        if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
+    pub fn copy_binary(&self, bytes: &[u8], mime: &str) -> bool {
+        if let Ok(mut child) = Command::new("wl-copy")
+            .args(["--type", mime])
+            .stdin(Stdio::piped())
+            .spawn()
+        {
             if let Some(mut stdin) = child.stdin.take() {
                 use std::io::Write;
-                let _ = stdin.write_all(item.preview.as_bytes());
+                let _ = stdin.write_all(bytes);
             }
-            let _ = child.wait();
-            return true;
+            if let Ok(st) = child.wait() {
+                return st.success();
+            }
+        }
+        false
+    }
+
+    pub fn copy_item(&self, item: &ClipboardItem) -> bool {
+        if item.is_image {
+            if let Some(ref path) = item.image_path {
+                if path.exists() {
+                    if let Ok(bytes) = std::fs::read(path) {
+                        if self.copy_binary(&bytes, "image/png") {
+                            return true;
+                        }
+                    }
+                }
+            }
+            if let Ok(out) = Command::new("cliphist").args(["decode", &item.id]).output() {
+                if out.status.success() && !out.stdout.is_empty() {
+                    return self.copy_binary(&out.stdout, "image/png");
+                }
+            }
+            return false;
         }
 
-        false
+        if let Ok(out) = Command::new("cliphist").args(["decode", &item.id]).output() {
+            if out.status.success() && !out.stdout.is_empty() {
+                let text = String::from_utf8_lossy(&out.stdout);
+                return self.copy_text(&text);
+            }
+        }
+
+        self.copy_text(&item.preview)
     }
 
     pub fn clear_history(&self) -> bool {

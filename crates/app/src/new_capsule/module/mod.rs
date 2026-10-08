@@ -204,6 +204,8 @@ impl Capsule {
                     }
                 }
             }));
+        } else if self.animation_task.is_none() {
+            self.sync_window(cx);
         }
         cx.notify();
     }

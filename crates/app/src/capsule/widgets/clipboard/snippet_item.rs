@@ -50,6 +50,7 @@ pub fn render_snippet_item(
             }
         }))
         .on_click(cx.listener(move |this, _, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(content_to_copy.clone()));
             this.service.copy_text(&content_to_copy);
             cx.emit(ClipboardEvent::Close);
         }))

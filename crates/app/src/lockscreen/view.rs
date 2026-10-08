@@ -111,8 +111,9 @@ impl LockScreen {
         self.auth_failed = false;
         cx.notify();
 
-        cx.spawn(async move |this, cx| {
-            let is_valid = services::spawn_blocking(move || {
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        std::thread::spawn(move || {
+            let res = std::panic::catch_unwind(|| {
                 match services::PamService::authenticate_current_user(&pass) {
                     Ok(valid) => valid,
                     Err(error) => {
@@ -121,8 +122,21 @@ impl LockScreen {
                     }
                 }
             })
-            .await
             .unwrap_or(false);
+            let _ = tx.send(res);
+        });
+
+        cx.spawn(async move |this, cx| {
+            let mut is_valid = false;
+            for _ in 0..100 {
+                if let Ok(res) = rx.try_recv() {
+                    is_valid = res;
+                    break;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+            }
 
             let _ = this.update(cx, |this: &mut Self, cx| {
                 this.is_checking = false;

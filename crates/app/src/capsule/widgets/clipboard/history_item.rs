@@ -218,6 +218,10 @@ pub fn render_history_item(
             }
         }))
         .on_click(cx.listener(move |this, _, _, cx| {
+            if !item_clone.is_image {
+                let text = this.service.get_item_text(&item_clone);
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+            }
             this.service.copy_item(&item_clone);
             cx.emit(ClipboardEvent::Close);
         }))

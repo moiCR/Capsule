@@ -68,17 +68,12 @@ pub fn render_workspaces(
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(id.is_some(), |element| element.cursor_pointer())
+                .cursor_pointer()
                 .on_click(cx.listener(move |_, _, _, cx| {
-                    if let Some(id) = id {
-                        let compositor = cx.global::<AppState>().compositor.clone();
-                        services::spawn_tokio(async move {
-                            let _ = tokio::task::spawn_blocking(move || {
-                                compositor.switch_workspace(id)
-                            })
-                            .await;
-                        });
-                    }
+                    let target_id = id.unwrap_or(index as i64 + 1);
+                    cx.global::<AppState>()
+                        .compositor
+                        .switch_workspace(target_id);
                 }))
                 .child(
                     div()

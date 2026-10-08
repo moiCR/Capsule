@@ -59,6 +59,8 @@ pub struct Capsule {
     last_known_workspace: services::WorkspaceInfo,
     last_keyboard_interactivity: Option<gpui::layer_shell::KeyboardInteractivity>,
     last_input_region: Option<Option<Vec<Bounds<Pixels>>>>,
+    last_known_config: Option<std::sync::Arc<services::AppConfig>>,
+    last_exclusive_zone: Option<f32>,
 }
 
 impl Capsule {
@@ -406,6 +408,18 @@ impl Capsule {
                                 default_mod.set_active_workspace(current_ws, cx);
                             });
                             capsule.on_workspace_changed(cx);
+                        }
+
+                        if cx.has_global::<services::AppState>() {
+                            let current_cfg = cx.global::<services::AppState>().config.get();
+                            let changed = match capsule.last_known_config {
+                                Some(ref last) => !std::sync::Arc::ptr_eq(last, &current_cfg),
+                                None => true,
+                            };
+                            if changed {
+                                capsule.last_known_config = Some(current_cfg.clone());
+                                capsule.on_config_changed_direct(&current_cfg, cx);
+                            }
                         }
 
                         while let Some(cmd) = services::pop_ipc_command() {
@@ -814,6 +828,12 @@ impl Capsule {
             },
             last_keyboard_interactivity: None,
             last_input_region: None,
+            last_known_config: if cx.has_global::<AppState>() {
+                Some(cx.global::<AppState>().config.get())
+            } else {
+                None
+            },
+            last_exclusive_zone: None,
         }
     }
 
@@ -1007,6 +1027,16 @@ impl Capsule {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.on_config_changed_direct(config, cx);
+        window.set_exclusive_zone(px(config.ui.exclusive_zone()));
+        cx.notify();
+    }
+
+    pub fn on_config_changed_direct(
+        &mut self,
+        config: &services::AppConfig,
+        cx: &mut Context<Self>,
+    ) {
         let new_target_y = if config.ui.capsule_style == services::CapsuleStyle::Concave {
             0.0
         } else {
@@ -1021,19 +1051,17 @@ impl Capsule {
             self.target_y = new_target_y;
             self.target_radius = new_target_r;
 
-            if self.animating {
-                self.anim_start_w = self.current_width;
-                self.anim_start_h = self.current_height;
-                self.anim_start_r = self.current_radius;
-                self.anim_start_y = self.current_y;
-                self.anim_start_progress = self.anim_progress;
-                self.anim_start_time = Some(Instant::now());
-            } else {
-                self.animate_dimension_change(cx);
-            }
+            self.anim_start_w = self.current_width;
+            self.anim_start_h = self.current_height;
+            self.anim_start_r = self.current_radius;
+            self.anim_start_y = self.current_y;
+            self.anim_start_progress = self.anim_progress;
+            self.anim_start_time = Some(Instant::now());
+            self.animating = false;
+            self.anim_task = None;
+            self.animate_dimension_change(cx);
         }
 
-        window.set_exclusive_zone(px(config.ui.exclusive_zone()));
         cx.notify();
     }
 
@@ -1747,6 +1775,12 @@ impl Render for Capsule {
         if self.last_keyboard_interactivity != Some(desired_interactivity) {
             window.set_keyboard_interactivity(desired_interactivity);
             self.last_keyboard_interactivity = Some(desired_interactivity);
+        }
+
+        let exclusive_zone = ui_config.exclusive_zone();
+        if self.last_exclusive_zone != Some(exclusive_zone) {
+            window.set_exclusive_zone(px(exclusive_zone));
+            self.last_exclusive_zone = Some(exclusive_zone);
         }
 
         let desired_input_region = if is_modal {

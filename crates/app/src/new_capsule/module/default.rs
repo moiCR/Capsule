@@ -38,24 +38,50 @@ impl DefaultModule {
         let mut changes = compositor.on_change_workspace();
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
         let workspace_service_task = services::spawn_tokio(async move {
-            let mut current = compositor.get_workspace();
+            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut last_current = compositor.get_workspace();
+            let mut last_workspaces = compositor.get_workspaces();
+            let _ = sender.send((last_current.clone(), last_workspaces.clone()));
+
             loop {
-                let backend = compositor.clone();
-                let workspaces =
-                    match tokio::task::spawn_blocking(move || backend.get_workspaces()).await {
-                        Ok(workspaces) => workspaces,
-                        Err(_) => break,
-                    };
-                if sender.send((current, workspaces)).is_err() {
+                let mut should_send = false;
+                tokio::select! {
+                    change = changes.recv() => {
+                        match change {
+                            Ok(ws) => {
+                                last_current = ws;
+                                last_workspaces = compositor.get_workspaces();
+                                should_send = true;
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                                last_current = compositor.get_workspace();
+                                last_workspaces = compositor.get_workspaces();
+                                should_send = true;
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                tokio::time::sleep(Duration::from_millis(500)).await;
+                                changes = compositor.on_change_workspace();
+                                last_current = compositor.get_workspace();
+                                last_workspaces = compositor.get_workspaces();
+                                should_send = true;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        let current = compositor.get_workspace();
+                        let workspaces = compositor.get_workspaces();
+                        if current != last_current || workspaces != last_workspaces {
+                            last_current = current;
+                            last_workspaces = workspaces;
+                            should_send = true;
+                        }
+                    }
+                }
+
+                if should_send && sender.send((last_current.clone(), last_workspaces.clone())).is_err() {
                     break;
                 }
-                current = match changes.recv().await {
-                    Ok(current) => current,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        compositor.get_workspace()
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                };
             }
         });
 

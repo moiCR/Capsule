@@ -88,7 +88,7 @@ impl DashboardModule {
                 if sender.send(catalog).await.is_err() {
                     break;
                 }
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                tokio::time::sleep(Duration::from_secs(60)).await;
             }
         });
         let catalog_task = cx.spawn(async move |this, cx| {

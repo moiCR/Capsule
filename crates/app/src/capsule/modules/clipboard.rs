@@ -165,6 +165,10 @@ impl ClipboardModule {
         match self.current_tab {
             ClipboardTab::History => {
                 if let Some(item) = self.filtered_items.get(self.selected_index) {
+                    if !item.is_image {
+                        let text = self.service.get_item_text(item);
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                    }
                     self.service.copy_item(item);
                     cx.emit(ClipboardEvent::Close);
                     true
@@ -174,6 +178,7 @@ impl ClipboardModule {
             }
             ClipboardTab::Snippets => {
                 if let Some(snippet) = self.filtered_snippets.get(self.selected_index) {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(snippet.content.clone()));
                     self.service.copy_text(&snippet.content);
                     cx.emit(ClipboardEvent::Close);
                     true

@@ -119,6 +119,18 @@ crates/
   - UI interactions, modal openings, and search queries (`reset_search`) must NEVER trigger synchronous disk re-scans (`.desktop` / icon caches). Disk indexing belongs strictly to background watchers (`inotify`).
 - **Icons**: SVGs in `crates/assets/icons/`, loaded via GPUI asset system.
 - **Styling**: Pure GPUI builder patterns (no CSS).
+- **Async Runtime Bridging & Process Spawning**:
+  - Never wrap immediate OS process spawns (`app.launch()`, compositor IPC socket commands) in nested `services::spawn_tokio` -> `spawn_blocking` -> `cx.spawn(launch.await)`. Spawning processes via `std::process::Command::spawn()` is non-blocking (`fork`/`exec`). Task locks (e.g. `self._launch_task`) waiting on cross-runtime wakers will freeze/deadlock the UI when the application is idle.
+  - Compositor commands (switching workspaces, toggling special workspaces) are lightweight socket dispatches; call them directly on `CompositorService` without awaiting cross-runtime handles.
+- **Resilient Background Service Loops**:
+  - Background monitoring loops (`workspace_service_task`, etc.) must NEVER permanently exit on transient broadcast errors (`Lagged`, `Closed`) or blocking errors. Always reconnect listeners and pair with periodic interval fallbacks (`tokio::select!`) to maintain state synchronization after idle periods.
+- **Workspace Navigation**:
+  - Workspace slot keys (1..=6) must always remain clickable and map to a target workspace number (`id.unwrap_or(index as i64 + 1)`), allowing users to switch to empty workspaces even before the compositor has created windows on them.
+- **Clipboard Integration**:
+  - In GPUI-CE Wayland, always write text selections through `cx.write_to_clipboard(gpui::ClipboardItem::new_string(...))` alongside background daemon updates (`wl-copy`).
+  - Never pipe shell commands blindly (`cliphist decode <id> | wl-copy`): shell pipe exit code masks decode failures and clears the system clipboard with an empty string. Validate decode status and stdout explicitly before copying, and always specify MIME types (`--type image/png`) for binary clips.
+- **Window Sync & Idle CPU**:
+  - Never call `sync_window` in tight periodic polling loops (e.g. 16ms timer). Only synchronize window bounds and layer-shell regions on explicit IPC commands, module transitions, or size change events.
 
 ## Notes
 
