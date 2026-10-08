@@ -1,7 +1,5 @@
 mod launch_apps;
 
-use std::time::Duration;
-
 use gpui::{Context, Task};
 use services::IpcCommand;
 
@@ -14,9 +12,7 @@ impl Capsule {
     pub(super) fn start_ipc(cx: &mut Context<Self>) -> Task<()> {
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(32))
-                    .await;
+                services::wait_for_ipc_command().await;
                 if this
                     .update(cx, |capsule, cx| {
                         let mut received = false;
@@ -44,7 +40,7 @@ impl Capsule {
             | IpcCommand::FileManager) => {
                 launch_apps::launch(command, cx);
             }
-            
+
             IpcCommand::ShowDashboard => {
                 self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Dashboard), cx)
             }
@@ -71,6 +67,44 @@ impl Capsule {
                 self.handle_module_event(&event, cx);
             }
 
+            IpcCommand::ShowClipboard => {
+                self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Clipboard), cx)
+            }
+            IpcCommand::ToggleClipboard => {
+                let event = if self.module_manager.current_id() == CapsuleModuleId::Clipboard {
+                    CapsuleModuleEvent::Close
+                } else {
+                    CapsuleModuleEvent::Open(CapsuleModuleId::Clipboard)
+                };
+                self.handle_module_event(&event, cx);
+            }
+            IpcCommand::ShowShelf => {
+                self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Shelf), cx)
+            }
+            IpcCommand::ShowRecord => {
+                self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Record), cx)
+            }
+            command @ (IpcCommand::ToggleShelf | IpcCommand::ToggleRecord) => {
+                let id = if command == IpcCommand::ToggleShelf {
+                    CapsuleModuleId::Shelf
+                } else {
+                    CapsuleModuleId::Record
+                };
+                let event = if self.module_manager.current_id() == id {
+                    CapsuleModuleEvent::Close
+                } else {
+                    CapsuleModuleEvent::Open(id)
+                };
+                self.handle_module_event(&event, cx);
+            }
+            IpcCommand::ToggleSelectTheme => {
+                let event = if self.module_manager.current_id() == CapsuleModuleId::Themes {
+                    CapsuleModuleEvent::Close
+                } else {
+                    CapsuleModuleEvent::Open(CapsuleModuleId::Themes)
+                };
+                self.handle_module_event(&event, cx);
+            }
             IpcCommand::Hide | IpcCommand::Default => {
                 self.handle_module_event(&CapsuleModuleEvent::Close, cx);
             }

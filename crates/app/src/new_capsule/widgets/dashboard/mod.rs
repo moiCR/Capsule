@@ -1,7 +1,7 @@
 pub(crate) mod details;
 pub(crate) mod header;
 pub(crate) mod home;
-mod media;
+pub(crate) mod media;
 mod notifications;
 
 use crate::new_capsule::module::dashboard::DashboardModule;
@@ -9,7 +9,6 @@ use gpui::{
     AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, Pixels, Size, div, ease_in_out,
     prelude::*, px, size, svg,
 };
-use std::path::PathBuf;
 use ui::theme::Theme;
 
 pub const WIDTH: f32 = 640.0;
@@ -31,11 +30,28 @@ pub(crate) enum DashboardView {
     Bluetooth,
     Calendar,
     Audio,
+    Media,
     Tray { bus: String, path: String },
     Themes,
     Wallpapers,
 }
 impl DashboardView {
+    pub(crate) fn satellite_id(&self) -> Option<crate::new_capsule::satellite::SatelliteId> {
+        use crate::new_capsule::satellite::SatelliteId;
+        match self {
+            Self::Wifi => Some(SatelliteId::Wifi),
+            Self::Bluetooth => Some(SatelliteId::Bluetooth),
+            Self::Calendar => Some(SatelliteId::Calendar),
+            Self::Audio => Some(SatelliteId::Audio),
+            Self::Media => Some(SatelliteId::Media),
+            Self::Tray { bus, path } => Some(SatelliteId::Tray {
+                bus: bus.clone(),
+                path: path.clone(),
+            }),
+            _ => None,
+        }
+    }
+
     pub fn title_key(&self) -> &'static str {
         match self {
             Self::Home => "dashboard_new.title",
@@ -43,6 +59,7 @@ impl DashboardView {
             Self::Bluetooth => "quick_settings.bt_devices",
             Self::Calendar => "dashboard_new.calendar",
             Self::Audio => "dashboard_new.audio_output",
+            Self::Media => "settings.tab_media",
             Self::Tray { .. } => "dashboard_new.tray",
             Self::Themes => "dashboard_new.themes",
             Self::Wallpapers => "dashboard_new.wallpapers",
@@ -54,6 +71,7 @@ pub(crate) enum DashboardAction {
     View(DashboardView),
     Back,
     Close,
+    CloseSatellite(crate::new_capsule::satellite::SatelliteId),
     Wifi,
     Bluetooth,
     Dnd,
@@ -75,8 +93,6 @@ pub(crate) enum DashboardAction {
     Seek(f64),
     TrayActivate { bus: String, path: String },
     TrayMenu(String, String, i32),
-    Theme(Theme),
-    Wallpaper(PathBuf),
 }
 
 pub(crate) fn button(
@@ -131,6 +147,41 @@ pub(crate) fn button(
         })
         .into_any_element()
 }
+pub(crate) fn icon_action(
+    id: impl Into<gpui::ElementId>,
+    icon: &'static str,
+    action: DashboardAction,
+    enabled: bool,
+    theme: &Theme,
+    cx: &mut Context<DashboardModule>,
+) -> AnyElement {
+    let hover = theme.surface().opacity(0.6);
+    div()
+        .id(id)
+        .size(px(28.0))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .opacity(if enabled { 1.0 } else { 0.35 })
+        .when(enabled, |s| {
+            s.cursor_pointer()
+                .hover(move |s| s.bg(hover))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.dispatch(action.clone(), cx);
+                }))
+        })
+        .child(
+            svg()
+                .path(icon)
+                .size(px(14.0))
+                .text_color(theme.foreground_muted()),
+        )
+        .into_any_element()
+}
+
 pub(crate) fn empty(text: String, theme: &Theme) -> AnyElement {
     div()
         .w_full()

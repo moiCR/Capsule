@@ -113,16 +113,17 @@ impl LockScreen {
 
         let (tx, mut rx) = tokio::sync::oneshot::channel();
         std::thread::spawn(move || {
-            let res = std::panic::catch_unwind(|| {
-                match services::PamService::authenticate_current_user(&pass) {
+            let res =
+                std::panic::catch_unwind(|| match services::PamService::authenticate_current_user(
+                    &pass,
+                ) {
                     Ok(valid) => valid,
                     Err(error) => {
                         eprintln!("[PAM] Authentication failed: {error:#}");
                         false
                     }
-                }
-            })
-            .unwrap_or(false);
+                })
+                .unwrap_or(false);
             let _ = tx.send(res);
         });
 

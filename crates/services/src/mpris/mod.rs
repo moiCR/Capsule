@@ -71,29 +71,23 @@ impl MprisService {
 
     pub async fn play_pause_bus(bus_name: &str) -> bool {
         let bus = bus_name.to_string();
-        crate::spawn_tokio(async move {
-            call_mpris_method(&bus, "PlayPause").await
-        })
-        .await
-        .unwrap_or(false)
+        crate::spawn_tokio(async move { call_mpris_method(&bus, "PlayPause").await })
+            .await
+            .unwrap_or(false)
     }
 
     pub async fn next_bus(bus_name: &str) -> bool {
         let bus = bus_name.to_string();
-        crate::spawn_tokio(async move {
-            call_mpris_method(&bus, "Next").await
-        })
-        .await
-        .unwrap_or(false)
+        crate::spawn_tokio(async move { call_mpris_method(&bus, "Next").await })
+            .await
+            .unwrap_or(false)
     }
 
     pub async fn previous_bus(bus_name: &str) -> bool {
         let bus = bus_name.to_string();
-        crate::spawn_tokio(async move {
-            call_mpris_method(&bus, "Previous").await
-        })
-        .await
-        .unwrap_or(false)
+        crate::spawn_tokio(async move { call_mpris_method(&bus, "Previous").await })
+            .await
+            .unwrap_or(false)
     }
 
     pub async fn seek_to(bus_name: &str, position_seconds: f64) -> bool {
@@ -404,35 +398,41 @@ async fn poll_all_players_dbus(allowed_players: &[String]) -> Vec<MediaTrack> {
 
 async fn resolve_art_url(url: &str) -> Option<String> {
     if url.starts_with("file://") {
-        let path = url.trim_start_matches("file://").to_string();
-        if Path::new(&path).exists() {
-            return Some(path);
-        }
-    } else if url.starts_with("http://") || url.starts_with("https://") {
-        let mut hasher = Sha256::new();
-        hasher.update(url.as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
-        let cache_path = format!("/tmp/capsule_art_{}.jpg", &hash[..16]);
-
-        if Path::new(&cache_path).exists() {
-            return Some(cache_path);
-        }
-
-        let url_owned = url.to_string();
-        crate::spawn_tokio(async move {
-            if let Ok(client) = reqwest::Client::builder()
-                .timeout(Duration::from_secs(3))
-                .build()
-            {
-                if let Ok(resp) = client.get(&url_owned).send().await {
-                    if let Ok(bytes) = resp.bytes().await {
-                        let _ = tokio::fs::write(&cache_path, &bytes).await;
-                    }
-                }
-            }
-        });
+        let path = reqwest::Url::parse(url).ok()?.to_file_path().ok()?;
+        return path.is_file().then(|| path.to_string_lossy().into_owned());
     }
-    None
+    if Path::new(url).is_absolute() {
+        return Path::new(url).is_file().then(|| url.to_string());
+    }
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return None;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let cache_path = format!("/tmp/capsule_art_{}.jpg", &hash[..16]);
+    if Path::new(&cache_path).is_file() {
+        return Some(cache_path);
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .ok()?;
+    let bytes = client
+        .get(url)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .bytes()
+        .await
+        .ok()?;
+    image::load_from_memory(&bytes).ok()?;
+    let pending_path = format!("{cache_path}.pending");
+    tokio::fs::write(&pending_path, bytes).await.ok()?;
+    tokio::fs::rename(&pending_path, &cache_path).await.ok()?;
+    Some(cache_path)
 }
 
 fn extract_string(v: &Value<'static>) -> Option<String> {
@@ -496,6 +496,24 @@ fn extract_i64(v: &Value<'static>) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_artwork_accepts_encoded_file_urls_and_absolute_paths() {
+        let directory =
+            std::env::temp_dir().join(format!("capsule-art-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("artwork fixture directory");
+        let path = directory.join("cover with spaces.png");
+        image::RgbaImage::new(2, 2)
+            .save(&path)
+            .expect("artwork fixture");
+        let url = reqwest::Url::from_file_path(&path).expect("file URL");
+        assert!(url.as_str().contains("%20"));
+        let expected = Some(path.to_string_lossy().into_owned());
+        assert_eq!(resolve_art_url(url.as_str()).await, expected);
+        assert_eq!(resolve_art_url(&path.to_string_lossy()).await, expected);
+        std::fs::remove_dir_all(directory).expect("clean artwork fixtures");
+        assert_eq!(resolve_art_url(url.as_str()).await, None);
+    }
 
     #[test]
     fn test_is_allowed_player() {

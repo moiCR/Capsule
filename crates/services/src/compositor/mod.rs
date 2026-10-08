@@ -206,6 +206,20 @@ impl CompositorService {
                 );
             }
             self.refresh_rate.store(Arc::new(rate));
+
+            let compositor = self.compositor.clone();
+            if let Some(active) = crate::spawn_blocking(move || compositor.get_workspace())
+                .await
+                .ok()
+                .flatten()
+            {
+                let prev_ws = self.current_workspace.load();
+                if **prev_ws != active {
+                    self.current_workspace.store(Arc::new(active.clone()));
+                    let _ = self.workspace_tx.send(active);
+                }
+            }
+
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }

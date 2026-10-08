@@ -11,11 +11,37 @@ impl DashboardModule {
     ) {
         match event.keystroke.key.as_str() {
             "escape" => {
-                if self.navigation.escape() {
+                if self.satellites.iter().any(|satellite| satellite.open) {
+                    if let Some(panel) = self.satellites.iter().rev().find(|panel| panel.open) {
+                        cx.emit(
+                            crate::new_capsule::module::CapsuleModuleEvent::CloseSatelliteId(
+                                panel.id.clone(),
+                            ),
+                        );
+                    }
+                } else if self.navigation.escape() {
                     self.dispatch(DashboardAction::Close, cx);
                 } else {
                     cx.notify();
                 }
+            }
+            "left"
+                if self.navigation.view
+                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+            {
+                self.dispatch(DashboardAction::Month(-1), cx)
+            }
+            "right"
+                if self.navigation.view
+                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+            {
+                self.dispatch(DashboardAction::Month(1), cx)
+            }
+            "home"
+                if self.navigation.view
+                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+            {
+                self.dispatch(DashboardAction::Month(0), cx)
             }
             "enter" if self.navigation.selected_ssid.is_some() => {
                 self.dispatch(DashboardAction::ConnectWifi, cx)

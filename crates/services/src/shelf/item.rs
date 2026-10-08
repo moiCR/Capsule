@@ -42,11 +42,10 @@ impl ShelfItem {
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "svg"
         );
 
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_millis())
-            .unwrap_or(0);
-        let id = format!("{name}_{timestamp}");
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        path.hash(&mut hash);
+        let id = format!("shelf-{:x}", hash.finish());
 
         let icon_path = resolve_file_icon(&path, is_dir);
 

@@ -56,14 +56,11 @@ impl CapsulePanel {
         ipc_subscriber: IpcSubscriber,
     ) -> Option<WindowHandle<crate::new_capsule::Capsule>> {
         let module_manager = crate::new_capsule::module::CapsuleModuleManager::new(cx);
-        let mut size = module_manager.maximum_size(cx);
-        size.height += px(cx
-            .global::<services::AppState>()
-            .config
-            .get()
-            .ui
-            .margin_top
-            .max(0.0));
+        let size = crate::new_capsule::Capsule::maximum_window_size(
+            &module_manager,
+            cx.displays().first().map(|display| display.bounds().size),
+            cx,
+        );
         let mut options = Self::window_options(cx);
         options.window_bounds = Some(WindowBounds::Windowed(gpui::Bounds {
             origin: gpui::point(px(0.0), px(0.0)),

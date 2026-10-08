@@ -131,6 +131,9 @@ crates/
   - Never pipe shell commands blindly (`cliphist decode <id> | wl-copy`): shell pipe exit code masks decode failures and clears the system clipboard with an empty string. Validate decode status and stdout explicitly before copying, and always specify MIME types (`--type image/png`) for binary clips.
 - **Window Sync & Idle CPU**:
   - Never call `sync_window` in tight periodic polling loops (e.g. 16ms timer). Only synchronize window bounds and layer-shell regions on explicit IPC commands, module transitions, or size change events.
+- **Compositor Socket Dispatch & Cancel Safety**:
+  - In modern Hyprland (>= 0.43/0.56), commands issued to `.socket.sock` evaluate as Lua. Dispatching workspaces requires `dispatch hl.dsp.focus({ workspace = id })` and `dispatch hl.dsp.workspace.toggle_special()`, whereas legacy versions use `dispatch workspace id` / `dispatch togglespecialworkspace`. Always issue modern Lua syntax first and fallback on legacy if `error:` is returned.
+  - Never wrap `reader.next_line()` on a socket event stream inside a short `tokio::select!` timeout loop. Tokio's `next_line()` is not cancel-safe and drops partially buffered stream bytes when the timeout triggers. Keep the event reader loop clean (`while let Ok(Some(line)) = reader.next_line().await`) and run fallback verification in a separate decoupled polling loop.
 
 ## Notes
 

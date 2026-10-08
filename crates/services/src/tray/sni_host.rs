@@ -392,70 +392,75 @@ async fn save_pixmap_to_file(
 
     let body = msg.body();
     let val: zbus::zvariant::Value = body.deserialize().ok()?;
-    let arr = match val {
-        zbus::zvariant::Value::Array(a) => a,
-        _ => return None,
-    };
-
-    let first_struct = match arr.iter().next() {
-        Some(zbus::zvariant::Value::Structure(s)) => s,
-        _ => return None,
-    };
-
-    let fields = first_struct.fields();
-    if fields.len() < 3 {
-        return None;
-    }
-
-    let width = match fields[0] {
-        zbus::zvariant::Value::I32(w) => w as u32,
-        _ => return None,
-    };
-    let height = match fields[1] {
-        zbus::zvariant::Value::I32(h) => h as u32,
-        _ => return None,
-    };
-    let bytes = match &fields[2] {
-        zbus::zvariant::Value::Array(b) => {
-            let mut buf = Vec::new();
-            for u in b.iter() {
-                if let zbus::zvariant::Value::U8(byte) = u {
-                    buf.push(*byte);
-                }
-            }
-            buf
-        }
-        _ => return None,
-    };
-
-    if width == 0 || height == 0 || bytes.len() < (width * height * 4) as usize {
-        return None;
-    }
-
-    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    for chunk in bytes.chunks_exact(4) {
-        let a = chunk[0];
-        let r = chunk[1];
-        let g = chunk[2];
-        let b = chunk[3];
-        rgba.push(r);
-        rgba.push(g);
-        rgba.push(b);
-        rgba.push(a);
-    }
+    let image = decode_icon_pixmap(&val)?;
+    let rgba = image.as_raw();
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    std::hash::Hash::hash(&rgba, &mut hasher);
+    std::hash::Hash::hash(rgba, &mut hasher);
     let hash = std::hash::Hasher::finish(&hasher);
 
-    let file_path = format!("/tmp/capsule_tray_icons/{item_id}_{hash}.png");
+    let safe_id: String = item_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let file_path = format!("/tmp/capsule_tray_icons/{safe_id}_{hash}.png");
     if !std::path::Path::new(&file_path).exists() {
-        let img_buf: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
-            image::ImageBuffer::from_raw(width, height, rgba)?;
-        img_buf.save(&file_path).ok()?;
+        image.save(&file_path).ok()?;
     }
 
     Some(file_path)
+}
+
+fn decode_icon_pixmap(value: &zbus::zvariant::Value<'_>) -> Option<image::RgbaImage> {
+    use zbus::zvariant::Value;
+    let Value::Array(pixmaps) = unwrap_val(value) else {
+        return None;
+    };
+    pixmaps
+        .iter()
+        .filter_map(|pixmap| {
+            let Value::Structure(structure) = unwrap_val(pixmap) else {
+                return None;
+            };
+            let fields = structure.fields();
+            let Value::I32(width) = unwrap_val(fields.first()?) else {
+                return None;
+            };
+            let Value::I32(height) = unwrap_val(fields.get(1)?) else {
+                return None;
+            };
+            let width = u32::try_from(*width).ok()?;
+            let height = u32::try_from(*height).ok()?;
+            let count = width.checked_mul(height)?.checked_mul(4)? as usize;
+            if count == 0 {
+                return None;
+            }
+            let Value::Array(bytes) = unwrap_val(fields.get(2)?) else {
+                return None;
+            };
+            if bytes.len() != count {
+                return None;
+            }
+            let argb: Option<Vec<u8>> = bytes
+                .iter()
+                .map(|byte| match unwrap_val(byte) {
+                    Value::U8(byte) => Some(*byte),
+                    _ => None,
+                })
+                .collect();
+            let mut rgba = argb?;
+            for pixel in rgba.as_chunks_mut::<4>().0 {
+                pixel.rotate_left(1);
+            }
+            image::RgbaImage::from_raw(width, height, rgba)
+        })
+        .max_by_key(|image| u64::from(image.width()) * u64::from(image.height()))
 }
 
 async fn fetch_registered_services(_conn: &zbus::Connection, host: &SniHostService) -> Vec<String> {
@@ -577,4 +582,24 @@ async fn get_tooltip_title(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod icon_tests {
+    use super::*;
+    use zbus::zvariant::Value;
+
+    #[test]
+    fn variant_pixmaps_skip_empty_entries_and_decode_argb() {
+        let pixmaps = Value::new(vec![
+            (0i32, 0i32, Vec::<u8>::new()),
+            (1i32, 1i32, vec![128u8, 10, 20, 30]),
+        ]);
+        let wrapped = Value::Value(Box::new(pixmaps));
+        let image = decode_icon_pixmap(&wrapped).expect("valid tray pixmap");
+        assert_eq!(image.dimensions(), (1, 1));
+        assert_eq!(image.get_pixel(0, 0).0, [10, 20, 30, 128]);
+        assert!(decode_icon_pixmap(&Value::new(vec![(-1i32, 1i32, vec![0u8; 4])])).is_none());
+        assert!(decode_icon_pixmap(&Value::new(vec![(1i32, 1i32, vec![0u8; 3])])).is_none());
+    }
 }

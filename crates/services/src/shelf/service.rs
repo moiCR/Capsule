@@ -110,6 +110,10 @@ impl ShelfService {
         copy_paths_to_clipboard(std::slice::from_ref(&item.path))
     }
 
+    pub fn copy_paths(&self, paths: &[PathBuf]) -> bool {
+        copy_paths_to_clipboard(paths)
+    }
+
     pub fn copy_all(&self) -> bool {
         let items = self.get_items();
         let paths: Vec<PathBuf> = items.into_iter().map(|item| item.path).collect();

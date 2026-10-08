@@ -319,7 +319,9 @@ pub fn render(
         );
     }
     left = left.child(shortcuts);
-    if let Some(message) = &module.navigation.error {
+    if module.satellites.is_empty()
+        && let Some(message) = &module.navigation.error
+    {
         left = left.child(super::error(message.clone(), theme));
     }
     let right = div()

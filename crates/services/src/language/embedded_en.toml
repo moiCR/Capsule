@@ -59,6 +59,11 @@ scanning = "Searching..."
 connection_failed = "Connection failed"
 
 [clipboard]
+copy_error = "Could not copy this item"
+action_error = "Could not update clipboard history"
+no_results = "No matching items"
+working = "Working…"
+copy_hint = "↑↓←→ navigate · Enter copy · Tab switch"
 title = "CLIPBOARD"
 search_placeholder = "Search history..."
 empty_history = "No items in history"
@@ -98,6 +103,10 @@ audio_output = "Audio Output"
 muted = "Mute"
 
 [record]
+starting = "Starting…"
+stopping = "Saving…"
+action_error = "Could not control the recording"
+working = "Working…"
 title = "RECORDING"
 record_screen = "Record screen"
 start = "Record"
@@ -266,6 +275,10 @@ record_audio_none = "None"
 record_output_fullscreen = "Full Screen"
 
 [shelf]
+folder = "Folder"
+action_error = "Could not complete the action"
+working = "Working…"
+navigate_hint = "↑↓←→ navigate · ↵ copy · Del remove"
 title = "SHELF"
 empty = "No files in the shelf"
 empty_title = "Drag files or folders onto Capsule"
@@ -277,6 +290,8 @@ copied_hint = "Copied to clipboard"
 remove_item = "Remove from shelf"
 
 [dashboard_new]
+apply = "Apply"
+applied = "Applied"
 title = "Dashboard"
 calendar = "Calendar"
 audio_output = "Audio output"

@@ -1,6 +1,8 @@
 pub mod service;
 
-pub use service::{IpcMessage, IpcSubscriber, pop_ipc_command, push_ipc_command};
+pub use service::{
+    IpcMessage, IpcSubscriber, pop_ipc_command, push_ipc_command, wait_for_ipc_command,
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

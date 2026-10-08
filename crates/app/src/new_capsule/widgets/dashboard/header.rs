@@ -1,6 +1,7 @@
 use super::{DashboardAction as Action, DashboardView as View, HEADER, button};
 use crate::new_capsule::module::dashboard::DashboardModule;
 use gpui::{AnyElement, Context, IntoElement, div, img, prelude::*, px, svg};
+use std::path::PathBuf;
 use ui::theme::Theme;
 
 pub fn render(
@@ -8,7 +9,9 @@ pub fn render(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    let title = if module.navigation.view == View::Home {
+    let title = if module.navigation.view == View::Home
+        || module.navigation.view.satellite_id().is_some()
+    {
         module.snapshot.date.clone()
     } else {
         module.text(module.navigation.view.title_key(), cx)
@@ -22,7 +25,9 @@ pub fn render(
         .h(px(HEADER))
         .flex_shrink_0()
         .gap(px(8.0));
-    let leading = if module.navigation.view == View::Home {
+    let leading = if module.navigation.view == View::Home
+        || module.navigation.view.satellite_id().is_some()
+    {
         button(
             "dashboard-calendar",
             title,
@@ -44,11 +49,13 @@ pub fn render(
         )
     };
     let mut trailing = div().flex().items_center().gap(px(6.0)).min_w_0();
-    if module.navigation.view == View::Home {
+    if module.navigation.view == View::Home || module.navigation.view.satellite_id().is_some() {
         let mut tray = div()
             .id("dashboard-tray")
             .flex()
             .items_center()
+            .h(px(36.0))
+            .min_w(px(0.0))
             .max_w(px(160.0))
             .overflow_x_scroll()
             .gap(px(4.0));
@@ -56,7 +63,15 @@ pub fn render(
             let bus = item.bus_name.clone();
             let path = item.object_path.clone();
             let icon = if let Some(path) = &item.icon_file_path {
-                img(path.clone()).size(px(18.0)).into_any_element()
+                if path.to_lowercase().ends_with(".svg") {
+                    svg()
+                        .path(path.clone())
+                        .size(px(18.0))
+                        .text_color(theme.foreground())
+                        .into_any_element()
+                } else {
+                    img(PathBuf::from(path)).size(px(18.0)).into_any_element()
+                }
             } else {
                 div()
                     .text_size(px(12.0))
@@ -70,7 +85,8 @@ pub fn render(
                         "dashboard-tray-{}-{}",
                         item.bus_name, item.object_path
                     ))
-                    .size(px(36.0))
+                    .size(px(28.0))
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .justify_center()

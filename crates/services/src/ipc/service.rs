@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::net::UnixListener as TokioUnixListener;
 
+static IPC_WAKEUP: OnceLock<tokio::sync::Notify> = OnceLock::new();
+
 static IPC_QUEUE: OnceLock<Arc<Mutex<VecDeque<IpcCommand>>>> = OnceLock::new();
 
 fn get_ipc_queue() -> &'static Arc<Mutex<VecDeque<IpcCommand>>> {
@@ -16,7 +18,17 @@ fn get_ipc_queue() -> &'static Arc<Mutex<VecDeque<IpcCommand>>> {
 pub fn push_ipc_command(cmd: IpcCommand) {
     if let Ok(mut q) = get_ipc_queue().lock() {
         q.push_back(cmd);
+        IPC_WAKEUP
+            .get_or_init(tokio::sync::Notify::new)
+            .notify_one();
     }
+}
+
+pub async fn wait_for_ipc_command() {
+    IPC_WAKEUP
+        .get_or_init(tokio::sync::Notify::new)
+        .notified()
+        .await;
 }
 
 pub fn pop_ipc_command() -> Option<IpcCommand> {

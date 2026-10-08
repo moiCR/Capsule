@@ -18,7 +18,7 @@ pub struct WorkspaceKey {
 
 pub fn workspace_keys(current: &WorkspaceInfo, workspaces: &[WorkspaceInfo]) -> [WorkspaceKey; 6] {
     std::array::from_fn(|index| {
-        if index == 5 && (current.is_special || current.num > 6) {
+        if index == 5 && (!current.is_special && current.num > 6) {
             return WorkspaceKey {
                 id: Some(current.id),
                 active: true,
@@ -40,17 +40,18 @@ pub fn workspace_keys(current: &WorkspaceInfo, workspaces: &[WorkspaceInfo]) -> 
 
 pub fn render_workspaces(
     keys: &[WorkspaceKey; 6],
+    special: bool,
     duration: Duration,
     theme: &Theme,
     cx: &mut Context<DefaultModule>,
 ) -> impl IntoElement {
-    div()
-        .w(px(WORKSPACES_WIDTH))
-        .h_full()
-        .flex_shrink_0()
+    let mut opposite = theme.accent();
+    opposite.color.hue += 180.0;
+    let row = div()
+        .h(px(16.0))
         .flex()
         .items_center()
-        .gap(px(3.0))
+        .gap(px(2.0))
         .children(keys.iter().enumerate().map(|(index, key)| {
             let id = key.id;
             let width = if key.active { 8.0 } else { 5.0 };
@@ -58,11 +59,12 @@ pub fn render_workspaces(
             let color = if key.active {
                 theme.accent()
             } else {
-                theme.foreground_muted().opacity(0.5)
+                theme.accent().opacity(0.4)
             };
             div()
                 .id(("workspace-key", index))
-                .w(px(10.0))
+                .w(px(width))
+                .transitions(|t| t.w(duration.with_easing(ease_in_out)))
                 .h_full()
                 .flex_shrink_0()
                 .flex()
@@ -109,7 +111,31 @@ pub fn render_workspaces(
                                 }),
                         ),
                 )
-        }))
+        }));
+    div()
+        .w(px(WORKSPACES_WIDTH))
+        .h_full()
+        .flex_shrink_0()
+        .flex()
+        .flex_col()
+        .justify_center()
+        .items_start()
+        .child(row)
+        .child(
+            div()
+                .id("special-workspace-indicator")
+                .w(px(40.0))
+                .h(px(if special { 4.0 } else { 0.0 }))
+                .mt(px(if special { 4.0 } else { 0.0 }))
+                .rounded_full()
+                .bg(opposite)
+                .opacity(if special { 1.0 } else { 0.0 })
+                .transitions(|t| {
+                    t.h(duration.with_easing(ease_in_out))
+                        .mt(duration.with_easing(ease_in_out))
+                        .opacity(duration.with_easing(ease_in_out))
+                }),
+        )
 }
 
 #[cfg(test)]
@@ -126,13 +152,24 @@ mod tests {
     }
 
     #[test]
-    fn keys_use_real_ids_and_replace_last_with_high_or_special_workspace() {
+    fn special_workspace_leaves_all_normal_slots_unselected() {
+        let existing = vec![workspace(1, 101, false), workspace(6, 606, false)];
+        let keys = workspace_keys(&workspace(-1, -99, true), &existing);
+        assert!(keys.iter().all(|key| !key.active));
+        assert_eq!(keys[0].id, Some(101));
+        assert_eq!(keys[5].id, Some(606));
+        assert!(!keys.iter().any(|key| key.id == Some(-99)));
+    }
+
+    #[test]
+    fn keys_use_real_ids_and_replace_last_with_high_workspace() {
         let existing = vec![workspace(1, 101, false), workspace(2, 202, false)];
         let keys = workspace_keys(&existing[1], &existing);
         assert_eq!(keys[0].id, Some(101));
         assert!(keys[1].active);
         assert_eq!(keys[2].id, None);
-        for current in [workspace(8, 808, false), workspace(-1, -99, true)] {
+        {
+            let current = workspace(8, 808, false);
             let keys = workspace_keys(&current, &existing);
             assert_eq!(
                 keys[5],

@@ -323,10 +323,17 @@ impl Compositor for Hyprland {
     fn switch_workspace(&self, id: i64) {
         let _ = catch_unwind(|| {
             if id < 0 {
-                let _ = query_hypr_command("dispatch togglespecialworkspace");
+                let res = query_hypr_command("dispatch hl.dsp.workspace.toggle_special()");
+                if res.as_deref().map_or(true, |r| r.starts_with("error:")) {
+                    let _ = query_hypr_command("dispatch togglespecialworkspace");
+                }
             } else {
-                let cmd = format!("dispatch workspace {id}");
-                let _ = query_hypr_command(&cmd);
+                let cmd_lua = format!("dispatch hl.dsp.focus({{ workspace = {id} }})");
+                let res = query_hypr_command(&cmd_lua);
+                if res.as_deref().map_or(true, |r| r.starts_with("error:")) {
+                    let cmd_legacy = format!("dispatch workspace {id}");
+                    let _ = query_hypr_command(&cmd_legacy);
+                }
             }
         });
     }
@@ -531,54 +538,32 @@ pub async fn run_events_listener(
         use tokio::io::AsyncBufReadExt;
         let mut reader = tokio::io::BufReader::new(stream).lines();
 
-        loop {
-            let res = tokio::select! {
-                line_res = reader.next_line() => line_res,
-                _ = tokio::time::sleep(Duration::from_millis(500)) => {
-                    let active = tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
-                        .await
-                        .ok()
-                        .flatten();
-                    if let Some(ws) = active {
-                        let prev = current_workspace.load();
-                        if **prev != ws {
-                            current_workspace.store(Arc::new(ws.clone()));
-                            let _ = tx.send(ws);
-                        }
-                    }
-                    continue;
-                }
+        while let Ok(Some(line)) = reader.next_line().await {
+            let parsed = parse_hyprland_event(&line, &current_workspace.load());
+            let ws_opt = if let Some(ws) = parsed {
+                Some(ws)
+            } else if line.starts_with("renameworkspace>>")
+                || line.starts_with("createworkspace>>")
+                || line.starts_with("createworkspacev2>>")
+                || line.starts_with("destroyworkspace>>")
+                || line.starts_with("destroyworkspacev2>>")
+                || line.starts_with("moveworkspace>>")
+                || line.starts_with("moveworkspacev2>>")
+            {
+                tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
             };
 
-            match res {
-                Ok(Some(line)) => {
-                    let parsed = parse_hyprland_event(&line, &current_workspace.load());
-                    let ws_opt = if let Some(ws) = parsed {
-                        Some(ws)
-                    } else if line.starts_with("renameworkspace>>")
-                        || line.starts_with("createworkspace>>")
-                        || line.starts_with("createworkspacev2>>")
-                        || line.starts_with("destroyworkspace>>")
-                        || line.starts_with("destroyworkspacev2>>")
-                    {
-                        tokio::task::spawn_blocking(|| Hyprland::new().get_workspace())
-                            .await
-                            .ok()
-                            .flatten()
-                    } else {
-                        None
-                    };
-
-                    if let Some(ws) = ws_opt {
-                        let prev = current_workspace.load();
-                        if **prev != ws {
-                            current_workspace.store(Arc::new(ws.clone()));
-                            let _ = tx.send(ws);
-                        }
-                    }
+            if let Some(ws) = ws_opt {
+                let prev = current_workspace.load();
+                if **prev != ws {
+                    current_workspace.store(Arc::new(ws.clone()));
+                    let _ = tx.send(ws);
                 }
-                Ok(None) => break,
-                Err(_) => break,
             }
         }
 

@@ -15,6 +15,30 @@ pub struct ClipboardItem {
     pub image_path: Option<PathBuf>,
 }
 
+pub enum ClipboardContent {
+    Text(String),
+    Image(Vec<u8>),
+}
+
+fn decode_content(bytes: Vec<u8>, is_image: bool) -> Result<ClipboardContent, String> {
+    if bytes.is_empty() {
+        return Err("clipboard.copy_error".into());
+    }
+    if is_image {
+        let image =
+            image::load_from_memory(&bytes).map_err(|_| "clipboard.copy_error".to_string())?;
+        let mut png = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut png, image::ImageFormat::Png)
+            .map_err(|_| "clipboard.copy_error".to_string())?;
+        Ok(ClipboardContent::Image(png.into_inner()))
+    } else {
+        String::from_utf8(bytes)
+            .map(ClipboardContent::Text)
+            .map_err(|_| "clipboard.copy_error".to_string())
+    }
+}
+
 fn parse_image_preview(raw: &str) -> String {
     let inner = raw
         .strip_prefix("[[ binary data")
@@ -202,24 +226,27 @@ impl ClipboardService {
                             let clean_preview = parse_image_preview(rest_trimmed);
                             let cache_dir = PathBuf::from("/tmp/capsule_clipboard");
                             let _ = std::fs::create_dir_all(&cache_dir);
-                            let file_path = cache_dir.join(format!("{id_trimmed}.png"));
+                            let file_path = cache_dir.join(format!("{id_trimmed}-preview.png"));
 
-                            let is_cached = file_path.exists()
-                                && file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+                            let is_cached = std::fs::read(&file_path)
+                                .is_ok_and(|bytes| image::load_from_memory(&bytes).is_ok());
 
                             if !is_cached {
                                 if let Ok(out) = Command::new("cliphist")
                                     .args(["decode", id_trimmed])
                                     .output()
                                 {
-                                    if out.status.success() && !out.stdout.is_empty() {
-                                        let _ = std::fs::write(&file_path, &out.stdout);
+                                    if out.status.success()
+                                        && let Ok(ClipboardContent::Image(bytes)) =
+                                            decode_content(out.stdout, true)
+                                    {
+                                        let _ = std::fs::write(&file_path, bytes);
                                     }
                                 }
                             }
 
-                            let resolved_path = if file_path.exists()
-                                && file_path.metadata().map(|m| m.len() > 0).unwrap_or(false)
+                            let resolved_path = if std::fs::read(&file_path)
+                                .is_ok_and(|bytes| image::load_from_memory(&bytes).is_ok())
                             {
                                 Some(file_path)
                             } else {
@@ -249,17 +276,47 @@ impl ClipboardService {
         if let Ok(guard) = self.fallback_history.lock() {
             return guard
                 .iter()
-                .enumerate()
-                .map(|(idx, text)| ClipboardItem {
-                    id: idx.to_string(),
-                    preview: text.clone(),
-                    is_image: false,
-                    image_path: None,
+                .map(|text| {
+                    use std::hash::{Hash, Hasher};
+                    let mut hash = std::collections::hash_map::DefaultHasher::new();
+                    text.hash(&mut hash);
+                    ClipboardItem {
+                        id: format!("fallback-{:x}", hash.finish()),
+                        preview: text.clone(),
+                        is_image: false,
+                        image_path: None,
+                    }
                 })
                 .collect();
         }
 
         Vec::new()
+    }
+
+    pub fn read_item(&self, item: &ClipboardItem) -> Result<ClipboardContent, String> {
+        if !item.is_image
+            && self
+                .fallback_history
+                .lock()
+                .is_ok_and(|history| history.iter().any(|text| text == &item.preview))
+        {
+            return Ok(ClipboardContent::Text(item.preview.clone()));
+        }
+        if item.is_image
+            && let Some(path) = &item.image_path
+            && let Ok(bytes) = std::fs::read(path)
+            && let Ok(content) = decode_content(bytes, true)
+        {
+            return Ok(content);
+        }
+        let output = Command::new("cliphist")
+            .args(["decode", &item.id])
+            .output()
+            .map_err(|_| "clipboard.copy_error".to_string())?;
+        if !output.status.success() {
+            return Err("clipboard.copy_error".into());
+        }
+        decode_content(output.stdout, item.is_image)
     }
 
     pub fn get_item_text(&self, item: &ClipboardItem) -> String {
@@ -274,20 +331,19 @@ impl ClipboardService {
     }
 
     pub fn copy_binary(&self, bytes: &[u8], mime: &str) -> bool {
-        if let Ok(mut child) = Command::new("wl-copy")
+        let Ok(mut child) = Command::new("wl-copy")
             .args(["--type", mime])
             .stdin(Stdio::piped())
             .spawn()
-        {
-            if let Some(mut stdin) = child.stdin.take() {
-                use std::io::Write;
-                let _ = stdin.write_all(bytes);
-            }
-            if let Ok(st) = child.wait() {
-                return st.success();
-            }
-        }
-        false
+        else {
+            return false;
+        };
+        let written = child.stdin.take().is_some_and(|mut stdin| {
+            use std::io::Write;
+            stdin.write_all(bytes).is_ok()
+        });
+        let success = child.wait().is_ok_and(|status| status.success());
+        written && success
     }
 
     pub fn copy_item(&self, item: &ClipboardItem) -> bool {
@@ -383,22 +439,58 @@ impl ClipboardService {
     }
 
     pub fn copy_text(&self, text: &str) -> bool {
-        if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
-            if let Some(mut stdin) = child.stdin.take() {
-                use std::io::Write;
-                let _ = stdin.write_all(text.as_bytes());
-            }
-            let _ = child.wait();
-            return true;
-        }
-
-        false
+        let Ok(mut child) = Command::new("wl-copy")
+            .args(["--type", "text/plain;charset=utf-8"])
+            .stdin(Stdio::piped())
+            .spawn()
+        else {
+            return false;
+        };
+        let written = child.stdin.take().is_some_and(|mut stdin| {
+            use std::io::Write;
+            stdin.write_all(text.as_bytes()).is_ok()
+        });
+        let success = child.wait().is_ok_and(|status| status.success());
+        written && success
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_payloads_are_validated_and_normalized_to_png() {
+        let mut source = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(2, 1)
+            .write_to(&mut source, image::ImageFormat::Jpeg)
+            .expect("JPEG fixture");
+        let ClipboardContent::Image(bytes) =
+            decode_content(source.into_inner(), true).expect("image payload")
+        else {
+            panic!("image payload");
+        };
+        assert_eq!(
+            image::guess_format(&bytes).expect("image format"),
+            image::ImageFormat::Png
+        );
+        let decoded = image::load_from_memory(&bytes).expect("PNG payload");
+        assert_eq!((decoded.width(), decoded.height()), (2, 1));
+    }
+
+    #[test]
+    fn invalid_clipboard_data_never_becomes_a_copy_payload() {
+        assert!(decode_content(Vec::new(), false).is_err());
+        assert!(decode_content(vec![0xff], false).is_err());
+        assert!(decode_content(b"not an image".to_vec(), true).is_err());
+        let ClipboardContent::Text(text) =
+            decode_content("primera\nsegunda 🚀".as_bytes().to_vec(), false)
+                .expect("UTF-8 payload")
+        else {
+            panic!("text payload");
+        };
+        assert_eq!(text, "primera\nsegunda 🚀");
+    }
 
     #[test]
     fn test_parse_image_preview() {

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::{Mutex, broadcast};
 
@@ -140,11 +140,69 @@ impl RecordOptions {
     }
 }
 
+async fn recorder_command(
+    socket: &Path,
+    name: &str,
+    data: Option<bool>,
+    timeout: Duration,
+) -> Result<(), String> {
+    let operation = async {
+        let mut stream = UnixStream::connect(socket)
+            .await
+            .map_err(|error| format!("No se pudo conectar con la grabación: {error}"))?;
+        let mut request = serde_json::json!({ "id": 1, "name": name });
+        if let Some(data) = data {
+            request["data"] = data.into();
+        }
+        let mut bytes = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
+        bytes.push(b'\n');
+        stream
+            .write_all(&bytes)
+            .await
+            .map_err(|error| format!("No se pudo controlar la grabación: {error}"))?;
+        let mut reader = BufReader::new(stream).take(65536);
+        let mut response = String::new();
+        reader
+            .read_line(&mut response)
+            .await
+            .map_err(|error| format!("No se pudo leer la respuesta de grabación: {error}"))?;
+        let response: serde_json::Value = serde_json::from_str(&response)
+            .map_err(|error| format!("Respuesta de grabación inválida: {error}"))?;
+        if response.get("id").and_then(serde_json::Value::as_u64) != Some(1) {
+            return Err("La respuesta de grabación no corresponde al comando".into());
+        }
+        if response.get("result").and_then(serde_json::Value::as_str) == Some("ok") {
+            Ok(())
+        } else {
+            Err(response
+                .get("data")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("El grabador rechazó el comando")
+                .to_string())
+        }
+    };
+    tokio::time::timeout(timeout, operation)
+        .await
+        .map_err(|_| "El grabador no respondió a tiempo".to_string())?
+}
+
+fn recorder_signal(pid: u32, signal: i32) -> Result<(), String> {
+    if unsafe { libc::kill(pid as libc::pid_t, signal) } == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "No se pudo controlar la grabación: {}",
+            std::io::Error::last_os_error()
+        ))
+    }
+}
+
 struct ActiveSession {
     backend: RecordBackend,
     output_path: PathBuf,
     ipc_socket_path: Option<PathBuf>,
     child_pid: u32,
+    child: Option<tokio::process::Child>,
     accumulated_active_duration: Duration,
     current_segment_start: Option<Instant>,
 }
@@ -266,11 +324,20 @@ impl RecordService {
         crate::spawn_tokio(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                let is_alive = unsafe { libc::kill(child_pid as libc::pid_t, 0) == 0 };
-                if !is_alive {
-                    let mut lock = active_clone.lock().await;
+                let mut lock = active_clone.lock().await;
+                let Some(session) = lock
+                    .as_mut()
+                    .filter(|session| session.child_pid == child_pid)
+                else {
+                    break;
+                };
+                let finished = session
+                    .child
+                    .as_mut()
+                    .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))));
+                if finished {
                     if let Some(session) = lock.take()
-                        && let Some(ref socket) = session.ipc_socket_path
+                        && let Some(socket) = session.ipc_socket_path
                     {
                         let _ = std::fs::remove_file(socket);
                     }
@@ -379,6 +446,7 @@ impl RecordService {
             output_path: output_path.to_path_buf(),
             ipc_socket_path: Some(socket_path),
             child_pid,
+            child: Some(child),
             accumulated_active_duration: Duration::ZERO,
             current_segment_start: Some(Instant::now()),
         })
@@ -448,6 +516,7 @@ impl RecordService {
             output_path: output_path.to_path_buf(),
             ipc_socket_path: None,
             child_pid,
+            child: Some(child),
             accumulated_active_duration: Duration::ZERO,
             current_segment_start: Some(Instant::now()),
         })
@@ -455,45 +524,57 @@ impl RecordService {
 
     pub async fn stop(&self) -> Result<PathBuf, String> {
         let mut guard = self.active_session.lock().await;
-        let session = guard
+        let mut session = guard
             .take()
             .ok_or_else(|| "No hay ninguna grabación en curso".to_string())?;
-
-        self.status.store(Arc::new(RecordStatus::Stopped));
-        let _ = self.status_tx.send(RecordStatus::Stopped);
-
-        let mut stopped_via_ipc = false;
-        if let Some(ref socket_path) = session.ipc_socket_path
-            && let Ok(mut stream) = UnixStream::connect(socket_path).await
+        let exited = session
+            .child
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))));
+        let stopped_via_ipc = if !exited && let Some(socket) = &session.ipc_socket_path {
+            recorder_command(socket, "stop", None, Duration::from_secs(3))
+                .await
+                .is_ok()
+        } else {
+            false
+        };
+        let exited = session
+            .child
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))));
+        if !exited
+            && !stopped_via_ipc
+            && let Err(error) = recorder_signal(session.child_pid, libc::SIGINT)
         {
-            let msg = "{\"id\":1,\"name\":\"stop\"}\n";
-            if stream.write_all(msg.as_bytes()).await.is_ok() {
-                let mut reader = BufReader::new(stream);
-                let mut response = String::new();
-                if reader.read_line(&mut response).await.is_ok() {
-                    stopped_via_ipc = true;
+            *guard = Some(session);
+            return Err(error);
+        }
+        let outcome = if let Some(child) = session.child.as_mut() {
+            match tokio::time::timeout(Duration::from_secs(3), child.wait()).await {
+                Ok(Ok(status)) => Ok(status.success()),
+                Ok(Err(error)) => Err(format!("No se pudo esperar al grabador: {error}")),
+                Err(_) => {
+                    Err("El grabador no terminó a tiempo; vuelve a intentar detenerlo".into())
                 }
             }
-        }
-
-        if !stopped_via_ipc {
-            unsafe {
-                libc::kill(session.child_pid as libc::pid_t, libc::SIGINT);
+        } else {
+            Ok(true)
+        };
+        let success = match outcome {
+            Ok(success) => success,
+            Err(error) => {
+                *guard = Some(session);
+                return Err(error);
             }
-        }
-
-        for _ in 0..60 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            let is_alive = unsafe { libc::kill(session.child_pid as libc::pid_t, 0) == 0 };
-            if !is_alive {
-                break;
-            }
-        }
-
-        if let Some(ref socket) = session.ipc_socket_path {
+        };
+        if let Some(socket) = &session.ipc_socket_path {
             let _ = std::fs::remove_file(socket);
         }
-
+        self.status.store(Arc::new(RecordStatus::Stopped));
+        let _ = self.status_tx.send(RecordStatus::Stopped);
+        if !success {
+            return Err("El grabador terminó con un error al guardar el archivo".into());
+        }
         Ok(session.output_path)
     }
 
@@ -507,18 +588,10 @@ impl RecordService {
             return Ok(());
         }
 
-        if let Some(ref socket_path) = session.ipc_socket_path {
-            if let Ok(mut stream) = UnixStream::connect(socket_path).await {
-                let msg = "{\"id\":2,\"name\":\"set-paused\",\"data\":true}\n";
-                let _ = stream.write_all(msg.as_bytes()).await;
-                let mut reader = BufReader::new(stream);
-                let mut line = String::new();
-                let _ = reader.read_line(&mut line).await;
-            }
+        if let Some(ref socket) = session.ipc_socket_path {
+            recorder_command(socket, "set-paused", Some(true), Duration::from_secs(1)).await?;
         } else {
-            unsafe {
-                libc::kill(session.child_pid as libc::pid_t, libc::SIGUSR2);
-            }
+            recorder_signal(session.child_pid, libc::SIGUSR2)?;
         }
 
         if let Some(start) = session.current_segment_start.take() {
@@ -539,18 +612,10 @@ impl RecordService {
             return Ok(());
         }
 
-        if let Some(ref socket_path) = session.ipc_socket_path {
-            if let Ok(mut stream) = UnixStream::connect(socket_path).await {
-                let msg = "{\"id\":3,\"name\":\"set-paused\",\"data\":false}\n";
-                let _ = stream.write_all(msg.as_bytes()).await;
-                let mut reader = BufReader::new(stream);
-                let mut line = String::new();
-                let _ = reader.read_line(&mut line).await;
-            }
+        if let Some(ref socket) = session.ipc_socket_path {
+            recorder_command(socket, "set-paused", Some(false), Duration::from_secs(1)).await?;
         } else {
-            unsafe {
-                libc::kill(session.child_pid as libc::pid_t, libc::SIGUSR2);
-            }
+            recorder_signal(session.child_pid, libc::SIGUSR2)?;
         }
 
         session.current_segment_start = Some(Instant::now());
@@ -749,12 +814,88 @@ mod tests {
     }
 
     #[test]
+    fn recorder_ipc_rejects_errors_and_times_out_without_a_reply() {
+        crate::tokio_handle().block_on(async {
+            use tokio::net::UnixListener;
+            let root = std::env::temp_dir()
+                .join(format!("capsule-record-ipc-test-{}", std::process::id()));
+            std::fs::create_dir_all(&root).expect("fixture directory");
+            let rejected = root.join("rejected.sock");
+            let listener = UnixListener::bind(&rejected).expect("mock recorder");
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.expect("connection");
+                let mut reader = BufReader::new(stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).await.expect("request");
+                let request: serde_json::Value =
+                    serde_json::from_str(&request).expect("request JSON");
+                assert_eq!(request["name"], "set-paused");
+                assert_eq!(request["data"], true);
+                reader
+                    .get_mut()
+                    .write_all(b"{\"id\":1,\"result\":\"error\",\"data\":\"Rejected pause\"}\n")
+                    .await
+                    .expect("reply");
+            });
+            assert_eq!(
+                recorder_command(&rejected, "set-paused", Some(true), Duration::from_secs(1)).await,
+                Err("Rejected pause".into())
+            );
+            server.await.expect("server");
+            let stalled = root.join("stalled.sock");
+            let listener = UnixListener::bind(&stalled).expect("silent recorder");
+            let server = tokio::spawn(async move {
+                let (_stream, _) = listener.accept().await.expect("connection");
+                std::future::pending::<()>().await;
+            });
+            let started = Instant::now();
+            assert!(
+                recorder_command(&stalled, "stop", None, Duration::from_millis(30))
+                    .await
+                    .is_err()
+            );
+            assert!(started.elapsed() < Duration::from_secs(1));
+            server.abort();
+            std::fs::remove_dir_all(root).expect("remove fixtures");
+        });
+    }
+
+    #[test]
+    fn rejected_pause_keeps_recording_state_and_elapsed_time() {
+        crate::tokio_handle().block_on(async {
+            let service = RecordService::new();
+            service.status.store(Arc::new(RecordStatus::Recording));
+            *service.active_session.lock().await = Some(ActiveSession {
+                backend: RecordBackend::GpuScreenRecorder,
+                output_path: PathBuf::from("/tmp/fixture.mp4"),
+                ipc_socket_path: Some(PathBuf::from("/tmp/capsule-nonexistent-recorder-ipc.sock")),
+                child_pid: 0,
+                child: None,
+                accumulated_active_duration: Duration::from_secs(5),
+                current_segment_start: Some(Instant::now()),
+            });
+            assert!(service.pause().await.is_err());
+            assert_eq!(service.get_status(), RecordStatus::Recording);
+            let guard = service.active_session.lock().await;
+            assert!(
+                guard
+                    .as_ref()
+                    .expect("session")
+                    .current_segment_start
+                    .is_some()
+            );
+            assert!(guard.as_ref().expect("session").current_duration() >= Duration::from_secs(5));
+        });
+    }
+
+    #[test]
     fn test_active_session_duration_math() {
         let mut session = ActiveSession {
             backend: RecordBackend::GpuScreenRecorder,
             output_path: PathBuf::from("/tmp/dummy.mp4"),
             ipc_socket_path: None,
             child_pid: 1234,
+            child: None,
             accumulated_active_duration: Duration::from_secs(5),
             current_segment_start: None,
         };

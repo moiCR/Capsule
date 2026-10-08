@@ -59,6 +59,11 @@ scanning = "Buscando..."
 connection_failed = "Error al conectar"
 
 [clipboard]
+copy_error = "No se pudo copiar este elemento"
+action_error = "No se pudo actualizar el historial"
+no_results = "No hay coincidencias"
+working = "Procesando…"
+copy_hint = "↑↓←→ navegar · Enter copiar · Tab cambiar"
 title = "PORTAPAPELES"
 search_placeholder = "Buscar en el historial..."
 empty_history = "No hay elementos en el historial"
@@ -98,6 +103,10 @@ audio_output = "Salida de audio"
 muted = "Silenciado"
 
 [record]
+starting = "Iniciando…"
+stopping = "Guardando…"
+action_error = "No se pudo controlar la grabación"
+working = "Procesando…"
 title = "GRABACIÓN"
 record_screen = "Grabar pantalla"
 start = "Grabar"
@@ -266,6 +275,10 @@ record_audio_none = "Ninguno"
 record_output_fullscreen = "Pantalla Completa"
 
 [shelf]
+folder = "Carpeta"
+action_error = "No se pudo completar la acción"
+working = "Procesando…"
+navigate_hint = "↑↓←→ navegar · ↵ copiar · Supr quitar"
 title = "ESTANTE"
 empty = "No hay archivos en el estante"
 empty_title = "Arrastra archivos o carpetas a Capsule"
@@ -277,6 +290,8 @@ copied_hint = "Copiado al portapapeles"
 remove_item = "Quitar del estante"
 
 [dashboard_new]
+apply = "Aplicar"
+applied = "Aplicado"
 title = "Dashboard"
 calendar = "Calendario"
 audio_output = "Salida de audio"

@@ -5,23 +5,32 @@ use crate::new_capsule::{
 };
 use gpui::Context;
 use services::{AppState, NotificationStore};
-use ui::theme::{Theme, theme_manager::ThemeManager};
 impl DashboardModule {
     pub fn dispatch(&mut self, action: DashboardAction, cx: &mut Context<Self>) {
         let state = cx.global::<AppState>().clone();
         match action {
             DashboardAction::View(view) => {
-                self.navigation.open(view.clone());
-                match &view {
-                    DashboardView::Wifi => state.network.rescan_wifi(),
-                    DashboardView::Bluetooth => state.network.start_bluetooth_scan(),
-                    _ => {}
+                if matches!(view, DashboardView::Themes | DashboardView::Wallpapers) {
+                    let id = if view == DashboardView::Themes {
+                        crate::new_capsule::module::CapsuleModuleId::Themes
+                    } else {
+                        crate::new_capsule::module::CapsuleModuleId::Wallpapers
+                    };
+                    cx.emit(CapsuleModuleEvent::Open(id));
+                } else if let Some(id) = view.satellite_id() {
+                    cx.emit(CapsuleModuleEvent::ToggleSatellite(id));
+                } else {
+                    cx.emit(CapsuleModuleEvent::CloseSatellite);
+                    self.navigation.open(view);
                 }
             }
             DashboardAction::Back => {
                 self.navigation.open(DashboardView::Home);
             }
             DashboardAction::Close => cx.emit(CapsuleModuleEvent::Close),
+            DashboardAction::CloseSatellite(id) => {
+                cx.emit(CapsuleModuleEvent::CloseSatelliteId(id))
+            }
             DashboardAction::Wifi => state.network.toggle_wifi(),
             DashboardAction::Bluetooth => state.network.toggle_bluetooth(),
             DashboardAction::Dnd => {
@@ -125,18 +134,18 @@ impl DashboardModule {
         self.pending = true;
         self.navigation.error = None;
         services::spawn_tokio(async move {
-            let result: Result<Option<Theme>, String> = match action {
+            let result: Result<(), String> = match action {
                 DashboardAction::Mute => state
                     .system
                     .toggle_mute()
                     .await
-                    .map(|_| None)
+                    .map(|_| ())
                     .map_err(|e| e.to_string()),
                 DashboardAction::Sink(name) => state
                     .system
                     .set_default_sink(&name)
                     .await
-                    .map(|_| None)
+                    .map(|_| ())
                     .map_err(|e| e.to_string()),
                 DashboardAction::Media(command) => {
                     let ok = if let Some(bus) = bus {
@@ -149,7 +158,7 @@ impl DashboardModule {
                         false
                     };
                     if ok {
-                        Ok(None)
+                        Ok(())
                     } else {
                         Err("dashboard_new.media_error".into())
                     }
@@ -157,31 +166,15 @@ impl DashboardModule {
                 DashboardAction::Seek(seconds) => {
                     if let Some(bus) = bus {
                         if services::MprisService::seek_to(&bus, seconds).await {
-                            Ok(None)
+                            Ok(())
                         } else {
                             Err("dashboard_new.media_error".into())
                         }
                     } else {
-                        Ok(None)
+                        Ok(())
                     }
                 }
-                DashboardAction::Theme(theme) => tokio::task::spawn_blocking(move || {
-                    ThemeManager::save_current_theme(&theme).map(|_| Some(theme))
-                })
-                .await
-                .map_err(|e| e.to_string())
-                .and_then(|result| result),
-                DashboardAction::Wallpaper(path) => tokio::task::spawn_blocking(move || {
-                    if state.wallpaper.set_wallpaper(path) {
-                        Ok(None)
-                    } else {
-                        Err("dashboard_new.wallpaper_error".into())
-                    }
-                })
-                .await
-                .map_err(|e| e.to_string())
-                .and_then(|result| result),
-                _ => Ok(None),
+                _ => Ok(()),
             };
             let _ = sender.send(result);
         });
@@ -190,15 +183,7 @@ impl DashboardModule {
             let _ = this.update(cx, |module, cx| {
                 module.pending = false;
                 match result {
-                    Ok(Ok(Some(theme))) => {
-                        if cx.has_global::<ThemeManager>() {
-                            let manager = cx.global_mut::<ThemeManager>();
-                            manager.current_theme = theme.clone();
-                            manager.apply_theme_to_apps();
-                        }
-                        cx.set_global(theme);
-                    }
-                    Ok(Ok(None)) => {}
+                    Ok(Ok(())) => {}
                     Ok(Err(error)) => {
                         module.navigation.error = Some(if error.starts_with("dashboard_new.") {
                             module.text(&error, cx)

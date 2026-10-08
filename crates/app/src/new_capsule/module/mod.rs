@@ -1,6 +1,10 @@
+pub(crate) mod appearance;
+pub(crate) mod clipboard;
 pub(crate) mod dashboard;
 pub(crate) mod default;
 pub(crate) mod launcher;
+pub(crate) mod record;
+pub(crate) mod shelf;
 
 use std::time::{Duration, Instant};
 
@@ -16,7 +20,11 @@ pub struct CapsuleModuleManager {
     current: CapsuleModuleId,
     default: Entity<DefaultModule>,
     launcher: Entity<LauncherModule>,
-    dashboard: Entity<DashboardModule>,
+    pub(super) dashboard: Entity<DashboardModule>,
+    pub(super) appearance: Entity<appearance::AppearanceModule>,
+    pub(super) clipboard: Entity<clipboard::ClipboardModule>,
+    pub(super) shelf: Entity<shelf::ShelfModule>,
+    pub(super) record: Entity<record::RecordModule>,
 }
 
 impl CapsuleModuleManager {
@@ -26,6 +34,10 @@ impl CapsuleModuleManager {
             default: cx.new(DefaultModule::new),
             launcher: cx.new(LauncherModule::new),
             dashboard: cx.new(DashboardModule::new),
+            appearance: cx.new(appearance::AppearanceModule::new),
+            clipboard: cx.new(clipboard::ClipboardModule::new),
+            shelf: cx.new(shelf::ShelfModule::new),
+            record: cx.new(record::RecordModule::new),
         }
     }
 
@@ -39,6 +51,18 @@ impl CapsuleModuleManager {
 
     pub fn subscribe(&self, cx: &mut Context<Capsule>) -> Vec<Subscription> {
         vec![
+            cx.subscribe(&self.shelf, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
+            cx.subscribe(&self.record, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
+            cx.subscribe(&self.clipboard, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
+            cx.subscribe(&self.appearance, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
             cx.subscribe(&self.dashboard, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
@@ -53,11 +77,38 @@ impl CapsuleModuleManager {
 
     pub fn maximum_size(&self, cx: &impl AppContext) -> Size<Pixels> {
         let default = self.default.read_with(cx, |module, _| module.size());
-        let launcher = self.launcher.read_with(cx, |module, _| module.size());
+        let launcher = gpui::size(
+            gpui::px(super::widgets::launcher::WIDTH),
+            gpui::px(super::widgets::launcher::HEIGHT),
+        );
+        let shelf = gpui::size(
+            gpui::px(super::widgets::shelf::WIDTH),
+            gpui::px(super::widgets::shelf::MAX_HEIGHT),
+        );
+        let record = gpui::size(
+            gpui::px(super::widgets::record::WIDTH),
+            gpui::px(super::widgets::record::MAX_HEIGHT),
+        );
         let dashboard = self.dashboard.read_with(cx, |module, _| module.size());
+        let appearance = self.appearance.read_with(cx, |module, _| module.size());
+        let clipboard = self.clipboard.read_with(cx, |module, _| module.size());
         Size {
-            width: default.width.max(launcher.width).max(dashboard.width),
-            height: default.height.max(launcher.height).max(dashboard.height),
+            width: default
+                .width
+                .max(launcher.width)
+                .max(dashboard.width)
+                .max(appearance.width)
+                .max(clipboard.width)
+                .max(shelf.width)
+                .max(record.width),
+            height: default
+                .height
+                .max(launcher.height)
+                .max(dashboard.height)
+                .max(appearance.height)
+                .max(clipboard.height)
+                .max(shelf.height)
+                .max(record.height),
         }
     }
 
@@ -80,6 +131,10 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Default => self.default.clone().into(),
             CapsuleModuleId::Launcher => self.launcher.clone().into(),
             CapsuleModuleId::Dashboard => self.dashboard.clone().into(),
+            CapsuleModuleId::Clipboard => self.clipboard.clone().into(),
+            CapsuleModuleId::Shelf => self.shelf.clone().into(),
+            CapsuleModuleId::Record => self.record.clone().into(),
+            CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => self.appearance.clone().into(),
         }
     }
 
@@ -88,6 +143,12 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Default => self.default.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Launcher => self.launcher.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Dashboard => self.dashboard.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Clipboard => self.clipboard.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Shelf => self.shelf.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Record => self.record.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => {
+                self.appearance.read_with(cx, |module, _| module.size())
+            }
         }
     }
 }
@@ -97,10 +158,19 @@ pub enum CapsuleModuleId {
     Default,
     Launcher,
     Dashboard,
+    Themes,
+    Wallpapers,
+    Clipboard,
+    Shelf,
+    Record,
 }
 
 pub enum CapsuleModuleEvent {
+    ToggleSatellite(super::satellite::SatelliteId),
     Close,
+    CloseSatellite,
+    CloseSatelliteId(super::satellite::SatelliteId),
+    SatelliteBounds(super::satellite::SatelliteId, gpui::Bounds<Pixels>),
     Open(CapsuleModuleId),
     SizeChanged(CapsuleModuleId),
 }
@@ -116,6 +186,7 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut subscriptions = module_manager.subscribe(cx);
+        let satellite = super::satellite::Satellite::new();
         subscriptions.push(cx.observe_global::<ui::theme::Theme>(|_, cx| cx.notify()));
         let size = module_manager.current_size(cx);
 
@@ -136,6 +207,8 @@ impl Capsule {
                 ),
             ),
             animation_task: None,
+            satellite,
+            satellite_animation_task: None,
             _subscriptions: subscriptions,
             _ipc_task: ipc_task,
         };
@@ -149,7 +222,46 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) {
         match event {
+            CapsuleModuleEvent::SatelliteBounds(id, bounds) => {
+                if self.satellite.contains(id) {
+                    let previous = self
+                        .window_state
+                        .satellite_bounds
+                        .iter_mut()
+                        .find(|(key, _)| key == id);
+                    let changed = match previous {
+                        Some((_, previous)) if previous == bounds => false,
+                        Some((_, previous)) => {
+                            *previous = *bounds;
+                            true
+                        }
+                        None => {
+                            self.window_state
+                                .satellite_bounds
+                                .push((id.clone(), *bounds));
+                            true
+                        }
+                    };
+                    if changed {
+                        self.sync_window(cx);
+                    }
+                }
+                return;
+            }
+            CapsuleModuleEvent::CloseSatelliteId(id) => {
+                self.close_satellite(id.clone(), cx);
+                return;
+            }
+            CapsuleModuleEvent::CloseSatellite => {
+                self.set_satellite_open(false, cx);
+                return;
+            }
+            CapsuleModuleEvent::ToggleSatellite(id) => {
+                self.toggle_satellite(id.clone(), cx);
+                return;
+            }
             CapsuleModuleEvent::Open(id) => {
+                self.set_satellite_open(false, cx);
                 if *id == CapsuleModuleId::Launcher && self.module_manager.current_id() != *id {
                     self.module_manager
                         .launcher
@@ -160,9 +272,37 @@ impl Capsule {
                         .dashboard
                         .update(cx, |module, cx| module.reset(cx));
                 }
+                if matches!(id, CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers) {
+                    let kind = if *id == CapsuleModuleId::Themes {
+                        appearance::AppearanceKind::Themes
+                    } else {
+                        appearance::AppearanceKind::Wallpapers
+                    };
+                    self.module_manager
+                        .appearance
+                        .update(cx, |module, cx| module.open(kind, cx));
+                }
+                if *id == CapsuleModuleId::Clipboard && self.module_manager.current_id() != *id {
+                    self.module_manager
+                        .clipboard
+                        .update(cx, |module, cx| module.open(cx));
+                }
+                if *id == CapsuleModuleId::Shelf && self.module_manager.current_id() != *id {
+                    self.module_manager
+                        .shelf
+                        .update(cx, |module, cx| module.open(cx));
+                }
+                if *id == CapsuleModuleId::Record && self.module_manager.current_id() != *id {
+                    self.module_manager
+                        .record
+                        .update(cx, |module, cx| module.open(cx));
+                }
                 self.module_manager.open(*id);
             }
-            CapsuleModuleEvent::Close => self.module_manager.close(),
+            CapsuleModuleEvent::Close => {
+                self.set_satellite_open(false, cx);
+                self.module_manager.close();
+            }
             CapsuleModuleEvent::SizeChanged(id) => {
                 if self.module_manager.current_id() != *id {
                     return;
@@ -177,7 +317,9 @@ impl Capsule {
         ));
         let compositor = state.compositor.clone();
         self.animator.transition_to(target, Instant::now());
-        if self.animation_task.is_none() && self.animator.advance(Instant::now()) {
+        let animating = self.animator.advance(Instant::now());
+        self.sync_window(cx);
+        if self.animation_task.is_none() && animating {
             self.animation_task = Some(cx.spawn(async move |this, cx| {
                 loop {
                     cx.background_executor()
@@ -204,8 +346,6 @@ impl Capsule {
                     }
                 }
             }));
-        } else if self.animation_task.is_none() {
-            self.sync_window(cx);
         }
         cx.notify();
     }
