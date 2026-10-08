@@ -220,7 +220,10 @@ pub fn render(
                         } else {
                             theme.accent()
                         })
-                        .transitions(|t| t.bg(module.snapshot.duration.with_easing(ease_in_out))),
+                        .transitions(|t| {
+                            t.bg(module.snapshot.duration.with_easing(ease_in_out))
+                                .w(module.snapshot.duration.with_easing(ease_in_out))
+                        }),
                 ),
         );
     left = left.child(

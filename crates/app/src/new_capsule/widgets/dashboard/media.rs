@@ -1,7 +1,8 @@
 use super::{DashboardAction as Action, button};
 use crate::new_capsule::module::dashboard::DashboardModule;
 use gpui::{
-    AnyElement, ColorExt, Context, IntoElement, StyledImage, div, img, prelude::*, px, relative,
+    AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out,
+    img, prelude::*, px, relative,
 };
 use ui::theme::Theme;
 

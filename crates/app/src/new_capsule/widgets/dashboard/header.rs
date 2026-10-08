@@ -81,11 +81,26 @@ pub fn render(
         }
         trailing = trailing.child(tray);
         if let Some(battery) = module.snapshot.battery {
-            trailing = trailing.child(div().text_size(px(12.0)).child(format!(
-                "{}{}%",
-                if battery.is_charging { "+" } else { "" },
-                battery.percentage
-            )));
+            trailing = trailing.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0))
+                    .text_size(px(12.0))
+                    .child(
+                        svg()
+                            .path(if battery.is_charging {
+                                "battery-charging.svg"
+                            } else if battery.percentage <= 20 {
+                                "battery-low.svg"
+                            } else {
+                                "battery-full.svg"
+                            })
+                            .size(px(16.0))
+                            .text_color(theme.foreground_muted()),
+                    )
+                    .child(format!("{}%", battery.percentage)),
+            );
         }
     }
     trailing = trailing.child(button(
