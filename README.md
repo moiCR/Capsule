@@ -9,7 +9,7 @@ In a typical tiling Wayland setup, you end up gluing together 5 or 6 separate da
 Because it is written in Rust and powered by GPUI, it renders directly through the GPU at 60+ FPS with minimal RAM consumption, avoiding the runtime overhead of WebViews, Electron, or QML/JS engines.
 
 ## Showcase
-https://github.com/user-attachments/assets/09a61cdc-6e56-4841-a826-4097da17a6d0
+https://github.com/user-attachments/assets/49894fa5-aa81-4ed9-9365-20f3adb190cf
 
 ## Features
 ### Dynamic Island & Shell
