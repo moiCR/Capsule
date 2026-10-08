@@ -7,6 +7,7 @@ use gpui::{ColorExt, MotionDurationExt, ease_in_out};
 use ui::theme::Theme;
 pub(super) fn tray(
     bus: &str,
+    object_path: &str,
     module: &DashboardModule,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
@@ -15,7 +16,7 @@ pub(super) fn tray(
         .snapshot
         .tray
         .iter()
-        .find(|item| item.bus_name == bus)
+        .find(|item| item.bus_name == bus && item.object_path == object_path)
     else {
         return empty(module.text("dashboard_new.tray_gone", cx), theme);
     };
@@ -23,7 +24,10 @@ pub(super) fn tray(
         "dashboard-tray-open",
         item.title.clone(),
         "chevron-right.svg",
-        Action::TrayActivate(bus.to_string()),
+        Action::TrayActivate {
+            bus: bus.to_string(),
+            path: object_path.to_string(),
+        },
         false,
         theme,
         cx,
@@ -58,7 +62,7 @@ pub(super) fn menu_entry(
     }
     let mut content = div().flex_shrink_0().flex().flex_col().gap(px(4.0));
     let mut row = div()
-        .id(format!("dashboard-tray-menu-{bus}-{}", entry.id))
+        .id(format!("dashboard-tray-menu-{bus}-{path}-{}", entry.id))
         .min_h(px(36.0))
         .px(px(12.0))
         .py(px(8.0))

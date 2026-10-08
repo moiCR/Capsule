@@ -31,7 +31,7 @@ pub(crate) enum DashboardView {
     Bluetooth,
     Calendar,
     Audio,
-    Tray(String),
+    Tray { bus: String, path: String },
     Themes,
     Wallpapers,
 }
@@ -43,7 +43,7 @@ impl DashboardView {
             Self::Bluetooth => "quick_settings.bt_devices",
             Self::Calendar => "dashboard_new.calendar",
             Self::Audio => "dashboard_new.audio_output",
-            Self::Tray(_) => "dashboard_new.tray",
+            Self::Tray { .. } => "dashboard_new.tray",
             Self::Themes => "dashboard_new.themes",
             Self::Wallpapers => "dashboard_new.wallpapers",
         }
@@ -73,7 +73,7 @@ pub(crate) enum DashboardAction {
     Player(String),
     Media(i8),
     Seek(f64),
-    TrayActivate(String),
+    TrayActivate { bus: String, path: String },
     TrayMenu(String, String, i32),
     Theme(Theme),
     Wallpaper(PathBuf),

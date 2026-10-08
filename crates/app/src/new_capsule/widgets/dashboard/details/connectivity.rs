@@ -78,7 +78,7 @@ pub(super) fn wifi(
             theme,
             cx,
         ));
-        if module.selected_ssid.as_deref() == Some(&ap.ssid) {
+        if module.navigation.selected_ssid.as_deref() == Some(&ap.ssid) {
             content = content.child(
                 div()
                     .flex()
@@ -96,10 +96,10 @@ pub(super) fn wifi(
                             .on_click(cx.listener(|this, _, window, cx| {
                                 window.focus(&this.focus_handle(), cx)
                             }))
-                            .child(if module.password.is_empty() {
+                            .child(if module.navigation.password.is_empty() {
                                 module.text("quick_settings.password_placeholder", cx)
                             } else {
-                                "•".repeat(module.password.chars().count())
+                                "•".repeat(module.navigation.password.chars().count())
                             }),
                     )
                     .child(button(

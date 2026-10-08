@@ -22,18 +22,18 @@ pub fn render(
         .flex_col()
         .gap(px(12.0))
         .overflow_hidden();
-    if let Some(message) = &module.error {
+    if let Some(message) = &module.navigation.error {
         content = content.child(error(message.clone(), theme));
     }
     if module.pending {
         content = content.child(empty(module.text("dashboard_new.pending", cx), theme));
     }
-    let body = match &module.view {
+    let body = match &module.navigation.view {
         View::Wifi => connectivity::wifi(module, theme, cx),
         View::Bluetooth => connectivity::bluetooth(module, theme, cx),
         View::Audio => audio::audio(module, theme, cx),
         View::Calendar => calendar::calendar(module, theme, cx),
-        View::Tray(bus) => tray::tray(bus, module, theme, cx),
+        View::Tray { bus, path } => tray::tray(bus, path, module, theme, cx),
         View::Themes => appearance::themes(module, theme, cx),
         View::Wallpapers => appearance::wallpapers(module, theme, cx),
         View::Home => div().into_any_element(),

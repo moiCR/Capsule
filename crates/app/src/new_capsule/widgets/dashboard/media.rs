@@ -179,9 +179,7 @@ pub fn render(
                 .cursor_pointer()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
-                    cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                        this.start_seek(event.position.x.into(), cx)
-                    }),
+                    cx.listener(|this, _: &gpui::MouseDownEvent, _, _| this.start_seek()),
                 )
                 .child(
                     gpui::canvas(
@@ -199,8 +197,12 @@ pub fn render(
                         .bg(theme.surface())
                         .child(
                             div()
+                                .id("dashboard-seek-fill")
                                 .h_full()
                                 .w(relative(fraction))
+                                .transitions(|t| {
+                                    t.w(module.snapshot.duration.with_easing(ease_in_out))
+                                })
                                 .rounded_full()
                                 .bg(theme.accent()),
                         ),

@@ -8,10 +8,10 @@ pub fn render(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    let title = if module.view == View::Home {
+    let title = if module.navigation.view == View::Home {
         module.snapshot.date.clone()
     } else {
-        module.text(module.view.title_key(), cx)
+        module.text(module.navigation.view.title_key(), cx)
     };
     let mut header = div()
         .id("dashboard-header")
@@ -22,7 +22,7 @@ pub fn render(
         .h(px(HEADER))
         .flex_shrink_0()
         .gap(px(8.0));
-    let leading = if module.view == View::Home {
+    let leading = if module.navigation.view == View::Home {
         button(
             "dashboard-calendar",
             title,
@@ -44,7 +44,7 @@ pub fn render(
         )
     };
     let mut trailing = div().flex().items_center().gap(px(6.0)).min_w_0();
-    if module.view == View::Home {
+    if module.navigation.view == View::Home {
         let mut tray = div()
             .id("dashboard-tray")
             .flex()
@@ -54,6 +54,7 @@ pub fn render(
             .gap(px(4.0));
         for item in &module.snapshot.tray {
             let bus = item.bus_name.clone();
+            let path = item.object_path.clone();
             let icon = if let Some(path) = &item.icon_file_path {
                 img(path.clone()).size(px(18.0)).into_any_element()
             } else {
@@ -65,7 +66,10 @@ pub fn render(
             let hover = theme.surface();
             tray = tray.child(
                 div()
-                    .id(format!("dashboard-tray-{}", item.bus_name))
+                    .id(format!(
+                        "dashboard-tray-{}-{}",
+                        item.bus_name, item.object_path
+                    ))
                     .size(px(36.0))
                     .flex()
                     .items_center()
@@ -74,7 +78,13 @@ pub fn render(
                     .cursor_pointer()
                     .hover(move |s| s.bg(hover))
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.dispatch(Action::View(View::Tray(bus.clone())), cx)
+                        this.dispatch(
+                            Action::View(View::Tray {
+                                bus: bus.clone(),
+                                path: path.clone(),
+                            }),
+                            cx,
+                        )
                     }))
                     .child(icon),
             );
