@@ -67,6 +67,21 @@ impl Capsule {
                 self.handle_module_event(&event, cx);
             }
 
+            command @ (IpcCommand::ShowNotification | IpcCommand::ToggleNotification) => {
+                if command == IpcCommand::ToggleNotification
+                    && self.module_manager.current_id() == CapsuleModuleId::Notification
+                {
+                    self.handle_module_event(&CapsuleModuleEvent::Close, cx);
+                } else {
+                    self.module_manager
+                        .notification
+                        .update(cx, |module, cx| module.open(true, cx));
+                    self.handle_module_event(
+                        &CapsuleModuleEvent::Open(CapsuleModuleId::Notification),
+                        cx,
+                    );
+                }
+            }
             IpcCommand::ShowClipboard => {
                 self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Clipboard), cx)
             }

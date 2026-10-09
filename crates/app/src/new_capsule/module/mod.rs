@@ -3,6 +3,7 @@ pub(crate) mod clipboard;
 pub(crate) mod dashboard;
 pub(crate) mod default;
 pub(crate) mod launcher;
+pub(crate) mod notification;
 pub(crate) mod polkit;
 pub(crate) mod record;
 pub(crate) mod shelf;
@@ -26,6 +27,7 @@ pub struct CapsuleModuleManager {
     pub(super) clipboard: Entity<clipboard::ClipboardModule>,
     pub(super) shelf: Entity<shelf::ShelfModule>,
     pub(super) record: Entity<record::RecordModule>,
+    pub(super) notification: Entity<notification::NotificationModule>,
     pub(super) polkit: Entity<polkit::PolkitModule>,
 }
 
@@ -40,6 +42,7 @@ impl CapsuleModuleManager {
             clipboard: cx.new(clipboard::ClipboardModule::new),
             shelf: cx.new(shelf::ShelfModule::new),
             record: cx.new(record::RecordModule::new),
+            notification: cx.new(notification::NotificationModule::new),
             polkit: cx.new(polkit::PolkitModule::new),
         }
     }
@@ -54,6 +57,9 @@ impl CapsuleModuleManager {
 
     pub fn subscribe(&self, cx: &mut Context<Capsule>) -> Vec<Subscription> {
         vec![
+            cx.subscribe(&self.notification, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
             cx.subscribe(&self.polkit, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
@@ -96,6 +102,10 @@ impl CapsuleModuleManager {
             gpui::px(super::widgets::record::MAX_HEIGHT),
         );
         let dashboard = super::widgets::dashboard::module_size(true);
+        let notification = gpui::size(
+            gpui::px(super::widgets::notification::WIDTH),
+            gpui::px(super::widgets::notification::HISTORY_HEIGHT),
+        );
         let polkit = self.polkit.read_with(cx, |module, _| module.size());
         let appearance = self.appearance.read_with(cx, |module, _| module.size());
         let clipboard = self.clipboard.read_with(cx, |module, _| module.size());
@@ -108,7 +118,8 @@ impl CapsuleModuleManager {
                 .max(clipboard.width)
                 .max(shelf.width)
                 .max(record.width)
-                .max(polkit.width),
+                .max(polkit.width)
+                .max(notification.width),
             height: default
                 .height
                 .max(launcher.height)
@@ -117,7 +128,8 @@ impl CapsuleModuleManager {
                 .max(clipboard.height)
                 .max(shelf.height)
                 .max(record.height)
-                .max(polkit.height),
+                .max(polkit.height)
+                .max(notification.height),
         }
     }
 
@@ -144,6 +156,7 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Shelf => self.shelf.clone().into(),
             CapsuleModuleId::Record => self.record.clone().into(),
             CapsuleModuleId::Polkit => self.polkit.clone().into(),
+            CapsuleModuleId::Notification => self.notification.clone().into(),
             CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => self.appearance.clone().into(),
         }
     }
@@ -157,6 +170,9 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Shelf => self.shelf.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Record => self.record.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Polkit => self.polkit.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Notification => {
+                self.notification.read_with(cx, |module, _| module.size())
+            }
             CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => {
                 self.appearance.read_with(cx, |module, _| module.size())
             }
@@ -175,9 +191,11 @@ pub enum CapsuleModuleId {
     Shelf,
     Record,
     Polkit,
+    Notification,
 }
 
 pub enum CapsuleModuleEvent {
+    NotificationChanged,
     ToggleSatellite(super::satellite::SatelliteId),
     Close,
     CloseSatelliteId(super::satellite::SatelliteId),
@@ -233,6 +251,26 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) {
         let previous_module = self.module_manager.current_id();
+        if matches!(event, CapsuleModuleEvent::NotificationChanged) {
+            let notification = self.module_manager.notification.read(cx);
+            let popup_active =
+                previous_module == CapsuleModuleId::Notification && !notification.history;
+            let show = notification.latest.is_some()
+                && (previous_module == CapsuleModuleId::Default || popup_active);
+            let close = notification.latest.is_none() && popup_active;
+            if show {
+                self.module_manager
+                    .notification
+                    .update(cx, |module, cx| module.open(false, cx));
+                self.handle_module_event(
+                    &CapsuleModuleEvent::Open(CapsuleModuleId::Notification),
+                    cx,
+                );
+            } else if close {
+                self.handle_module_event(&CapsuleModuleEvent::Close, cx);
+            }
+            return;
+        }
         if self.module_manager.polkit.read(cx).has_request() {
             match event {
                 CapsuleModuleEvent::Open(id) if *id != CapsuleModuleId::Polkit => return,
@@ -246,6 +284,7 @@ impl Capsule {
             }
         }
         match event {
+            CapsuleModuleEvent::NotificationChanged => return,
             CapsuleModuleEvent::SatelliteBounds(id, bounds) => {
                 if self.satellite.contains(id) {
                     let previous = self

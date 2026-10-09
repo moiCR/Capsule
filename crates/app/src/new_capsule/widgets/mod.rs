@@ -14,3 +14,5 @@ pub(crate) mod record;
 pub(crate) mod shelf;
 
 pub(crate) mod polkit;
+
+pub(crate) mod notification;

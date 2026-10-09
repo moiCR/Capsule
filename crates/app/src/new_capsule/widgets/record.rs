@@ -1,6 +1,9 @@
-use crate::new_capsule::module::record::{PendingAction, RecordModule};
+use crate::new_capsule::module::record::{PendingAction, Presentation, RecordModule};
 use crate::new_capsule::widgets::style;
-use gpui::{Context, FontWeight, div, prelude::*, px, svg};
+use gpui::{
+    Animation, AnimationExt, Context, FontWeight, IntoElement, div, ease_in_out, prelude::*, px,
+    svg,
+};
 use services::{AppState, RecordStatus};
 use ui::theme::Theme;
 
@@ -22,17 +25,21 @@ pub fn duration(seconds: u64) -> String {
     }
 }
 
-pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::Stateful<gpui::Div> {
+fn controls(
+    presentation: Presentation,
+    interactive: bool,
+    cx: &mut Context<RecordModule>,
+) -> gpui::Div {
     let theme = cx.global::<Theme>().clone();
     let language = &cx.global::<AppState>().language;
-    let label = language.get(match module.pending {
+    let label = language.get(match presentation.pending {
         Some(PendingAction::Start) => "record.starting",
         Some(PendingAction::Stop) => "record.stopping",
-        _ if module.status == RecordStatus::Paused => "record.paused",
+        _ if presentation.status == RecordStatus::Paused => "record.paused",
         _ => "record.record_screen",
     });
     let hover = style::hover(&theme);
-    let paused = module.status == RecordStatus::Paused;
+    let paused = presentation.status == RecordStatus::Paused;
     let mut bar = div()
         .w_full()
         .h(px(32.0))
@@ -40,62 +47,38 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
         .flex()
         .items_center()
         .gap(px(10.0));
-    if module.status == RecordStatus::Stopped {
-        bar = bar
-            .child(
-                div()
-                    .id("record-start")
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .px(px(8.0))
-                    .rounded_full()
-                    .flex()
-                    .items_center()
-                    .gap(px(9.0))
-                    .when(module.pending.is_none(), |s| {
-                        s.cursor_pointer()
-                            .hover(move |s| s.bg(hover))
-                            .on_click(cx.listener(|module, _, _, cx| module.primary_action(cx)))
-                    })
-                    .child(
-                        div()
-                            .size(px(10.0))
-                            .flex_shrink_0()
-                            .rounded_full()
-                            .bg(theme.red()),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_ellipsis()
-                            .child(label),
-                    ),
-            )
-            .child(
-                div()
-                    .id("record-cancel")
-                    .size(px(26.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .bg(style::surface(&theme))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(hover))
-                    .on_click(cx.listener(|module, _, _, cx| {
-                        cx.stop_propagation();
-                        module.close(cx);
-                    }))
-                    .child(
-                        svg()
-                            .path("close.svg")
-                            .size(px(12.0))
-                            .text_color(theme.foreground_muted()),
-                    ),
-            );
+    if presentation.status == RecordStatus::Stopped {
+        bar = bar.child(
+            div()
+                .id("record-start")
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .px(px(8.0))
+                .rounded_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap(px(9.0))
+                .when(interactive && presentation.pending.is_none(), |s| {
+                    s.cursor_pointer()
+                        .on_click(cx.listener(|module, _, _, cx| module.primary_action(cx)))
+                })
+                .child(
+                    div()
+                        .size(px(10.0))
+                        .flex_shrink_0()
+                        .rounded_full()
+                        .bg(theme.red()),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_ellipsis()
+                        .child(label),
+                ),
+        );
     } else {
         bar = bar
             .px(px(4.0))
@@ -115,7 +98,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .text_size(px(14.0))
                     .font_weight(FontWeight::MEDIUM)
                     .flex_shrink_0()
-                    .child(duration(module.seconds)),
+                    .child(duration(presentation.seconds)),
             )
             .child(
                 div()
@@ -124,9 +107,10 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .text_size(px(11.0))
                     .text_color(theme.foreground_muted())
                     .text_ellipsis()
-                    .when(paused || module.pending == Some(PendingAction::Stop), |s| {
-                        s.child(label)
-                    }),
+                    .when(
+                        paused || presentation.pending == Some(PendingAction::Stop),
+                        |s| s.child(label),
+                    ),
             )
             .child(
                 div()
@@ -138,8 +122,12 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .flex()
                     .items_center()
                     .justify_center()
-                    .opacity(if module.pending.is_some() { 0.4 } else { 1.0 })
-                    .when(module.pending.is_none(), |s| {
+                    .opacity(if presentation.pending.is_some() {
+                        0.4
+                    } else {
+                        1.0
+                    })
+                    .when(interactive && presentation.pending.is_none(), |s| {
                         s.cursor_pointer()
                             .hover(move |s| s.bg(hover))
                             .on_click(cx.listener(|module, _, _, cx| module.primary_action(cx)))
@@ -161,8 +149,12 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .flex()
                     .items_center()
                     .justify_center()
-                    .opacity(if module.pending.is_some() { 0.4 } else { 1.0 })
-                    .when(module.pending.is_none(), |s| {
+                    .opacity(if presentation.pending.is_some() {
+                        0.4
+                    } else {
+                        1.0
+                    })
+                    .when(interactive && presentation.pending.is_none(), |s| {
                         s.cursor_pointer()
                             .hover(move |s| s.bg(hover))
                             .on_click(cx.listener(|module, _, _, cx| module.stop(cx)))
@@ -173,31 +165,48 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                             .size(px(13.0))
                             .text_color(theme.red()),
                     ),
-            )
-            .child(
-                div()
-                    .id("record-cancel")
-                    .size(px(28.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .bg(style::surface(&theme))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(hover))
-                    .on_click(cx.listener(|module, _, _, cx| {
-                        cx.stop_propagation();
-                        module.close(cx);
-                    }))
-                    .child(
-                        svg()
-                            .path("close.svg")
-                            .size(px(12.0))
-                            .text_color(theme.foreground_muted()),
-                    ),
             );
     }
+    bar
+}
+
+pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::Stateful<gpui::Div> {
+    let theme = cx.global::<Theme>().clone();
+    let bar = if let Some(transition) = &module.transition {
+        let animation = Animation::new(transition.duration).with_easing(ease_in_out);
+        div()
+            .relative()
+            .w_full()
+            .h(px(32.0))
+            .flex_shrink_0()
+            .child(
+                controls(transition.outgoing, false, cx)
+                    .absolute()
+                    .inset_0()
+                    .with_animation(
+                        ("record-outgoing", transition.epoch),
+                        animation.clone(),
+                        |element, progress| {
+                            element.opacity(1.0 - progress).blur(px(progress * 5.0))
+                        },
+                    ),
+            )
+            .child(
+                controls(module.presentation(), true, cx)
+                    .absolute()
+                    .inset_0()
+                    .with_animation(
+                        ("record-incoming", transition.epoch),
+                        animation,
+                        |element, progress| {
+                            element.opacity(progress).blur(px((1.0 - progress) * 5.0))
+                        },
+                    ),
+            )
+            .into_any_element()
+    } else {
+        controls(module.presentation(), true, cx).into_any_element()
+    };
     div()
         .id("record-module")
         .size_full()

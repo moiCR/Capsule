@@ -7,6 +7,7 @@ use gpui::{
     Subscription, Task, Window, prelude::*, px,
 };
 use services::{AppState, RecordStatus};
+use std::time::Duration;
 use ui::theme::Theme;
 use worker::Request;
 
@@ -18,11 +19,27 @@ pub(crate) enum PendingAction {
     Stop,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct Presentation {
+    pub status: RecordStatus,
+    pub seconds: u64,
+    pub pending: Option<PendingAction>,
+}
+
+pub(crate) struct Transition {
+    pub outgoing: Presentation,
+    pub epoch: usize,
+    pub duration: Duration,
+}
+
 pub(crate) struct RecordModule {
     pub status: RecordStatus,
     pub seconds: u64,
     pub(crate) pending: Option<PendingAction>,
     pub error: Option<String>,
+    pub transition: Option<Transition>,
+    transition_epoch: usize,
+    transition_finish: Option<Task<()>>,
     focus: FocusHandle,
     active: bool,
     generation: u64,
@@ -41,11 +58,17 @@ impl RecordModule {
                 if this
                     .update(cx, |module: &mut Self, cx| {
                         let previous_size = module.size();
+                        let previous = module.presentation();
                         module.status = reply.status;
                         module.seconds = reply.seconds;
                         if reply.finished.is_some() && reply.finished == module.pending {
                             module.pending = None;
                             module.error = reply.error;
+                        }
+                        if (previous.status == RecordStatus::Stopped)
+                            != (module.status == RecordStatus::Stopped)
+                        {
+                            module.transition_from(previous, cx);
                         }
                         if module.active {
                             if previous_size != module.size() {
@@ -68,6 +91,9 @@ impl RecordModule {
             seconds: 0,
             pending: None,
             error: None,
+            transition: None,
+            transition_epoch: 0,
+            transition_finish: None,
             focus: cx.focus_handle(),
             active: false,
             generation: 0,
@@ -77,12 +103,59 @@ impl RecordModule {
             _theme: cx.observe_global::<Theme>(|_, cx| cx.notify()),
         }
     }
+    pub fn presentation(&self) -> Presentation {
+        Presentation {
+            status: self.status,
+            seconds: self.seconds,
+            pending: self.pending,
+        }
+    }
+
+    fn transition_from(&mut self, outgoing: Presentation, cx: &mut Context<Self>) {
+        self.transition = None;
+        self.transition_finish = None;
+        let duration = Duration::from_millis(
+            cx.global::<AppState>()
+                .config
+                .get()
+                .ui
+                .animation_duration_ms as u64,
+        );
+        if !self.active || duration.is_zero() {
+            return;
+        }
+        self.transition_epoch = self.transition_epoch.wrapping_add(1);
+        let epoch = self.transition_epoch;
+        self.transition = Some(Transition {
+            outgoing,
+            epoch,
+            duration,
+        });
+        self.transition_finish = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(duration).await;
+            let _ = this.update(cx, |module, cx| {
+                if module
+                    .transition
+                    .as_ref()
+                    .is_some_and(|transition| transition.epoch == epoch)
+                {
+                    module.transition = None;
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
     pub fn focus_handle(&self) -> FocusHandle {
         self.focus.clone()
     }
     pub fn set_active(&mut self, active: bool) {
         if self.active != active {
             self.active = active;
+            if !active {
+                self.transition = None;
+                self.transition_finish = None;
+            }
             let _ = self.sender.send(Request::Active(active));
         }
     }

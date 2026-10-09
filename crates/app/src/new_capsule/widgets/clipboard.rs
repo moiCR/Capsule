@@ -88,7 +88,7 @@ pub(crate) fn render(
             div()
                 .text_size(px(19.0))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .child("Portapapeles"),
+                .child(module.text("clipboard.title", cx)),
         );
     let mut tabs = div()
         .h(px(TABS_HEIGHT))

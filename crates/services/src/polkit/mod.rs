@@ -682,6 +682,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn helper_preserves_password_bytes_and_reports_failed_authentication() {
+        let output = run_helper_process(
+            "/bin/sh",
+            &["-c", "IFS= read -r cookie; IFS= read -r password; [ \"$cookie\" = test-cookie ] && [ \"$password\" = ' pass ñ ' ] && printf 'SUCCESS\\n'"],
+            "test-cookie\n pass ñ \n",
+            2,
+        ).await.expect("helper response");
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"SUCCESS\n");
+        let failed = run_helper_process(
+            "/bin/sh",
+            &[
+                "-c",
+                "printf 'FAILURE\\n'; printf 'Credentials rejected\\n' >&2; exit 1",
+            ],
+            "test-cookie\ninvalid-password\n",
+            2,
+        )
+        .await
+        .expect("failed helper response");
+        assert!(!failed.status.success());
+        assert_eq!(
+            extract_stderr_message(&String::from_utf8_lossy(&failed.stderr)),
+            "Credentials rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelling_authentication_stops_the_running_helper() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("test timestamp")
+            .as_nanos();
+        let pid_path = std::path::PathBuf::from(format!(
+            "/tmp/capsule-polkit-helper-{}-{nonce}.pid",
+            std::process::id()
+        ));
+        let script = format!(
+            "printf '%s' \"$$\" > '{}'; exec /bin/sleep 30",
+            pid_path.display()
+        );
+        let task = tokio::spawn(async move {
+            run_helper_process("/bin/sh", &["-c", &script], "test-cookie\n", 30).await
+        });
+        let pid = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                if let Ok(text) = tokio::fs::read_to_string(&pid_path).await
+                    && let Ok(pid) = text.parse::<libc::pid_t>()
+                {
+                    break pid;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("helper started");
+        task.abort();
+        assert!(
+            task.await
+                .expect_err("cancelled helper task")
+                .is_cancelled()
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let status = unsafe { libc::kill(pid, 0) };
+                if status == -1
+                    && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("helper exited after cancellation");
+        tokio::fs::remove_file(pid_path)
+            .await
+            .expect("remove fixture");
+    }
+
+    #[tokio::test]
     async fn test_queue_and_cancellation() {
         let service = PolkitService;
         let cookie = "test-cookie-1234";

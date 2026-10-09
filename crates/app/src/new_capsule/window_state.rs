@@ -12,6 +12,7 @@ pub(super) struct WindowState {
     exclusive_zone: Option<Pixels>,
     current_module: Option<CapsuleModuleId>,
     satellite_open: bool,
+    notification_popup: bool,
     pub satellite_bounds: Vec<(super::satellite::SatelliteId, Bounds<Pixels>)>,
 }
 
@@ -26,6 +27,7 @@ impl WindowState {
             exclusive_zone: None,
             current_module: None,
             satellite_open: false,
+            notification_popup: false,
             satellite_bounds: Vec::new(),
         }
     }
@@ -87,12 +89,17 @@ impl Capsule {
     pub(super) fn apply_window_geometry(&mut self, window: &mut Window, cx: &mut gpui::App) {
         let current = self.module_manager.current_id();
         let satellite_open = self.satellite.open();
+        let passive_notification = current == CapsuleModuleId::Notification
+            && !self.module_manager.notification.read(cx).history;
         if self.window_state.current_module != Some(current)
             || self.window_state.satellite_open != satellite_open
+            || self.window_state.notification_popup != passive_notification
         {
             self.window_state.current_module = Some(current);
             self.window_state.satellite_open = satellite_open;
-            let keyboard = if !matches!(current, CapsuleModuleId::Default | CapsuleModuleId::Shelf)
+            self.window_state.notification_popup = passive_notification;
+            let keyboard = if !passive_notification
+                && !matches!(current, CapsuleModuleId::Default | CapsuleModuleId::Shelf)
                 || satellite_open
             {
                 gpui::layer_shell::KeyboardInteractivity::Exclusive
@@ -106,6 +113,9 @@ impl Capsule {
                 window.focus(&self.module_manager.launcher_focus_handle(cx), cx);
             } else if current == CapsuleModuleId::Dashboard {
                 window.focus(&self.module_manager.dashboard_focus_handle(cx), cx);
+            } else if current == CapsuleModuleId::Notification {
+                let focus = self.module_manager.notification.read(cx).focus_handle();
+                window.focus(&focus, cx);
             } else if current == CapsuleModuleId::Polkit {
                 let focus = self.module_manager.polkit.read(cx).focus_handle();
                 window.focus(&focus, cx);
@@ -174,6 +184,9 @@ impl Capsule {
             );
             visual.layout.bounds.origin -= region.origin;
         }
+        self.module_manager.notification.update(cx, |module, _| {
+            module.set_active(current == CapsuleModuleId::Notification);
+        });
         self.module_manager.shelf.update(cx, |module, _| {
             module.set_active(current == CapsuleModuleId::Shelf)
         });

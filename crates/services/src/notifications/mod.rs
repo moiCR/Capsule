@@ -22,7 +22,7 @@ struct LatestNotification {
     hovered_at: Option<Instant>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct NotificationStore {
     items: Arc<Mutex<Vec<NotificationItem>>>,
     latest_notification: Arc<Mutex<LatestNotification>>,
@@ -30,9 +30,20 @@ pub struct NotificationStore {
     senders: Arc<Mutex<HashMap<u32, zbus::names::OwnedUniqueName>>>,
     counter: Arc<Mutex<u32>>,
     dnd: Arc<AtomicBool>,
+    changes: tokio::sync::watch::Sender<()>,
+}
+
+impl Default for NotificationStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NotificationStore {
+    pub fn subscribe(&self) -> tokio::sync::watch::Receiver<()> {
+        self.changes.subscribe()
+    }
+
     pub fn new() -> Self {
         Self {
             items: Arc::new(Mutex::new(Vec::new())),
@@ -41,6 +52,7 @@ impl NotificationStore {
             senders: Arc::new(Mutex::new(HashMap::new())),
             counter: Arc::new(Mutex::new(1)),
             dnd: Arc::new(AtomicBool::new(false)),
+            changes: tokio::sync::watch::channel(()).0,
         }
     }
 
@@ -124,6 +136,7 @@ impl NotificationStore {
             }
         }
 
+        self.changes.send_replace(());
         id
     }
 
@@ -133,10 +146,12 @@ impl NotificationStore {
 
     pub fn set_dnd(&self, enabled: bool) {
         self.dnd.store(enabled, Ordering::SeqCst);
+        self.changes.send_replace(());
     }
 
     pub fn toggle_dnd(&self) -> bool {
         let prev = self.dnd.fetch_xor(true, Ordering::SeqCst);
+        self.changes.send_replace(());
         !prev
     }
 
@@ -160,6 +175,7 @@ impl NotificationStore {
 
     pub fn set_hovered(&self, hovered: bool) {
         self.set_hovered_at(hovered, Instant::now());
+        self.changes.send_replace(());
     }
 
     fn set_hovered_at(&self, hovered: bool, now: Instant) {
@@ -277,6 +293,7 @@ impl NotificationStore {
                 }
             }
         }
+        self.changes.send_replace(());
     }
 
     pub fn clear_all_notifications(&self) {
@@ -291,6 +308,7 @@ impl NotificationStore {
         if let Ok(mut latest_guard) = self.latest_notification.lock() {
             *latest_guard = LatestNotification::default();
         }
+        self.changes.send_replace(());
     }
 }
 
@@ -376,6 +394,30 @@ pub async fn start_notification_server() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn subscribers_receive_mutations_without_idle_wakes() {
+        let store = NotificationStore::new();
+        let mut first = store.subscribe();
+        let mut second = store.subscribe();
+        assert!(!first.has_changed().expect("watch open"));
+        let id = add_test_notification(&store);
+        first.changed().await.expect("notification added");
+        second.changed().await.expect("second subscriber notified");
+        assert!(!first.has_changed().expect("watch open"));
+        store.set_dnd(true);
+        first.changed().await.expect("DND changed");
+        assert!(store.get_latest_active_notification().is_none());
+        store.remove_notification(id);
+        first.changed().await.expect("notification removed");
+        store.clear_all_notifications();
+        first.changed().await.expect("history cleared");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), first.changed())
+                .await
+                .is_err()
+        );
+    }
 
     fn add_test_notification(store: &NotificationStore) -> u32 {
         store.add_notification(
