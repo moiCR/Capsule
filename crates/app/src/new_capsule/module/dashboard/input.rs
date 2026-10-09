@@ -19,27 +19,28 @@ impl DashboardModule {
                             ),
                         );
                     }
-                } else if self.navigation.escape() {
-                    self.dispatch(DashboardAction::Close, cx);
                 } else {
-                    cx.notify();
+                    self.dispatch(DashboardAction::Close, cx);
                 }
             }
             "left"
-                if self.navigation.view
-                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+                if self.satellites.iter().any(|panel| {
+                    panel.open && panel.id == crate::new_capsule::satellite::SatelliteId::Calendar
+                }) =>
             {
                 self.dispatch(DashboardAction::Month(-1), cx)
             }
             "right"
-                if self.navigation.view
-                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+                if self.satellites.iter().any(|panel| {
+                    panel.open && panel.id == crate::new_capsule::satellite::SatelliteId::Calendar
+                }) =>
             {
                 self.dispatch(DashboardAction::Month(1), cx)
             }
             "home"
-                if self.navigation.view
-                    == crate::new_capsule::widgets::dashboard::DashboardView::Calendar =>
+                if self.satellites.iter().any(|panel| {
+                    panel.open && panel.id == crate::new_capsule::satellite::SatelliteId::Calendar
+                }) =>
             {
                 self.dispatch(DashboardAction::Month(0), cx)
             }
@@ -86,6 +87,35 @@ impl DashboardModule {
     pub fn start_volume(&mut self, x: f32, cx: &mut Context<Self>) {
         self.dragging_volume = true;
         self.volume_at(x, cx);
+    }
+    pub fn brightness_at(&mut self, x: f32, cx: &mut Context<Self>) {
+        if let Some(fraction) = slider_fraction(
+            x,
+            self.brightness_bounds.left(),
+            self.brightness_bounds.width(0.0),
+        ) {
+            let value = ((fraction * 100.0).round() as u32).clamp(5, 100);
+            if self.brightness_preview != Some(value) {
+                self.brightness_preview = Some(value);
+                cx.notify();
+            }
+        }
+    }
+    pub fn start_brightness(&mut self, x: f32, cx: &mut Context<Self>) {
+        if self.pending {
+            return;
+        }
+        self.dragging_brightness = true;
+        self.brightness_at(x, cx);
+    }
+    pub(super) fn finish_brightness(&mut self, cx: &mut Context<Self>) {
+        if !self.dragging_brightness {
+            return;
+        }
+        self.dragging_brightness = false;
+        if let Some(value) = self.brightness_preview.take() {
+            self.dispatch(DashboardAction::Brightness(value), cx);
+        }
     }
     pub fn start_seek(&mut self) {
         self.dragging_seek = true;

@@ -1,31 +1,14 @@
 use super::{DashboardModule, Snapshot};
-use crate::new_capsule::{
-    module::CapsuleModuleEvent,
-    widgets::dashboard::{DashboardAction, DashboardView},
-};
+use crate::new_capsule::{module::CapsuleModuleEvent, widgets::dashboard::DashboardAction};
 use gpui::Context;
 use services::{AppState, NotificationStore};
 impl DashboardModule {
     pub fn dispatch(&mut self, action: DashboardAction, cx: &mut Context<Self>) {
         let state = cx.global::<AppState>().clone();
         match action {
-            DashboardAction::View(view) => {
-                if matches!(view, DashboardView::Themes | DashboardView::Wallpapers) {
-                    let id = if view == DashboardView::Themes {
-                        crate::new_capsule::module::CapsuleModuleId::Themes
-                    } else {
-                        crate::new_capsule::module::CapsuleModuleId::Wallpapers
-                    };
-                    cx.emit(CapsuleModuleEvent::Open(id));
-                } else if let Some(id) = view.satellite_id() {
-                    cx.emit(CapsuleModuleEvent::ToggleSatellite(id));
-                } else {
-                    cx.emit(CapsuleModuleEvent::CloseSatellite);
-                    self.navigation.open(view);
-                }
-            }
-            DashboardAction::Back => {
-                self.navigation.open(DashboardView::Home);
+            DashboardAction::Satellite(id) => {
+                self.navigation.reset();
+                cx.emit(CapsuleModuleEvent::ToggleSatellite(id));
             }
             DashboardAction::Close => cx.emit(CapsuleModuleEvent::Close),
             DashboardAction::CloseSatellite(id) => {
@@ -86,10 +69,6 @@ impl DashboardModule {
                 cx.emit(CapsuleModuleEvent::Close);
                 crate::panel::SettingsPanel::open(cx);
             }
-            DashboardAction::Lock => {
-                cx.emit(CapsuleModuleEvent::Close);
-                crate::panel::LockScreenPanel::open_all(cx);
-            }
             DashboardAction::ClearNotifications => {
                 NotificationStore::global().clear_all_notifications()
             }
@@ -99,7 +78,6 @@ impl DashboardModule {
             DashboardAction::Notification(id, key) => {
                 NotificationStore::global().invoke_action(id, key)
             }
-            DashboardAction::Player(bus) => self.player_bus = Some(bus),
             DashboardAction::TrayActivate { bus, path } => {
                 if let Some(index) = state
                     .sni_host
@@ -135,6 +113,11 @@ impl DashboardModule {
         self.navigation.error = None;
         services::spawn_tokio(async move {
             let result: Result<(), String> = match action {
+                DashboardAction::Brightness(value) => state
+                    .system
+                    .set_brightness(value)
+                    .await
+                    .map_err(|error| error.to_string()),
                 DashboardAction::Mute => state
                     .system
                     .toggle_mute()

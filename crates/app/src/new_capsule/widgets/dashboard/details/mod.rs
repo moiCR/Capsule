@@ -1,48 +1,14 @@
 mod audio;
-mod calendar;
 mod connectivity;
 mod tray;
-use super::{BODY, DashboardView as View, error};
+use super::error;
 use super::{button, empty};
 use crate::new_capsule::module::dashboard::DashboardModule;
 use gpui::{
     AnyElement, Context, IntoElement, MotionDurationExt, canvas, div, ease_in_out, prelude::*, px,
+    svg,
 };
 use ui::theme::Theme;
-pub fn render(
-    module: &DashboardModule,
-    theme: &Theme,
-    cx: &mut Context<DashboardModule>,
-) -> AnyElement {
-    let mut content = div()
-        .id("dashboard-detail")
-        .h(px(BODY))
-        .w_full()
-        .flex_shrink_0()
-        .flex()
-        .flex_col()
-        .gap(px(12.0))
-        .overflow_hidden();
-    if let Some(message) = &module.navigation.error {
-        content = content.child(error(message.clone(), theme));
-    }
-    if module.pending {
-        content = content.child(empty(module.text("dashboard_new.pending", cx), theme));
-    }
-    let body = match &module.navigation.view {
-        View::Wifi => connectivity::wifi(module, theme, cx),
-        View::Bluetooth => connectivity::bluetooth(module, theme, cx),
-        View::Audio => audio::audio(module, theme, cx),
-        View::Calendar => calendar::calendar(module, theme, cx),
-        View::Media => crate::new_capsule::widgets::satellite::media::render(module, theme, cx),
-        View::Tray { bus, path } => tray::tray(bus, path, module, theme, cx),
-        View::Themes => div().into_any_element(),
-        View::Wallpapers => div().into_any_element(),
-        View::Home => div().into_any_element(),
-    };
-    content.child(body).into_any_element()
-}
-
 pub(crate) fn render_satellite(
     module: &DashboardModule,
     visual: &crate::new_capsule::satellite::SatelliteVisual,
@@ -62,9 +28,6 @@ pub(crate) fn render_satellite(
                 SatelliteId::Wifi => connectivity::wifi(module, theme, cx),
                 SatelliteId::Bluetooth => connectivity::bluetooth(module, theme, cx),
                 SatelliteId::Audio => audio::audio(module, theme, cx),
-                SatelliteId::Media => {
-                    crate::new_capsule::widgets::satellite::media::render(module, theme, cx)
-                }
                 SatelliteId::Tray { bus, path } => tray::tray(bus, path, module, theme, cx),
                 SatelliteId::Calendar => div().into_any_element(),
             };
@@ -76,7 +39,14 @@ pub(crate) fn render_satellite(
                     .find(|item| item.bus_name == *bus && item.object_path == *path)
                     .map(|item| item.title.clone())
                     .unwrap_or_else(|| module.text("dashboard_new.tray", cx)),
-                _ => module.text(id.view().title_key(), cx),
+                _ => module.text(id.title_key(), cx),
+            };
+            let icon = match id {
+                SatelliteId::Audio => "volume-2.svg",
+                SatelliteId::Wifi => "wifi.svg",
+                SatelliteId::Bluetooth => "bluetooth.svg",
+                SatelliteId::Calendar => "calendar-days.svg",
+                SatelliteId::Tray { .. } => "sparkles.svg",
             };
             let mut panel = div()
                 .w(visual.layout.content_size.width)
@@ -95,7 +65,19 @@ pub(crate) fn render_satellite(
                         .flex()
                         .items_center()
                         .justify_between()
-                        .child(div().flex_1().min_w_0().text_ellipsis().child(title))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .child(svg().path(icon).size(px(16.0)).text_color(theme.accent()))
+                                .child(
+                                    div()
+                                        .text_size(px(13.0))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .child(title),
+                                ),
+                        )
                         .child(super::icon_action(
                             "satellite-close",
                             "close.svg",

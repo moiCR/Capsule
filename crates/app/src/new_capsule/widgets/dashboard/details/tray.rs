@@ -2,8 +2,9 @@ use super::super::DashboardAction as Action;
 use super::list;
 use super::{button, empty};
 use crate::new_capsule::module::dashboard::DashboardModule;
+use crate::new_capsule::widgets::style;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
-use gpui::{ColorExt, MotionDurationExt, ease_in_out};
+use gpui::{MotionDurationExt, ease_in_out};
 use ui::theme::Theme;
 pub(super) fn tray(
     bus: &str,
@@ -67,7 +68,7 @@ pub(super) fn menu_entry(
         .px(px(12.0))
         .py(px(8.0))
         .rounded(px(10.0))
-        .bg(theme.surface().opacity(0.25))
+        .bg(style::surface(theme))
         .opacity(if entry.enabled { 1.0 } else { 0.4 })
         .transitions(|t| {
             t.bg(module.snapshot.duration.with_easing(ease_in_out))
@@ -76,7 +77,7 @@ pub(super) fn menu_entry(
         .child(entry.label.replace('_', ""));
     if entry.enabled {
         let action = Action::TrayMenu(bus.to_string(), path.to_string(), entry.id);
-        let hover = theme.surface().opacity(0.5);
+        let hover = style::hover(theme);
         row = row
             .cursor_pointer()
             .hover(move |s| s.bg(hover))

@@ -123,9 +123,7 @@ impl AppearanceModule {
         });
         let refresh = cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(250))
-                    .await;
+                cx.background_executor().timer(Duration::from_secs(1)).await;
                 if this
                     .update(cx, |module: &mut Self, cx| {
                         let current = cx.global::<AppState>().wallpaper.get_current();
@@ -172,6 +170,9 @@ impl AppearanceModule {
     }
     pub fn set_active(&mut self, active: bool) {
         self.active = active;
+        if !active {
+            self.animation = None;
+        }
     }
     pub fn carousel(&self) -> &Carousel {
         match self.kind {
@@ -237,7 +238,7 @@ impl AppearanceModule {
                     .timer(
                         compositor
                             .get_frame_duration()
-                            .max(Duration::from_millis(16)),
+                            .max(Duration::from_millis(2)),
                     )
                     .await;
                 match this.update(cx, |module, cx| {

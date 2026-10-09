@@ -62,6 +62,7 @@ impl CapsulePanel {
             cx,
         );
         let mut options = Self::window_options(cx);
+        options.inactive_frame_interval = None;
         options.window_bounds = Some(WindowBounds::Windowed(gpui::Bounds {
             origin: gpui::point(px(0.0), px(0.0)),
             size,

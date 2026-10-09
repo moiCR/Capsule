@@ -97,11 +97,23 @@ impl Capsule {
                 };
                 self.handle_module_event(&event, cx);
             }
-            IpcCommand::ToggleSelectTheme => {
-                let event = if self.module_manager.current_id() == CapsuleModuleId::Themes {
+            command @ (IpcCommand::ToggleSelectTheme
+            | IpcCommand::ToggleSelectWallpaper
+            | IpcCommand::ShowThemes
+            | IpcCommand::ShowWallpapers) => {
+                let id = if matches!(
+                    command,
+                    IpcCommand::ToggleSelectTheme | IpcCommand::ShowThemes
+                ) {
+                    CapsuleModuleId::Themes
+                } else {
+                    CapsuleModuleId::Wallpapers
+                };
+                let show = matches!(command, IpcCommand::ShowThemes | IpcCommand::ShowWallpapers);
+                let event = if !show && self.module_manager.current_id() == id {
                     CapsuleModuleEvent::Close
                 } else {
-                    CapsuleModuleEvent::Open(CapsuleModuleId::Themes)
+                    CapsuleModuleEvent::Open(id)
                 };
                 self.handle_module_event(&event, cx);
             }

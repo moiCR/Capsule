@@ -1,4 +1,5 @@
 pub mod default;
+pub(crate) mod style;
 
 pub mod launcher;
 
@@ -11,3 +12,5 @@ pub(crate) mod clipboard;
 
 pub(crate) mod record;
 pub(crate) mod shelf;
+
+pub(crate) mod polkit;

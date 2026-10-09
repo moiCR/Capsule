@@ -16,10 +16,13 @@ pub enum IpcCommand {
     ToggleDashboard,
     ToggleNotification,
     ToggleSelectTheme,
+    ToggleSelectWallpaper,
     ToggleClipboard,
     ToggleEmoji,
     ShowLauncher,
     ShowDashboard,
+    ShowThemes,
+    ShowWallpapers,
     ShowNotification,
     ShowClipboard,
     ShowEmoji,
@@ -53,15 +56,34 @@ impl FromStr for IpcCommand {
             "toggle-notification" | "toggle notification" | "notification" | "notifications" => {
                 Ok(IpcCommand::ToggleNotification)
             }
-            "select-theme" | "toggle-select-theme" | "themes" | "theme" => {
-                Ok(IpcCommand::ToggleSelectTheme)
-            }
+            "select-theme"
+            | "toggle-select-theme"
+            | "toggle-theme"
+            | "toggle-themes"
+            | "toggle theme"
+            | "toggle themes"
+            | "themes"
+            | "theme" => Ok(IpcCommand::ToggleSelectTheme),
+            "select-wallpaper"
+            | "toggle-select-wallpaper"
+            | "toggle-wallpaper"
+            | "toggle-wallpapers"
+            | "toggle wallpaper"
+            | "toggle wallpapers"
+            | "wallpapers"
+            | "wallpaper" => Ok(IpcCommand::ToggleSelectWallpaper),
             "toggle-clipboard" | "toggle clipboard" | "clipboard" | "clip" => {
                 Ok(IpcCommand::ToggleClipboard)
             }
             "toggle-emoji" | "toggle emoji" | "emoji" | "emojis" => Ok(IpcCommand::ToggleEmoji),
             "show-launcher" | "show launcher" => Ok(IpcCommand::ShowLauncher),
             "show-dashboard" | "show dashboard" => Ok(IpcCommand::ShowDashboard),
+            "show-theme" | "show-themes" | "show theme" | "show themes" => {
+                Ok(IpcCommand::ShowThemes)
+            }
+            "show-wallpaper" | "show-wallpapers" | "show wallpaper" | "show wallpapers" => {
+                Ok(IpcCommand::ShowWallpapers)
+            }
             "show-notification" | "show notification" => Ok(IpcCommand::ShowNotification),
             "show-clipboard" | "show clipboard" => Ok(IpcCommand::ShowClipboard),
             "show-emoji" | "show emoji" => Ok(IpcCommand::ShowEmoji),
@@ -96,10 +118,13 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::ToggleDashboard => "toggle-dashboard".to_string(),
         IpcCommand::ToggleNotification => "toggle-notification".to_string(),
         IpcCommand::ToggleSelectTheme => "select-theme".to_string(),
+        IpcCommand::ToggleSelectWallpaper => "select-wallpaper".to_string(),
         IpcCommand::ToggleClipboard => "toggle-clipboard".to_string(),
         IpcCommand::ToggleEmoji => "toggle-emoji".to_string(),
         IpcCommand::ShowLauncher => "show-launcher".to_string(),
         IpcCommand::ShowDashboard => "show-dashboard".to_string(),
+        IpcCommand::ShowThemes => "show-themes".to_string(),
+        IpcCommand::ShowWallpapers => "show-wallpapers".to_string(),
         IpcCommand::ShowNotification => "show-notification".to_string(),
         IpcCommand::ShowClipboard => "show-clipboard".to_string(),
         IpcCommand::ShowEmoji => "show-emoji".to_string(),
@@ -135,5 +160,49 @@ pub fn get_socket_path() -> PathBuf {
     } else {
         let user = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
         PathBuf::from(format!("/tmp/capsule-{user}.sock"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn appearance_commands_accept_aliases_and_round_trip() {
+        for (aliases, command) in [
+            (
+                vec![
+                    "theme",
+                    "themes",
+                    "select-theme",
+                    "toggle-theme",
+                    "toggle themes",
+                ],
+                IpcCommand::ToggleSelectTheme,
+            ),
+            (
+                vec![
+                    "wallpaper",
+                    "wallpapers",
+                    "select-wallpaper",
+                    "toggle-wallpaper",
+                    "toggle wallpaper",
+                ],
+                IpcCommand::ToggleSelectWallpaper,
+            ),
+            (
+                vec!["show-theme", "show-themes", "show themes"],
+                IpcCommand::ShowThemes,
+            ),
+            (
+                vec!["show-wallpaper", "show-wallpapers", "show wallpapers"],
+                IpcCommand::ShowWallpapers,
+            ),
+        ] {
+            for alias in aliases {
+                assert_eq!(decode_command(alias), Some(command.clone()));
+            }
+            assert_eq!(decode_command(&encode_command(&command)), Some(command));
+        }
     }
 }

@@ -1,4 +1,5 @@
 use crate::new_capsule::module::shelf::ShelfModule;
+use crate::new_capsule::widgets::style;
 use gpui::{
     ColorExt, Context, ExternalDragPayload, FileDragPaths, IntoElement, Pixels, Point, Render,
     Window, div, img, prelude::*, px, svg,
@@ -6,13 +7,13 @@ use gpui::{
 use services::{AppState, ShelfItem};
 use ui::{components::button::IconButton, theme::Theme};
 
-pub const COLUMNS: usize = 4;
-pub const WIDTH: f32 = 480.0;
-pub const CARD_HEIGHT: f32 = 112.0;
+pub const COLUMNS: usize = 3;
+pub const WIDTH: f32 = 650.0;
+pub const CARD_HEIGHT: f32 = 84.0;
 pub const GAP: f32 = 8.0;
-pub const MAX_HEIGHT: f32 = 314.0;
+pub const MAX_HEIGHT: f32 = 258.0;
 const BASE_HEIGHT: f32 = 82.0;
-const CARD_WIDTH: f32 = (WIDTH - 24.0 - GAP * 3.0) / COLUMNS as f32;
+const CARD_WIDTH: f32 = (WIDTH - 24.0 - GAP * (COLUMNS - 1) as f32) / COLUMNS as f32;
 
 pub fn height(count: usize) -> f32 {
     let rows = count.div_ceil(COLUMNS).min(2);
@@ -79,8 +80,8 @@ fn card(
         .get()
         .ui
         .cards_round
-        .clamp(0.0, 12.0);
-    let hover = theme.surface().opacity(0.45);
+        .clamp(0.0, 18.0);
+    let hover = style::hover(theme);
     let remove_id = item.id.clone();
     let payload = DraggedFile {
         path: item.path.clone(),
@@ -88,9 +89,9 @@ fn card(
     };
     let preview = if let Some(image) = module.previews.get(&item.id) {
         img(image.clone())
-            .w(px(84.0))
+            .w(px(60.0))
             .h(px(60.0))
-            .aspect_ratio(84.0 / 60.0)
+            .aspect_ratio(1.0)
             .rounded(px((radius - 2.0).max(0.0)))
             .object_fit(gpui::ObjectFit::Cover)
             .into_any_element()
@@ -122,16 +123,15 @@ fn card(
         .w(px(CARD_WIDTH))
         .h(px(CARD_HEIGHT))
         .flex_shrink_0()
-        .p(px(6.0))
+        .p(px(10.0))
         .rounded(px(radius))
         .flex()
-        .flex_col()
         .items_center()
-        .gap(px(4.0))
+        .gap(px(10.0))
         .bg(if selected {
-            theme.accent().opacity(0.13)
+            style::selected(theme)
         } else {
-            theme.surface().opacity(0.18)
+            style::surface(theme)
         })
         .hover(move |s| s.bg(hover))
         .cursor_grab()
@@ -158,8 +158,7 @@ fn card(
         })
         .child(
             div()
-                .w_full()
-                .h(px(60.0))
+                .size(px(60.0))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
@@ -168,20 +167,24 @@ fn card(
         )
         .child(
             div()
-                .w_full()
-                .text_center()
-                .text_size(px(11.0))
-                .text_ellipsis()
-                .child(item.name.clone()),
-        )
-        .child(
-            div()
-                .w_full()
-                .text_center()
-                .text_size(px(10.0))
-                .text_color(theme.foreground_muted())
-                .text_ellipsis()
-                .child(description),
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_ellipsis()
+                        .child(item.name.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(theme.foreground_muted())
+                        .text_ellipsis()
+                        .child(description),
+                ),
         )
         .child(
             div().absolute().top(px(2.0)).right(px(2.0)).child(
@@ -212,7 +215,7 @@ pub fn render(module: &ShelfModule, cx: &mut Context<ShelfModule>) -> gpui::Stat
         "shelf.navigate_hint"
     });
     let empty = language.get("shelf.empty_title");
-    let drop_background = theme.accent().opacity(0.08);
+    let drop_background = style::selected(&theme);
     let mut gallery = div()
         .id("shelf-gallery")
         .w_full()
@@ -261,9 +264,21 @@ pub fn render(module: &ShelfModule, cx: &mut Context<ShelfModule>) -> gpui::Stat
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(12.0))
-                        .text_color(theme.foreground_muted())
-                        .child(count),
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .child(
+                            div()
+                                .text_size(px(14.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child("Shelf"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(theme.foreground_muted())
+                                .child(format!("· {count}")),
+                        ),
                 )
                 .when(!module.items.is_empty(), |s| {
                     s.child(
@@ -284,12 +299,28 @@ pub fn render(module: &ShelfModule, cx: &mut Context<ShelfModule>) -> gpui::Stat
             div()
                 .flex_1()
                 .min_h_0()
+                .w_full()
                 .flex()
+                .flex_col()
                 .items_center()
                 .justify_center()
-                .text_size(px(12.0))
-                .text_color(theme.foreground_muted())
-                .child(empty)
+                .gap(px(6.0))
+                .rounded(px(style::INNER_RADIUS))
+                .border_1()
+                .border_dashed()
+                .border_color(theme.foreground_muted().opacity(0.35))
+                .child(
+                    svg()
+                        .path("plus.svg")
+                        .size(px(20.0))
+                        .text_color(theme.foreground_muted()),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_color(theme.foreground_muted())
+                        .child(empty),
+                )
                 .into_any_element()
         } else {
             gallery.into_any_element()
@@ -316,16 +347,16 @@ mod tests {
     fn navigation_handles_partial_last_rows() {
         assert_eq!(next_selection(0, 0, "down"), 0);
         assert_eq!(next_selection(3, 6, "down"), 5);
-        assert_eq!(next_selection(5, 6, "up"), 1);
+        assert_eq!(next_selection(5, 6, "up"), 2);
         assert_eq!(next_selection(0, 6, "left"), 0);
         assert_eq!(next_selection(2, 6, "end"), 5);
     }
     #[test]
     fn shelf_height_is_bounded_and_matches_content() {
         assert_eq!(height(0), 162.0);
-        assert_eq!(height(1), 194.0);
-        assert_eq!(height(4), height(1));
-        assert_eq!(height(5), MAX_HEIGHT);
+        assert_eq!(height(1), 166.0);
+        assert_eq!(height(3), height(1));
+        assert_eq!(height(4), MAX_HEIGHT);
         assert_eq!(height(100), MAX_HEIGHT);
     }
 }

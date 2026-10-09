@@ -1,8 +1,7 @@
+use crate::new_capsule::widgets::style;
 use std::time::Duration;
 
-use gpui::{
-    ColorExt, Context, IntoElement, MotionDurationExt, div, ease_in_out, prelude::*, px, svg,
-};
+use gpui::{Context, IntoElement, MotionDurationExt, div, ease_in_out, prelude::*, px, svg};
 use services::AppState;
 use ui::theme::Theme;
 
@@ -21,8 +20,8 @@ pub fn render_search(
     } else {
         query.to_string()
     };
-    let surface = theme.surface().opacity(0.35);
-    let hover = theme.surface().opacity(0.65);
+    let surface = style::surface(theme);
+    let hover = style::hover(theme);
     div()
         .id("launcher-search")
         .h(px(44.0))
@@ -32,7 +31,7 @@ pub fn render_search(
         .items_center()
         .gap(px(10.0))
         .px(px(12.0))
-        .rounded(px(14.0))
+        .rounded_full()
         .bg(surface)
         .transitions(|transitions| transitions.bg(duration.with_easing(ease_in_out)))
         .hover(move |style| style.bg(hover))

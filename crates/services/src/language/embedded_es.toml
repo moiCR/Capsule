@@ -128,6 +128,8 @@ auth_required = "Autenticación Requerida"
 user_prefix = "Usuario: "
 verifying = "Verificando contraseña..."
 incorrect_password = "Contraseña incorrecta. Reintenta..."
+password_placeholder = "Contraseña"
+timeout = "La autenticación ha expirado. Inténtalo de nuevo."
 
 [emoji]
 title = "EMOJIS"
@@ -290,6 +292,7 @@ copied_hint = "Copiado al portapapeles"
 remove_item = "Quitar del estante"
 
 [dashboard_new]
+display = "Pantalla"
 apply = "Aplicar"
 applied = "Aplicado"
 title = "Dashboard"

@@ -2,7 +2,7 @@ use super::super::DashboardAction as Action;
 use super::{button, empty};
 use super::{error, list};
 use crate::new_capsule::module::dashboard::DashboardModule;
-use gpui::ColorExt;
+use crate::new_capsule::widgets::style;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use ui::theme::Theme;
 pub(super) fn wifi(
@@ -91,7 +91,7 @@ pub(super) fn wifi(
                             .min_h(px(40.0))
                             .p(px(10.0))
                             .rounded(px(10.0))
-                            .bg(theme.surface().opacity(0.5))
+                            .bg(style::surface(theme))
                             .cursor_text()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 window.focus(&this.focus_handle(), cx)

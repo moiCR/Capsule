@@ -1,160 +1,95 @@
 ---
 name: capsule-design
-description: Design and refine Capsule and Orbit's GPUI interface using the project's minimalist style. Use for visual changes, modules, widgets, orbs, satellites, controls, spacing, typography, states, and animations. Ground decisions in existing implementations, theme, and configuration; avoid unnecessary persistent UI or decoration.
+description: Design and refine Capsule's native GPUI modules, widgets, controls and animations with its solid, rounded, theme-aware desktop style. Ground changes in new_capsule and preserve real system interactions.
 ---
 
-# Capsule and Orbit Design
+# Capsule Design
 
-## Direction
+## Design direction
 
-Capsule is a contextual Wayland shell. Its interface should occupy only the space and attention needed for the current task.
+Capsule uses solid rounded surfaces, spacious cards, pill controls and clear typography. Reference mockups establish proportions, alignment and hierarchy. Their colors, branding and example data are not specifications. Apply the active theme and the user's latest layout corrections.
 
-**Fewer simultaneous elements, clear hierarchy, and detail on demand.** Minimalism does not mean making everything tiny, hiding essential actions, or replacing clear labels with ambiguous icons.
+Work in `crates/app/src/new_capsule/`. Legacy `capsule/` code is a reference for behavior that has not migrated. Preserve each module's purpose: the compact Default pill, launcher grid, Clipboard and Shelf galleries, finite appearance carousels, recording strip and focused Polkit form. Do not impose one Dashboard layout on every module.
 
-- Start with the closest existing module or widget. Improve consistency before introducing another visual language.
-- Each visible element must communicate useful state, enable a necessary action, or aid understanding. Omit elements whose removal harms none of these.
-- A design request does not authorize new features, configuration options, panels, or dependencies.
-- Do not turn Capsule Corp. inspiration into themed decoration. Avoid anime motifs, neon, or sci-fi styling unless explicitly requested.
-- These rules guide new changes; they do not authorize redesigning unrelated modules.
+## Before changing the UI
 
-## Before Designing
+- Inspect module state, widgets, theme helpers and a nearby implementation. Use the installed codebase graph and verify relevant coverage; read missed or stale source directly.
+- Reuse actual services and interaction paths. Styling must not replace integrations with placeholders or require dependencies without a concrete reason.
+- For requested design exploration, provide meaningfully different compositions. Recoloring the same layout does not provide a different design.
+- Preserve local edits. Explicit user choices take precedence over examples in this skill.
 
-1. Define the task: what users need to see or do, when the interface appears, and when it is no longer needed.
-2. Consult the project graph and verify coverage and freshness according to repository rules. Read the affected surface's current code and a nearby reference implementation. If the graph is insufficient, inspect files directly and disclose the limitation.
-3. Inspect the container, widget, states, and theme/configuration sources. Do not design from the README alone.
-4. Choose the smallest surface that solves the task using the distinctions below.
-5. Preserve existing structure and gestures unless the requested change affects them. Do not ask users to resolve decisions already established by the code.
+## Theme and surfaces
 
-Paths below are relative to the repository root, not the skill directory. Documented values are observed references, not universal tokens or substitutes for configuration. Verify them before reuse.
+- Use `new_capsule/widgets/style.rs` for opaque background, surface, hover, selected, border, raised and on-accent colors. Reuse the configured font and radius.
+- Keep grouping surfaces opaque; desktop text must not show through ordinary cards.
+- Use foreground for content and muted foreground for metadata. Active controls, selection and slider fill use the theme accent; accent-backed text uses `style::on_accent`.
+- Avoid glass, decorative gradients, glow and blurred panels. The music player's existing blurred artwork is an intentional exception.
+- Differentiate groups through surface tone and spacing. Borders identify selection, focus or a necessary boundary rather than every nested group.
+- Theme previews, wallpapers, album artwork and application-owned tray icons retain their source colors.
 
-## Surface Responsibilities
+## Geometry and hierarchy
 
-### Capsule: Primary Interaction
+- Read each module's constants before choosing dimensions. Adjust groups independently; do not scale the entire interface uniformly.
+- Shared card radii are currently 16px and 12px for inner surfaces. Outer Capsule rounding follows configuration.
+- Keep padding, gaps and columns aligned. Circles suit prominent status icons and playback controls; utility actions can be pills or rounded rectangles.
+- Ellipsize long titles and paths. Wrap and scroll descriptions, authentication messages and notifications inside their own content area.
+- Match module dimensions to actual padding, gaps and child heights. Fixed rows need minimum heights and protection from unintended flex shrinking.
+- Avoid decorative titles, explanatory filler and oversized empty areas.
 
-- Use the existing container to present the active module. Do not draw another framed capsule inside it.
-- Size the interface for the necessary information and controls. A brief action can fit in one row; search needs input and results, not a welcome page.
-- Preserve dimension and corner-radius morphing. Do not force every module into the same large rectangle.
-- Use the launcher as a reference for compact lists and the recording bar for single-row status and controls.
-- Complex modules such as the dashboard may group controls. Their density should not carry over to simple interactions.
+## Dashboard
 
-### Orbit and Orbs: Contextual Presence
+Current references: 560px width, 268px connectivity column, 8px column gap, 260px music column. Height is 562px with tray items and 514px without them. These dimensions do not apply to other modules.
 
-Orbit manages layout, visibility, and motion. Orb widgets render indicators and connect interactions.
+- Keep one Home composition. Connection, calendar, audio and tray details use the existing satellites instead of replacing Home with secondary views.
+- Header: date/time left and actual Settings action right. No Capsule branding, decorative title, time divider or top-right close button.
+- Connectivity: coherent cards with prominent circular icons, real Ethernet/Wi-Fi state, readable labels and muted secondary text. Preserve separate toggles and detail actions; nested actions stop propagation.
+- Music: real rounded artwork background, title and artist without album, pause at the opposite side of the same row. Center the header/progress group vertically and give the header extra horizontal padding. Previous and next sit at opposite ends of the bar. No timestamps, player-selector badge or media satellite.
+- Sound: one 80px section with a 32px track and real volume/output selection. There is no Display section. Paint accent fill as a complete rounded track clipped to the volume fraction, preserving the endpoint shape at low volume. Dragging uses the same bounds. Do not create a shrinking rounded blob or add a second thumb.
+- Notifications: bounded 150px section with natural-height rows, minimum row height and scrolling. Long bodies wrap without clipping; preserve notification actions and dismissal.
+- Tray: actual icons at the bottom with balanced space above/below. Remove the footer and its gap when empty. Preserve application-owned icons and supported interactions.
+- Themes, Wallpapers and Lock remain available through IPC. Do not restore their removed Dashboard shortcuts or a bottom Settings button.
 
-- An orb represents an active state worth quick access, not an installed feature. Do not add a permanent orb for every module.
-- The current pattern shows Shelf when it contains items and Recording while it is not stopped. Capsule allows them in `Default` mode with no active drag target; opening them activates the corresponding module.
-- Preserve this policy unless the task requires changing it. Do not keep orbs around every module as decoration.
-- Keep each orb circular with one symbol or indicator. Add a badge only for operational information, such as Shelf item count.
-- Do not add permanent titles, descriptions, timers, action menus, or legends to orbs. Details belong in the module they open.
-- Reuse `ORB_SIZE` and Orbit geometry. Do not calculate independent positions in each widget or create another manager.
-- Preserve active orbs' lateral stability, gap closing, and continuity when reversing transitions. Do not reorder them on every state update.
-- Respect `interactive` and input regions when changing visibility. Hidden elements must not capture clicks, and transparent window areas must not block desktop input.
-- Preserve specialized interactions, such as dropping files onto Shelf, without extending them to all orbs.
+## Other modules
 
-### Satellites: Supporting Detail
+- Default remains a 250px workspace/clock/status pill with a minimum height of 40px. Preserve workspace spacing, accent states, special workspaces and centered time.
+- Launcher preserves its native grid, real icons, search and keyboard navigation.
+- Clipboard uses a 480px gallery with two columns and 144px cards. Search and tabs sit above the gallery. Two complete rows fit before scrolling; footer hints stay outside the scroll area. Binary images and local image paths show previews; selecting an image copies image data.
+- Shelf preserves real file previews, copying and drag/drop.
+- Themes and Wallpapers remain finite compact carousels with piano motion, rounded preview clipping and explicit apply. Bound wallpaper names inside thumbnails; the current limit is 12 Unicode characters plus an ellipsis. Theme preview backgrounds stay inside rounded selection bounds.
+- Recording remains a compact action/status bar. Closing its view does not silently stop recording. Preserve pending, paused, stopping and error states.
+- Polkit uses a compact 400×212px form: accent lock icon, authentication title and actual user, real message/action, masked password, bounded error area and Cancel/Authenticate. Long messages/errors scroll. Show the error area only when needed; it adds 40px to the module height. Keep normal and pending states compact without reserved empty bands. Real requests open the form automatically; queueing, authority cancellation, retries and completion use the existing authentication service.
+- Satellites retain one panel per side, centered relative to Capsule, with measured height, a maximum and smooth transitions. Do not reintroduce legacy Orbit behavior.
 
-- Distinguish circular status orbs from panels in `satellites/`.
-- Reuse existing satellites and their manager for supporting details that follow this pattern. Do not create a parallel window or popup system.
-- Opening a detail view must not expose unrelated controls. Preserve placement, available-space, and dismissal rules.
+## Interaction, animation and idle behavior
 
-## Visual Language
+- Preserve keyboard navigation, focus, Escape/Enter and essential actions. Do not hide required actions behind hover.
+- Use restrained hover, pressed, selected and disabled states. Do not scale or move every control on hover.
+- Reuse configured animation durations. Interrupted transitions continue from the displayed state; finished animations stop requesting frames.
+- Module resizing and content fades use GPUI next-frame callbacks. Same-size module changes still reveal their content. Capsule opts out of GPUI's inactive-window frame cap so returning to unfocused Default remains smooth; this must not introduce continuous idle rendering.
+- Timer-driven animations use the normalized compositor refresh interval with a defensive 2ms minimum. Do not impose a 16ms floor on high-refresh displays.
+- Rendering is declarative. Perform IO, service creation, task setup, focus changes and Wayland commits outside render. Geometry updates require cached diffs.
+- Give interactive loop elements stable unique IDs. Keep GPUI's event loop outside Tokio `block_on`; D-Bus/socket work runs on the shared Tokio runtime and reaches entities through channels.
+- Polkit is event-driven. Do not add periodic request/result polling, copy passwords to the clipboard or log them. Cancel outstanding authentication when the request expires, is cancelled or the entity closes.
+- Preserve input regions and pass-through outside visible panels. Do not synchronize geometry from idle polling loops.
 
-### Color and Surfaces
+## Implementation references
 
-- Use the existing `Theme` colors according to their meaning: `background()`, `background_alt()`, `surface()`, `foreground()`, `foreground_muted()`, `accent()`, `red()`, and `green()`.
-- Use `background` for the base and `surface` with appropriate opacity for grouping and feedback. Do not assume the theme is always dark.
-- Reserve `accent` for selection, primary actions, active states, or brief feedback. Do not accent every border, icon, and background simultaneously.
-- Use `foreground` for primary text and `foreground_muted` for secondary text. Keep useful content readable.
-- Active controls may use an accent background, as connectivity pills do. Preserve this functional signal.
-- Reuse the container's border and shadow. Build hierarchy through spacing and alignment before adding internal backgrounds, frames, or nested cards.
-- Do not introduce gradients, glow, glassmorphism, extra blur, or arbitrary colors merely to make the design look modern.
-- Current recording widgets contain fixed colors, and the Shelf badge uses fixed white. These are observed exceptions, not a palette to copy. Prefer available semantic colors without inventing theme methods or expanding its schema beyond scope.
-
-### Shape, Scale, and Spacing
-
-- Preserve the existing shape family: adaptive container, pills for compact controls, circles for icon actions, and softly rounded list rows.
-- Respect container parameters and available configuration. Do not hardcode another global radius, font, spacing, or duration inside a widget.
-- Group through alignment, proximity, and whitespace. Add an internal background only when it distinguishes an actual control or functional group.
-- Keep density compact and readable. Do not fill unused space with extra content or shrink interactive areas for a minimalist appearance.
-
-Scale references to verify in code:
-
-| Element | Current reference | Use |
-| --- | --- | --- |
-| Orb | `ORB_SIZE = 26.0`; 13 px icon | Reuse the constant |
-| Recording orb indicator | 8 px dot | Status without extra text |
-| `IconButton` | 24 px control; default 13 px icon | Reusable compact action |
-| Recording bar controls | 26 px control; 12 px icon | Activity-row reference |
-| Launcher row | 12 px radius; 6 px vertical padding | Compact list |
-| Launcher app text | 13 px semibold primary; 11 px secondary | Brief row hierarchy |
-| Launcher list | 4 px gap | Result spacing |
-
-Do not use small badge text sizes for general content or impose these measurements on surfaces with different needs.
-
-### Typography, Icons, and Content
-
-- Inherit the configured font through the theme/container. Geist is the default, not a font to hardcode in every widget.
-- Prefer primary and secondary text levels. Use semibold or bold for focused emphasis, not every label.
-- Reuse existing SVGs and preserve optical scale. Avoid decorative emoji, mixed icon families, or additional icon packages.
-- Avoid headings that repeat what controls or content already explain. A recording bar does not need an additional “Recording” heading.
-- Write short, concrete labels localized through the existing language service. Do not add help paragraphs by default.
-- Preserve ellipsis, height limits, and scrolling where appropriate. Check long titles, paths, translations, and counters without arbitrarily enlarging the entire interface.
-- Keep empty states quiet: a useful sentence and, where helpful, a muted icon. Avoid large illustrations, onboarding, or unrelated feature prompts.
-
-## Interaction and Motion
-
-- Distinguish selection, hover, pressed, and disabled states through restrained surface, border, or contrast changes. Do not move or scale every control on hover.
-- Keep keyboard selection visible and consistent with pointer interaction. Preserve the module's Enter, Escape, focus, and navigation behavior.
-- Do not make essential actions depend solely on hover or a new hidden gesture. Icons need clear meaning and accessible names where supported.
-- Preserve necessary feedback and confirmations. Important states must remain understandable without color alone.
-- Closing a view does not stop its activity. Preserve the distinction between closing the recording bar and stopping recording.
-- Reuse Capsule transitions and Orbit/satellite curves. Read `animation_duration_ms` where used; do not assume every animation shares configuration.
-- Use motion to explain appearance, retraction, or resizing. Avoid independent bounces, persistent pulses, and ornamental animation.
-- Continue interrupted animations from the current visual state. Stop continuous repainting when no ongoing activity requires it.
-
-## GPUI Composition
-
-- Keep rendering declarative. Widgets present state and connect actions; they do not instantiate services or perform blocking work.
-- Extend the relevant module in `crates/app/src/capsule/modules/` and widgets in `crates/app/src/capsule/widgets/`. Do not accumulate all new UI in `capsule.rs`.
-- Reuse controls from `crates/ui/src/components/` where appropriate. Extract shared components for actual reuse, not to wrap every `div()`.
-- Use `AppState` entities and global services. Do not duplicate theme, configuration, or Orbit managers.
-- Follow project rules for background work with Tokio. Older implementations do not justify copying patterns that conflict with those rules.
-- Preserve stable IDs, event propagation, focus, and input regions. Visual changes must not accidentally trigger parent-container actions.
-
-## Implementation References
-
-Read only references relevant to the task:
-
-| Path | What to inspect |
+| Path | Responsibility |
 | --- | --- |
-| `crates/app/src/capsule/capsule.rs` | `sync_orbit_visibility`, `open_orb`, dimensions, configuration, focus, input regions |
-| `crates/app/src/capsule/container/normal.rs` | Parameterized size, radius, font, background, border |
-| `crates/app/src/capsule/orbit.rs` | `ORB_SIZE`, `Layout`, `Motion`, geometry, continuity/visibility tests |
-| `crates/app/src/capsule/widgets/record/orb.rs` | Minimal recording/paused indicator and module access |
-| `crates/app/src/capsule/widgets/shelf/orb.rs` | Icon, counter, drag feedback |
-| `crates/app/src/capsule/widgets/record/bar.rs` | Status, duration, compact actions without extra heading |
-| `crates/app/src/capsule/modules/record.rs` | Width by state/content; closing versus stopping |
-| `crates/app/src/capsule/modules/launcher.rs` | Search/results composition, empty state, keyboard navigation |
-| `crates/app/src/capsule/widgets/launcher/app_item.rs` | Row hierarchy, selection, ellipsis, feedback |
-| `crates/app/src/capsule/widgets/dashboard/quick_settings.rs` | Functional grouping and active pills |
-| `crates/app/src/capsule/satellites/mod.rs` | Supporting panels, lanes, bounds, animation |
-| `crates/ui/src/components/button.rs` | Existing `IconButton` and `TextButton` |
-| `crates/ui/src/theme/mod.rs` | Actual color and font APIs |
+| `crates/app/src/new_capsule/widgets/style.rs` | Semantic opaque palette and controls |
+| `crates/app/src/new_capsule/widgets/dashboard/` | Home, music, sound, notifications and tray |
+| `crates/app/src/new_capsule/widgets/default/` | Compact workspace/clock/status pill |
+| `crates/app/src/new_capsule/widgets/clipboard.rs` | Clipboard gallery and previews |
+| `crates/app/src/new_capsule/widgets/appearance.rs` | Appearance carousels |
+| `crates/app/src/new_capsule/widgets/polkit.rs` | Authentication form |
+| `crates/app/src/new_capsule/module/polkit.rs` | Authentication state, requests and input |
+| `crates/services/src/polkit/mod.rs` | Existing Polkit agent and helpers |
+| `crates/app/src/new_capsule/window_state.rs` | Cached geometry and focus |
+| `crates/app/src/new_capsule/animator.rs` | Size/content transition state |
+| `crates/ui/src/theme/mod.rs` | Existing theme and font APIs |
 
-These references describe specific patterns, not a complete visual audit. If code and this guide diverge, verify the current implementation. Do not invent APIs or force outdated measurements.
+## Verification
 
-## Final Review
+Run formatting, compilation and relevant behavior tests. Check long labels, empty/populated states, clipping, focus, keyboard input, interrupted transitions and both theme modes. Verify Polkit with a real authorization request and cancellation without inventing requests or collecting credentials.
 
-Before completing a design, check:
-
-- Does it solve the task without adding a persistent surface?
-- Is the primary content clear without another title, card, or color?
-- Does each orb remain an indicator/access point rather than a miniature module?
-- Do details appear when needed and disappear without accidentally canceling activities?
-- Are theme, configuration, density, and shared components respected?
-- Is content readable across light/dark themes, long content, and supported scaling?
-- Do keyboard, pointer, and relevant drag interactions work, including rapid opening/closing and multiple orbs?
-- Do transparent areas pass input through, and do hidden elements stop capturing clicks?
-- Has the change avoided unrelated features, configuration, and refactors?
-
-For Rust changes, run `cargo fmt`, relevant tests, and Clippy according to scope and repository rules. Visually verify affected states when the shell can run. Otherwise, disclose that verification was code-only and identify remaining visual checks. A successful build is not visual validation.
+Render the real application when a desktop session is available. Claim visual verification only for states inspected. Measure frame intervals and idle CPU when changing animation scheduling; compilation and screenshots do not establish FPS. Report remaining limitations plainly.

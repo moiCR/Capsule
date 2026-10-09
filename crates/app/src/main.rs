@@ -109,6 +109,10 @@ COMMANDS:
     (no args)           Start Capsule daemon process
     toggle-launcher     Toggle application launcher (alias: launcher)
     toggle-dashboard    Toggle main dashboard panel (alias: dashboard)
+    toggle-themes       Toggle theme selector (aliases: themes, select-theme)
+    toggle-wallpapers   Toggle wallpaper selector (aliases: wallpapers, select-wallpaper)
+    show-themes         Show theme selector
+    show-wallpapers     Show wallpaper selector
     toggle-notification Toggle notification panel (alias: notifications)
     toggle-clipboard    Toggle clipboard history manager (alias: clipboard, clip)
     show-launcher       Show application launcher

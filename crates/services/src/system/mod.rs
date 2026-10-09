@@ -332,10 +332,16 @@ impl SystemService {
         let percent = percent.min(100).max(5);
         let percent_str = format!("{percent}%");
 
-        let _ = Command::new("brightnessctl")
+        let output = Command::new("brightnessctl")
             .args(["set", &percent_str])
-            .status()
-            .await;
+            .output()
+            .await
+            .context("Could not run brightnessctl")?;
+        anyhow::ensure!(
+            output.status.success(),
+            "Could not set brightness: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
 
         self.refresh().await
     }

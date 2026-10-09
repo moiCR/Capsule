@@ -1,8 +1,9 @@
+use crate::new_capsule::widgets::style;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, ColorExt, Context, ElementId, IntoElement, MotionDurationExt, div, ease_in_out,
-    prelude::*, px, svg,
+    AnyElement, Context, ElementId, IntoElement, MotionDurationExt, div, ease_in_out, prelude::*,
+    px, svg,
 };
 use services::Application;
 use ui::theme::Theme;
@@ -32,16 +33,15 @@ fn tile(
         icon,
     } = content;
     let background = if selected {
-        theme.accent().opacity(0.13)
+        theme.accent()
     } else {
-        theme.surface().opacity(0.0)
+        style::surface(theme)
     };
-    let border = if selected {
-        theme.accent().opacity(0.55)
+    let hover = if selected {
+        style::tint(theme.accent(), theme.background(), 0.08)
     } else {
-        theme.surface().opacity(0.0)
+        style::hover(theme)
     };
-    let hover = theme.surface().opacity(0.45);
     div()
         .id(id)
         .flex_1()
@@ -54,16 +54,10 @@ fn tile(
         .justify_center()
         .gap(px(10.0))
         .px(px(8.0))
-        .rounded(px(14.0))
-        .border_1()
-        .border_color(border)
+        .rounded(px(style::CARD_RADIUS))
         .bg(background)
         .cursor_pointer()
-        .transitions(|transitions| {
-            transitions
-                .bg(duration.with_easing(ease_in_out))
-                .border_color(duration.with_easing(ease_in_out))
-        })
+        .transitions(|transitions| transitions.bg(duration.with_easing(ease_in_out)))
         .hover(move |style| style.bg(hover))
         .on_hover(cx.listener(move |this, &hovered, _, cx| {
             if hovered && this.mouse_moved {
@@ -79,7 +73,11 @@ fn tile(
             div()
                 .w_full()
                 .text_size(px(12.0))
-                .text_color(theme.foreground())
+                .text_color(if selected {
+                    style::on_accent(theme)
+                } else {
+                    theme.foreground()
+                })
                 .text_center()
                 .text_ellipsis()
                 .child(label),

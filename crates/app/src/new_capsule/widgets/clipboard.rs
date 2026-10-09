@@ -2,19 +2,27 @@ use crate::new_capsule::module::{
     CapsuleModuleEvent,
     clipboard::{ClipboardModule, ClipboardTab},
 };
+use crate::new_capsule::widgets::style;
 use gpui::{
-    AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out,
-    img, prelude::*, px, svg,
+    AnyElement, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out, img,
+    prelude::*, px, svg,
 };
 use ui::theme::Theme;
 
 pub const WIDTH: f32 = 480.0;
 pub const COLUMNS: usize = 2;
-pub const CARD_HEIGHT: f32 = 132.0;
+pub const CARD_HEIGHT: f32 = 144.0;
 pub const GRID_GAP: f32 = 10.0;
-pub const BASE_HEIGHT: f32 = 134.0;
-pub const MAX_HEIGHT: f32 = 408.0;
-const CARD_WIDTH: f32 = (WIDTH - 32.0 - GRID_GAP) / COLUMNS as f32;
+const PADDING: f32 = 16.0;
+const GAP: f32 = 10.0;
+const HEADER_HEIGHT: f32 = 32.0;
+const SEARCH_HEIGHT: f32 = 40.0;
+const TABS_HEIGHT: f32 = 28.0;
+const FOOTER_HEIGHT: f32 = 18.0;
+pub const BASE_HEIGHT: f32 =
+    PADDING * 2.0 + HEADER_HEIGHT + SEARCH_HEIGHT + TABS_HEIGHT + FOOTER_HEIGHT + GAP * 4.0;
+pub const MAX_HEIGHT: f32 = BASE_HEIGHT + CARD_HEIGHT * 2.0 + GRID_GAP;
+const CARD_WIDTH: f32 = (WIDTH - PADDING * 2.0 - GRID_GAP) / COLUMNS as f32;
 
 #[derive(Clone, Copy)]
 enum ItemAction {
@@ -32,7 +40,7 @@ fn action(
     cx: &mut Context<ClipboardModule>,
     action: ItemAction,
 ) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.surface().opacity(0.6);
+    let hover = style::hover(theme);
     div()
         .id(id)
         .size(px(26.0))
@@ -68,15 +76,26 @@ pub(crate) fn render(
 ) -> gpui::Stateful<gpui::Div> {
     let config = cx.global::<services::AppState>().config.get();
     let duration = std::time::Duration::from_millis(config.ui.animation_duration_ms as u64);
-    let radius = config.ui.cards_round.clamp(0.0, 16.0);
-    let preview_radius = px((radius - 1.0).max(0.0));
-    let hover = theme.surface().opacity(0.5);
+    let preview_radius = px(style::INNER_RADIUS - 2.0);
+    let hover = style::hover(theme);
     let mut header = div()
-        .h(px(28.0))
+        .h(px(HEADER_HEIGHT))
         .flex_shrink_0()
         .flex()
         .items_center()
-        .gap(px(6.0));
+        .gap(px(8.0))
+        .child(
+            div()
+                .text_size(px(19.0))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .child("Portapapeles"),
+        );
+    let mut tabs = div()
+        .h(px(TABS_HEIGHT))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(8.0));
     for (tab, id, label) in [
         (
             ClipboardTab::History,
@@ -90,35 +109,27 @@ pub(crate) fn render(
         ),
     ] {
         let active = module.model.tab == tab;
-        header = header.child(
+        tabs = tabs.child(
             div()
                 .id(id)
-                .h(px(28.0))
+                .h(px(TABS_HEIGHT))
                 .px(px(8.0))
+                .rounded_full()
                 .flex()
-                .flex_col()
-                .justify_center()
-                .relative()
+                .items_center()
                 .cursor_pointer()
+                .bg(if active {
+                    theme.accent()
+                } else {
+                    style::surface(theme)
+                })
                 .text_color(if active {
-                    theme.foreground()
+                    style::on_accent(theme)
                 } else {
                     theme.foreground_muted()
                 })
                 .on_click(cx.listener(move |module, _, _, cx| module.switch_tab(tab, cx)))
-                .child(div().text_size(px(12.0)).child(module.text(label, cx)))
-                .child(
-                    div()
-                        .absolute()
-                        .bottom_0()
-                        .left(px(8.0))
-                        .right(px(8.0))
-                        .h(px(2.0))
-                        .rounded_full()
-                        .bg(theme.accent())
-                        .opacity(if active { 1.0 } else { 0.0 })
-                        .transitions(|t| t.opacity(duration.with_easing(ease_in_out))),
-                ),
+                .child(div().text_size(px(12.0)).child(module.text(label, cx))),
         );
     }
     header = header
@@ -143,6 +154,7 @@ pub(crate) fn render(
                 .items_center()
                 .justify_center()
                 .rounded_full()
+                .bg(style::surface(theme))
                 .cursor_pointer()
                 .hover(move |s| s.bg(hover))
                 .on_click(cx.listener(|_, _, _, cx| cx.emit(CapsuleModuleEvent::Close)))
@@ -159,25 +171,25 @@ pub(crate) fn render(
         module.model.query.clone()
     };
     let search = div()
-        .h(px(32.0))
+        .h(px(SEARCH_HEIGHT))
         .flex_shrink_0()
-        .px(px(10.0))
+        .px(px(12.0))
         .flex()
         .items_center()
         .gap(px(8.0))
-        .rounded(px(10.0))
-        .bg(theme.surface().opacity(0.22))
+        .rounded_full()
+        .bg(style::surface(theme))
         .child(
             svg()
                 .path("search.svg")
-                .size(px(13.0))
+                .size(px(14.0))
                 .text_color(theme.foreground_muted()),
         )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .text_size(px(12.0))
+                .text_size(px(13.0))
                 .text_ellipsis()
                 .text_color(if module.model.query.is_empty() {
                     theme.foreground_muted()
@@ -220,6 +232,7 @@ pub(crate) fn render(
             .id(("clipboard-gallery-row", row_index))
             .w_full()
             .h(px(CARD_HEIGHT))
+            .min_h(px(CARD_HEIGHT))
             .flex_shrink_0()
             .flex()
             .justify_center()
@@ -237,8 +250,8 @@ pub(crate) fn render(
                             .flex_col()
                             .child(
                                 div()
-                                    .w(px(CARD_WIDTH - 2.0))
-                                    .h(px(96.0))
+                                    .w(px(CARD_WIDTH - 4.0))
+                                    .h(px(104.0))
                                     .flex_shrink_0()
                                     .rounded_tl(preview_radius)
                                     .rounded_tr(preview_radius)
@@ -249,9 +262,9 @@ pub(crate) fn render(
                                     .when_some(module.images.get(&item.id), |s, image| {
                                         s.child(
                                             img(image.clone())
-                                                .w(px(CARD_WIDTH - 2.0))
-                                                .h(px(96.0))
-                                                .aspect_ratio((CARD_WIDTH - 2.0) / 96.0)
+                                                .w(px(CARD_WIDTH - 4.0))
+                                                .h(px(104.0))
+                                                .aspect_ratio((CARD_WIDTH - 4.0) / 104.0)
                                                 .rounded_tl(preview_radius)
                                                 .rounded_tr(preview_radius)
                                                 .object_fit(gpui::ObjectFit::Cover),
@@ -286,6 +299,7 @@ pub(crate) fn render(
                                             .flex_1()
                                             .min_w_0()
                                             .text_size(px(10.0))
+                                            .whitespace_nowrap()
                                             .text_ellipsis()
                                             .child(if item.preview.is_empty() {
                                                 module.text("clipboard.image_item", cx)
@@ -337,8 +351,8 @@ pub(crate) fn render(
                                     .min_h_0()
                                     .w_full()
                                     .overflow_hidden()
-                                    .text_size(px(12.0))
-                                    .line_height(px(18.0))
+                                    .text_size(px(13.0))
+                                    .line_height(px(19.0))
                                     .child(if item.preview.is_empty() {
                                         module.text("clipboard.empty_item", cx)
                                     } else {
@@ -378,6 +392,7 @@ pub(crate) fn render(
                                         .flex_1()
                                         .min_w_0()
                                         .text_size(px(11.0))
+                                        .whitespace_nowrap()
                                         .text_ellipsis()
                                         .child(snippet.title.clone()),
                                 )
@@ -397,8 +412,8 @@ pub(crate) fn render(
                                 .min_h_0()
                                 .w_full()
                                 .overflow_hidden()
-                                .text_size(px(12.0))
-                                .line_height(px(18.0))
+                                .text_size(px(13.0))
+                                .line_height(px(19.0))
                                 .child(snippet.content.clone()),
                         );
                     (
@@ -412,19 +427,20 @@ pub(crate) fn render(
                     .id(id)
                     .w(px(CARD_WIDTH))
                     .h(px(CARD_HEIGHT))
+                    .min_h(px(CARD_HEIGHT))
                     .flex_shrink_0()
-                    .rounded(px(radius))
+                    .rounded(px(style::INNER_RADIUS))
                     .overflow_hidden()
-                    .border_1()
+                    .border_2()
                     .border_color(if selected {
-                        theme.accent().opacity(0.8)
+                        theme.accent()
                     } else {
-                        theme.surface().opacity(0.4)
+                        style::border(theme)
                     })
                     .bg(if selected {
-                        theme.accent().opacity(0.08)
+                        style::selected(theme)
                     } else {
-                        theme.surface().opacity(0.18)
+                        style::surface(theme)
                     })
                     .transitions(|t| t.bg(duration.with_easing(ease_in_out)))
                     .when(!module.busy, |s| {
@@ -452,18 +468,19 @@ pub(crate) fn render(
     div()
         .id("clipboard-module")
         .size_full()
-        .p(px(16.0))
+        .p(px(PADDING))
         .flex()
         .flex_col()
-        .gap(px(8.0))
+        .gap(px(GAP))
         .font_family(theme.font_family())
         .text_color(theme.foreground())
         .child(header)
         .child(search)
+        .child(tabs)
         .child(gallery)
         .child(
             div()
-                .h(px(18.0))
+                .h(px(FOOTER_HEIGHT))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
@@ -489,4 +506,22 @@ pub(crate) fn render(
                         .child(module.model.filtered.len().to_string()),
                 ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_full_rows_fit_below_the_header_search_tabs_and_above_the_footer() {
+        let controls =
+            PADDING * 2.0 + HEADER_HEIGHT + SEARCH_HEIGHT + TABS_HEIGHT + FOOTER_HEIGHT + GAP * 4.0;
+        assert_eq!(controls, BASE_HEIGHT);
+        assert_eq!(MAX_HEIGHT - controls, CARD_HEIGHT * 2.0 + GRID_GAP);
+        assert_eq!(
+            CARD_WIDTH * COLUMNS as f32 + GRID_GAP + PADDING * 2.0,
+            WIDTH
+        );
+        assert_eq!(CARD_HEIGHT - 4.0 - 104.0, 36.0);
+    }
 }

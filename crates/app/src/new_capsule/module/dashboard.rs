@@ -3,7 +3,7 @@ mod input;
 mod navigation;
 
 use super::{CapsuleModule, CapsuleModuleEvent};
-use crate::new_capsule::widgets::dashboard::{self as widgets, DashboardView};
+use crate::new_capsule::widgets::dashboard::{self as widgets};
 use chrono::Local;
 use gpui::{
     Context, EventEmitter, FocusHandle, Pixels, Render, Size, Subscription, Task, Window, div,
@@ -67,8 +67,11 @@ pub(crate) struct DashboardModule {
     pub player_bus: Option<String>,
     pub pending: bool,
     pub volume_bounds: DimensionTracker,
+    pub brightness_bounds: DimensionTracker,
+    pub brightness_preview: Option<u32>,
     pub seek_bounds: DimensionTracker,
     dragging_volume: bool,
+    dragging_brightness: bool,
     dragging_seek: bool,
     focus: FocusHandle,
     _refresh: Option<Task<()>>,
@@ -85,15 +88,18 @@ impl DashboardModule {
             wave_phase: 0.0,
             snapshot_at: Instant::now(),
             active: false,
-            container_size: widgets::module_size(),
+            container_size: widgets::module_size(!snapshot.tray.is_empty()),
             _media_animation: None,
             player_bus: retain_player(None, &snapshot.players),
             snapshot,
             navigation: Navigation::default(),
             pending: false,
             volume_bounds: DimensionTracker::new(),
+            brightness_bounds: DimensionTracker::new(),
+            brightness_preview: None,
             seek_bounds: DimensionTracker::new(),
             dragging_volume: false,
+            dragging_brightness: false,
             dragging_seek: false,
             focus: cx.focus_handle(),
             _refresh: None,
@@ -134,6 +140,7 @@ impl DashboardModule {
     fn refresh_snapshot(&mut self, cx: &mut Context<Self>) {
         let next = Snapshot::read(cx);
         if next != self.snapshot {
+            let size_changed = next.tray.is_empty() != self.snapshot.tray.is_empty();
             self.player_bus = retain_player(self.player_bus.as_deref(), &next.players);
             if self
                 .navigation
@@ -146,6 +153,11 @@ impl DashboardModule {
             }
             self.snapshot = next;
             self.snapshot_at = Instant::now();
+            if size_changed {
+                cx.emit(CapsuleModuleEvent::SizeChanged(
+                    super::CapsuleModuleId::Dashboard,
+                ));
+            }
             cx.notify();
         }
         if !self.player().is_some_and(|player| player.is_playing) {
@@ -188,25 +200,6 @@ impl DashboardModule {
         if self.satellites == visuals {
             return;
         }
-        if let Some(next) = visuals.iter().rev().find(|next| {
-            !self
-                .satellites
-                .iter()
-                .any(|previous| previous.id == next.id)
-        }) {
-            self.navigation.view = next.id.view();
-        } else if let Some(current) = self.navigation.view.satellite_id()
-            && !visuals
-                .iter()
-                .any(|visual| visual.id == current && visual.open)
-        {
-            self.navigation.view = visuals
-                .iter()
-                .rev()
-                .find(|visual| visual.open)
-                .map(|visual| visual.id.view())
-                .unwrap_or(DashboardView::Home);
-        }
         self.satellite_heights
             .retain(|(id, _)| visuals.iter().any(|visual| &visual.id == id));
         self.satellites = visuals;
@@ -235,8 +228,11 @@ impl DashboardModule {
         self.focus.clone()
     }
     pub fn reset(&mut self, cx: &mut Context<Self>) {
-        self.navigation.open(DashboardView::Home);
+        self.navigation.reset();
+        self.refresh_snapshot(cx);
         self.dragging_volume = false;
+        self.dragging_brightness = false;
+        self.brightness_preview = None;
         self.dragging_seek = false;
         cx.notify();
     }
@@ -258,7 +254,18 @@ fn format_date(state: &AppState) -> String {
         .get(now.month0() as usize)
         .cloned()
         .unwrap_or_else(|| now.month().to_string());
-    format!("{} {} · {}", now.day(), month, now.format("%H:%M"))
+    let days = state.language.get_list("datetime.days");
+    let weekday = days
+        .get(now.weekday().num_days_from_monday() as usize)
+        .cloned()
+        .unwrap_or_else(|| now.weekday().to_string());
+    let date = state
+        .language
+        .get("datetime.header_date_format")
+        .replace("{weekday}", &weekday)
+        .replace("{day}", &now.day().to_string())
+        .replace("{month}", &month);
+    format!("{date} · {}", now.format("%H:%M"))
 }
 
 pub(crate) fn retain_player(current: Option<&str>, players: &[MediaTrack]) -> Option<String> {
@@ -275,7 +282,7 @@ pub(crate) fn slider_fraction(x: f32, left: f32, width: f32) -> Option<f32> {
 impl EventEmitter<CapsuleModuleEvent> for DashboardModule {}
 impl CapsuleModule for DashboardModule {
     fn size(&self) -> Size<Pixels> {
-        widgets::module_size()
+        widgets::module_size(!self.snapshot.tray.is_empty())
     }
 }
 impl Render for DashboardModule {
@@ -289,11 +296,15 @@ impl Render for DashboardModule {
                 if this.dragging_volume {
                     this.volume_at(event.position.x.into(), cx);
                 }
+                if this.dragging_brightness {
+                    this.brightness_at(event.position.x.into(), cx);
+                }
             }))
             .on_mouse_up(
                 gpui::MouseButton::Left,
                 cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
                     this.dragging_volume = false;
+                    this.finish_brightness(cx);
                     if this.dragging_seek {
                         this.dragging_seek = false;
                         this.seek_at(event.position.x.into(), cx);
@@ -304,6 +315,7 @@ impl Render for DashboardModule {
                 gpui::MouseButton::Left,
                 cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
                     this.dragging_volume = false;
+                    this.finish_brightness(cx);
                     if this.dragging_seek {
                         this.dragging_seek = false;
                         this.seek_at(event.position.x.into(), cx);
@@ -311,26 +323,15 @@ impl Render for DashboardModule {
                 }),
             )
             .flex()
-            .flex_col()
             .w(self.size().width)
             .h(self.size().height)
-            .p(px(widgets::PADDING))
-            .gap(px(widgets::GAP))
             .rounded(px(cx.global::<AppState>().config.get().ui.capsule_round))
             .overflow_hidden()
-            .bg(theme.background())
+            .bg(crate::new_capsule::widgets::style::background(&theme))
+            .font_family(theme.font_family())
             .text_size(px(14.0))
             .text_color(theme.foreground())
-            .child(widgets::header::render(self, &theme, cx))
-            .child(
-                if self.navigation.view == DashboardView::Home
-                    || self.navigation.view.satellite_id().is_some()
-                {
-                    widgets::home::render(self, &theme, cx)
-                } else {
-                    widgets::details::render(self, &theme, cx)
-                },
-            );
+            .child(widgets::home::render(self, &theme, cx));
         let mut root = div()
             .relative()
             .w(self.container_size.width)

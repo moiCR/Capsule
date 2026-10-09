@@ -39,7 +39,7 @@ impl DefaultModule {
         let mut changes = compositor.on_change_workspace();
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
         let workspace_service_task = services::spawn_tokio(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut last_current = compositor.get_workspace();
             let mut last_workspaces = compositor.get_workspaces();
@@ -110,9 +110,7 @@ impl DefaultModule {
 
         let refresh_task = cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(250))
-                    .await;
+                cx.background_executor().timer(Duration::from_secs(1)).await;
                 if this
                     .update(cx, |module: &mut Self, cx| {
                         let state = cx.global::<AppState>();

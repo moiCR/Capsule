@@ -1,4 +1,5 @@
-use gpui::{ColorExt, IntoElement, div, prelude::*, px};
+use crate::new_capsule::widgets::style;
+use gpui::{IntoElement, div, prelude::*, px};
 use ui::theme::Theme;
 
 use crate::new_capsule::satellite::layout::{SatelliteLayout, Side};
@@ -34,9 +35,7 @@ pub(crate) fn render(
         .rounded(radius)
         .opacity(progress.clamp(0.0, 1.0))
         .overflow_hidden()
-        .bg(theme.background())
-        .border_1()
-        .border_color(theme.surface().opacity(0.45))
+        .bg(style::background(theme))
         .child(body)
         .when(!open || progress < 1.0, |s| {
             s.child(div().absolute().inset_0().occlude())
@@ -209,7 +208,7 @@ mod tests {
                 "content height at {progress}: {height}"
             );
             assert!(
-                (visible_width + 2.0 - 300.0).abs() < 0.5,
+                (visible_width - 300.0).abs() < 0.5,
                 "surface width at {progress}: {visible_width}"
             );
         }

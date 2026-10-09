@@ -1,4 +1,7 @@
+use std::path::PathBuf;
+
 use crate::new_capsule::module::appearance::{AppearanceKind, AppearanceModule};
+use crate::new_capsule::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, StyledImage, div, img, prelude::*, px, svg,
 };
@@ -40,7 +43,7 @@ fn control(
     cx: &mut Context<AppearanceModule>,
     direction: Option<i32>,
 ) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.surface().opacity(0.5);
+    let hover = style::hover(theme);
     div()
         .id(id)
         .size(px(28.0))
@@ -69,6 +72,149 @@ fn control(
         )
 }
 
+fn render_theme_preview(item_theme: &Theme) -> AnyElement {
+    div()
+        .size_full()
+        .rounded(px(style::CARD_RADIUS - 2.0))
+        .overflow_hidden()
+        .p(px(8.0))
+        .bg(item_theme.background())
+        .flex()
+        .gap(px(6.0))
+        .child(
+            div()
+                .w(px(20.0))
+                .h_full()
+                .rounded(px(5.0))
+                .bg(item_theme.surface())
+                .p(px(3.0))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(3.0))
+                .child(div().size(px(5.0)).rounded_full().bg(item_theme.accent()))
+                .child(
+                    div()
+                        .size(px(4.0))
+                        .rounded_full()
+                        .bg(item_theme.foreground_muted().opacity(0.4)),
+                )
+                .child(
+                    div()
+                        .size(px(4.0))
+                        .rounded_full()
+                        .bg(item_theme.foreground_muted().opacity(0.4)),
+                )
+                .child(
+                    div()
+                        .size(px(4.0))
+                        .rounded_full()
+                        .bg(item_theme.foreground_muted().opacity(0.4)),
+                ),
+        )
+        .child(
+            div()
+                .flex_1()
+                .h_full()
+                .flex()
+                .flex_col()
+                .gap(px(4.0))
+                .child(
+                    div()
+                        .w_full()
+                        .h(px(12.0))
+                        .rounded(px(3.0))
+                        .bg(item_theme.surface())
+                        .flex()
+                        .items_center()
+                        .px(px(4.0))
+                        .child(
+                            div()
+                                .w(px(22.0))
+                                .h(px(3.0))
+                                .rounded_full()
+                                .bg(item_theme.accent().opacity(0.8)),
+                        ),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .h(px(12.0))
+                        .rounded(px(3.0))
+                        .bg(item_theme.surface())
+                        .flex()
+                        .items_center()
+                        .px(px(4.0))
+                        .child(
+                            div()
+                                .w(px(30.0))
+                                .h(px(3.0))
+                                .rounded_full()
+                                .bg(item_theme.foreground_muted().opacity(0.4)),
+                        ),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .flex_1()
+                        .rounded(px(5.0))
+                        .bg(item_theme.surface())
+                        .p(px(4.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(5.0))
+                        .child(div().size(px(22.0)).rounded_full().bg(item_theme.accent()))
+                        .child(
+                            div()
+                                .flex_1()
+                                .flex()
+                                .flex_col()
+                                .gap(px(3.0))
+                                .child(
+                                    div()
+                                        .w_full()
+                                        .h(px(4.0))
+                                        .rounded_full()
+                                        .bg(item_theme.foreground().opacity(0.8)),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(24.0))
+                                        .h(px(3.0))
+                                        .rounded_full()
+                                        .bg(item_theme.foreground_muted().opacity(0.4)),
+                                ),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
+fn render_wallpaper_preview(thumbnail: Option<&PathBuf>, theme: &Theme) -> AnyElement {
+    if let Some(path) = thumbnail {
+        img(path.clone())
+            .size_full()
+            .rounded(px(style::CARD_RADIUS))
+            .object_fit(gpui::ObjectFit::Cover)
+            .into_any_element()
+    } else {
+        div()
+            .size_full()
+            .rounded(px(style::CARD_RADIUS))
+            .bg(theme.surface())
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                svg()
+                    .path("image.svg")
+                    .size(px(28.0))
+                    .text_color(theme.foreground_muted()),
+            )
+            .into_any_element()
+    }
+}
+
 pub(crate) fn render(
     module: &AppearanceModule,
     theme: &Theme,
@@ -77,24 +223,15 @@ pub(crate) fn render(
     let count = module.count();
     let selected = module.carousel().selected;
     let position = module.carousel().position;
-    let radius = cx
-        .global::<services::AppState>()
-        .config
-        .get()
-        .ui
-        .cards_round;
-    let title = module.text(
-        match module.kind {
-            AppearanceKind::Themes => "dashboard_new.themes",
-            AppearanceKind::Wallpapers => "dashboard_new.wallpapers",
-        },
-        cx,
-    );
+    let title = match module.kind {
+        AppearanceKind::Themes => "Temas",
+        AppearanceKind::Wallpapers => "Fondos",
+    };
     let mut carousel = div()
         .id("appearance-carousel")
         .relative()
         .w_full()
-        .h(px(128.0))
+        .h(px(140.0))
         .flex_shrink_0()
         .overflow_hidden();
     if count == 0 {
@@ -119,129 +256,115 @@ pub(crate) fn render(
             continue;
         }
         let props = geometry(relative, module.carousel().piano_offset(index));
-        let preview_width = (props.width - 2.0).max(1.0);
-        let preview_height = (props.height - 28.0).max(1.0);
-        let preview_radius = px((radius.min(16.0) - 1.0).max(0.0));
         let (id, name, preview, applied): (String, String, AnyElement, bool) = match module.kind {
             AppearanceKind::Themes => {
                 let item = &module.themes[index];
-                let colors = [
-                    item.theme.red(),
-                    item.theme.green(),
-                    item.theme.accent(),
-                    item.theme.foreground(),
-                    item.theme.foreground_muted(),
-                    item.theme.surface(),
-                ];
-                let preview =
-                    div()
-                        .w(px(preview_width))
-                        .h(px(preview_height))
-                        .flex_shrink_0()
-                        .rounded_tl(preview_radius)
-                        .rounded_tr(preview_radius)
-                        .overflow_hidden()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .bg(item.theme.background())
-                        .child(div().flex().gap(px(4.0)).children(colors.into_iter().map(
-                            |color| {
-                                div()
-                                    .size(px(if relative.abs() < 0.5 { 10.0 } else { 8.0 }))
-                                    .rounded_full()
-                                    .bg(color)
-                            },
-                        )));
                 (
                     format!("appearance-theme-{}", item.path.display()),
                     item.name.clone(),
-                    preview.into_any_element(),
+                    render_theme_preview(&item.theme),
                     item.theme == *theme,
                 )
             }
             AppearanceKind::Wallpapers => {
                 let item = &module.wallpapers[index];
-                let preview = div()
-                    .relative()
-                    .w(px(preview_width))
-                    .h(px(preview_height))
-                    .flex_shrink_0()
-                    .rounded_tl(preview_radius)
-                    .rounded_tr(preview_radius)
-                    .overflow_hidden()
-                    .bg(theme.surface())
-                    .when_some(item.thumbnail.as_ref(), |s, path| {
-                        s.child(
-                            img(path.clone())
-                                .w(px(preview_width))
-                                .h(px(preview_height))
-                                .aspect_ratio(preview_width / preview_height)
-                                .rounded_tl(preview_radius)
-                                .rounded_tr(preview_radius)
-                                .object_fit(gpui::ObjectFit::Cover),
-                        )
-                    });
                 (
                     format!("appearance-wallpaper-{}", item.path.display()),
                     item.name.clone(),
-                    preview.into_any_element(),
+                    render_wallpaper_preview(item.thumbnail.as_ref(), theme),
                     module.current_wallpaper.as_ref() == Some(&item.path),
                 )
             }
         };
-        let hover = theme.surface().opacity(0.6);
-        carousel = carousel.child(
-            div()
-                .id(id)
-                .absolute()
-                .left(px(props.left))
-                .top(px(props.top))
-                .w(px(props.width))
-                .h(px(props.height))
-                .flex()
-                .flex_col()
-                .rounded(px(radius.min(16.0)))
-                .overflow_hidden()
-                .bg(theme.surface().opacity(0.35))
-                .border_1()
-                .border_color(if index == selected {
-                    theme.accent()
-                } else {
-                    theme.surface().opacity(0.7)
-                })
-                .opacity(props.opacity)
-                .cursor_pointer()
-                .hover(move |s| s.bg(hover))
-                .on_click(cx.listener(move |module, _, _, cx| module.choose(index, cx)))
-                .child(preview)
-                .child(
-                    div()
-                        .h(px(26.0))
-                        .flex_shrink_0()
-                        .px(px(8.0))
-                        .flex()
-                        .items_center()
-                        .gap(px(4.0))
-                        .child(
+        let name = if module.kind == AppearanceKind::Wallpapers {
+            let mut characters = name.chars();
+            let mut label: String = characters.by_ref().take(12).collect();
+            if characters.next().is_some() {
+                label.push_str("...");
+            }
+            label
+        } else {
+            name
+        };
+        carousel = carousel
+            .child(
+                div()
+                    .id(id)
+                    .absolute()
+                    .left(px(props.left))
+                    .top(px(props.top))
+                    .w(px(props.width))
+                    .h(px(props.height))
+                    .rounded(px(style::CARD_RADIUS))
+                    .overflow_hidden()
+                    .bg(style::surface(theme))
+                    .border_2()
+                    .border_color(if index == selected {
+                        theme.accent()
+                    } else {
+                        theme.foreground().opacity(0.1)
+                    })
+                    .opacity(props.opacity)
+                    .cursor_pointer()
+                    .hover(move |s| s.opacity(1.0))
+                    .on_click(cx.listener(move |module, _, _, cx| module.choose(index, cx)))
+                    .child(preview)
+                    .when(applied, |s| {
+                        s.child(
                             div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_ellipsis()
-                                .text_size(px(11.0))
-                                .child(name),
+                                .absolute()
+                                .top(px(8.0))
+                                .right(px(8.0))
+                                .child(style::check_badge(18.0, theme)),
                         )
-                        .when(applied, |s| {
-                            s.child(
-                                div()
-                                    .text_size(px(12.0))
-                                    .text_color(theme.accent())
-                                    .child("✓"),
-                            )
-                        }),
-                ),
-        );
+                    }),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(props.left))
+                    .top(px(props.top + props.height + 6.0))
+                    .w(px(props.width))
+                    .h(px(20.0))
+                    .overflow_hidden()
+                    .text_center()
+                    .text_ellipsis()
+                    .text_size(if index == selected {
+                        px(13.0)
+                    } else {
+                        px(11.0)
+                    })
+                    .font_weight(if index == selected {
+                        gpui::FontWeight::MEDIUM
+                    } else {
+                        gpui::FontWeight::NORMAL
+                    })
+                    .text_color(if index == selected {
+                        theme.foreground()
+                    } else {
+                        theme.foreground_muted()
+                    })
+                    .opacity(props.opacity)
+                    .child(name),
+            );
     }
+    carousel = carousel
+        .child(div().absolute().left(px(8.0)).top(px(50.0)).child(control(
+            "appearance-prev",
+            "chevron-left.svg",
+            selected > 0,
+            theme,
+            cx,
+            Some(-1),
+        )))
+        .child(div().absolute().right(px(8.0)).top(px(50.0)).child(control(
+            "appearance-next",
+            "chevron-right.svg",
+            selected + 1 < count,
+            theme,
+            cx,
+            Some(1),
+        )));
     carousel = carousel.when_some(module.error.as_ref(), |s, error| {
         s.child(
             div()
@@ -266,14 +389,13 @@ pub(crate) fn render(
             .is_some_and(|item| module.current_wallpaper.as_ref() == Some(&item.path)),
     };
     let enabled = count > 0 && !module.pending && !applied;
-    let hover = theme.surface().opacity(0.6);
     div()
         .id("appearance-module")
         .size_full()
-        .p(px(16.0))
+        .p(px(14.0))
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .justify_between()
         .font_family(theme.font_family())
         .text_color(theme.foreground())
         .child(
@@ -282,91 +404,79 @@ pub(crate) fn render(
                 .flex_shrink_0()
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .justify_between()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(
+                            svg()
+                                .path(match module.kind {
+                                    AppearanceKind::Themes => "palette_2.svg",
+                                    AppearanceKind::Wallpapers => "image.svg",
+                                })
+                                .size(px(18.0))
+                                .text_color(theme.foreground()),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(14.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.foreground())
+                                .child(title),
+                        ),
+                )
                 .child(control(
                     "appearance-back",
-                    "chevron-left.svg",
+                    "close.svg",
                     true,
                     theme,
                     cx,
                     None,
-                ))
-                .child(div().flex_1().text_size(px(13.0)).child(title))
+                )),
+        )
+        .child(carousel)
+        .child(
+            div()
+                .h(px(32.0))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(div().w(px(80.0)))
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .flex_1()
+                        .text_center()
+                        .text_size(px(12.0))
                         .text_color(theme.foreground_muted())
                         .child(format!(
                             "{} / {}",
                             if count == 0 { 0 } else { selected + 1 },
                             count
                         )),
-                ),
-        )
-        .child(carousel)
-        .child(
-            div()
-                .h(px(28.0))
-                .flex_shrink_0()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(control(
-                    "appearance-prev",
-                    "chevron-left.svg",
-                    selected > 0,
-                    theme,
-                    cx,
-                    Some(-1),
-                ))
-                .child(
-                    div()
-                        .id("appearance-apply")
-                        .h(px(28.0))
-                        .px(px(12.0))
-                        .rounded(px(8.0))
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .bg(theme.accent().opacity(0.15))
-                        .opacity(if enabled || applied { 1.0 } else { 0.4 })
-                        .when(enabled, |s| {
-                            s.cursor_pointer()
-                                .hover(move |s| s.bg(hover))
-                                .on_click(cx.listener(|module, _, _, cx| module.apply(cx)))
-                        })
-                        .child(
-                            svg()
-                                .path(if module.pending {
-                                    "rotate-ccw.svg"
-                                } else {
-                                    match module.kind {
-                                        AppearanceKind::Themes => "palette_2.svg",
-                                        AppearanceKind::Wallpapers => "wallpaper.svg",
-                                    }
-                                })
-                                .size(px(13.0))
-                                .text_color(theme.accent()),
-                        )
-                        .child(div().text_size(px(11.0)).child(module.text(
-                            if module.pending {
-                                "dashboard_new.pending"
-                            } else if applied {
-                                "dashboard_new.applied"
-                            } else {
-                                "dashboard_new.apply"
-                            },
-                            cx,
-                        ))),
                 )
-                .child(control(
-                    "appearance-next",
-                    "chevron-right.svg",
-                    selected + 1 < count,
-                    theme,
-                    cx,
-                    Some(1),
-                )),
+                .child(
+                    div().w(px(80.0)).flex().justify_end().child(
+                        style::primary_button(
+                            "appearance-apply",
+                            module.text(
+                                if module.pending {
+                                    "dashboard_new.pending"
+                                } else if applied {
+                                    "dashboard_new.applied"
+                                } else {
+                                    "dashboard_new.apply"
+                                },
+                                cx,
+                            ),
+                            enabled,
+                            theme,
+                        )
+                        .on_click(cx.listener(|module, _, _, cx| module.apply(cx))),
+                    ),
+                ),
         )
 }
 

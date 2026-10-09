@@ -1,11 +1,12 @@
+use crate::new_capsule::widgets::style;
 use chrono::{Datelike, Local, NaiveDate};
-use gpui::{ColorExt, Context, IntoElement, div, prelude::*, px, svg};
+use gpui::{Context, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
 use crate::new_capsule::module::dashboard::DashboardModule;
 
 pub const WIDTH: f32 = 300.0;
-pub const HEIGHT: f32 = 350.0;
+pub const HEIGHT: f32 = 300.0;
 
 fn control(
     id: &'static str,
@@ -93,10 +94,10 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(px(8.0))
-                    .when(selected, |s| s.bg(theme.accent().opacity(0.16)))
+                    .rounded_full()
+                    .when(selected, |s| s.bg(theme.accent()))
                     .text_color(if selected {
-                        theme.accent()
+                        style::on_accent(&theme)
                     } else {
                         theme.foreground()
                     })
@@ -122,21 +123,15 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                 .flex_shrink_0()
                 .flex()
                 .items_center()
-                .gap(px(4.0))
-                .child(control(
-                    "satellite-calendar-prev",
-                    "chevron-left.svg",
-                    Some(-1),
-                    &theme,
-                    cx,
-                ))
+                .justify_between()
                 .child(
                     div()
                         .id("satellite-calendar-today")
                         .flex_1()
                         .min_w_0()
-                        .text_center()
-                        .text_ellipsis()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
                         .cursor_pointer()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.dispatch(
@@ -144,22 +139,47 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                                 cx,
                             )
                         }))
-                        .child(format!("{month_name} {year}")),
+                        .child(
+                            svg()
+                                .path("calendar-days.svg")
+                                .size(px(16.0))
+                                .text_color(theme.accent()),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_ellipsis()
+                                .child(format!("{month_name} {year}")),
+                        ),
                 )
-                .child(control(
-                    "satellite-calendar-next",
-                    "chevron-right.svg",
-                    Some(1),
-                    &theme,
-                    cx,
-                ))
-                .child(control(
-                    "satellite-calendar-close",
-                    "close.svg",
-                    None,
-                    &theme,
-                    cx,
-                )),
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .child(control(
+                            "satellite-calendar-prev",
+                            "chevron-left.svg",
+                            Some(-1),
+                            &theme,
+                            cx,
+                        ))
+                        .child(control(
+                            "satellite-calendar-next",
+                            "chevron-right.svg",
+                            Some(1),
+                            &theme,
+                            cx,
+                        ))
+                        .child(control(
+                            "satellite-calendar-close",
+                            "close.svg",
+                            None,
+                            &theme,
+                            cx,
+                        )),
+                ),
         )
         .child(labels)
         .child(grid)

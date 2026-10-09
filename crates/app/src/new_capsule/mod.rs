@@ -24,7 +24,7 @@ pub struct Capsule {
     animator: Animator,
     satellite: satellite::Satellite,
     satellite_animation_task: Option<Task<()>>,
-    animation_task: Option<Task<()>>,
+    animation_frame_pending: bool,
     _subscriptions: Vec<Subscription>,
     _ipc_task: Task<()>,
 }
@@ -59,9 +59,16 @@ impl Render for Capsule {
                 |s| s.overflow_hidden(),
             )
             .rounded(gpui::px(self.window_state.radius))
-            .bg(theme.background())
+            .bg(widgets::style::background(&theme))
+            .font_family(theme.font_family())
             .text_color(theme.foreground())
-            .child(self.module_manager.current());
+            .child(
+                div()
+                    .id("capsule-module-content")
+                    .size_full()
+                    .opacity(self.animator.content_opacity())
+                    .child(self.module_manager.current()),
+            );
         let root = div()
             .relative()
             .size_full()

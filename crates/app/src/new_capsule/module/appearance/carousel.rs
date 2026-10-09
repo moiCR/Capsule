@@ -91,6 +91,28 @@ mod tests {
         assert_eq!(carousel.selected, 0);
     }
     #[test]
+    fn navigation_advances_on_each_monitor_frame_without_skipping_to_the_end() {
+        let now = Instant::now();
+        let duration = Duration::from_millis(350);
+        for rate in [60, 144, 240] {
+            let interval = Duration::from_secs_f64(1.0 / rate as f64);
+            let mut carousel = Carousel::default();
+            carousel.navigate(1, 3, duration, now);
+            let mut elapsed = interval;
+            let mut previous = 0.0;
+            while elapsed < duration {
+                assert!(carousel.advance(now + elapsed));
+                assert!(carousel.position > previous);
+                assert!(carousel.position <= 1.0);
+                previous = carousel.position;
+                elapsed += interval;
+            }
+            assert!(!carousel.advance(now + duration + Duration::from_millis(72)));
+            assert_eq!(carousel.position, 1.0);
+        }
+    }
+
+    #[test]
     fn interrupted_piano_navigation_preserves_position_and_stops() {
         let now = Instant::now();
         let duration = Duration::from_millis(220);

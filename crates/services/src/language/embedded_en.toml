@@ -128,6 +128,8 @@ auth_required = "Authentication Required"
 user_prefix = "User: "
 verifying = "Verifying password..."
 incorrect_password = "Incorrect password. Try again..."
+password_placeholder = "Password"
+timeout = "Authentication timed out. Try again."
 
 [emoji]
 title = "EMOJIS"
@@ -290,6 +292,7 @@ copied_hint = "Copied to clipboard"
 remove_item = "Remove from shelf"
 
 [dashboard_new]
+display = "Display"
 apply = "Apply"
 applied = "Applied"
 title = "Dashboard"

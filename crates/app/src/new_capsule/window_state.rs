@@ -106,6 +106,9 @@ impl Capsule {
                 window.focus(&self.module_manager.launcher_focus_handle(cx), cx);
             } else if current == CapsuleModuleId::Dashboard {
                 window.focus(&self.module_manager.dashboard_focus_handle(cx), cx);
+            } else if current == CapsuleModuleId::Polkit {
+                let focus = self.module_manager.polkit.read(cx).focus_handle();
+                window.focus(&focus, cx);
             } else if current == CapsuleModuleId::Shelf {
                 let focus = self.module_manager.shelf.read(cx).focus_handle();
                 window.focus(&focus, cx);

@@ -11,71 +11,62 @@ use gpui::{
 };
 use ui::theme::Theme;
 
-pub const WIDTH: f32 = 640.0;
-pub const HEIGHT: f32 = 480.0;
-pub const PADDING: f32 = 20.0;
-pub const GAP: f32 = 16.0;
-pub const HEADER: f32 = 44.0;
-pub const LEFT: f32 = 224.0;
-pub const RIGHT: f32 = 360.0;
-pub const BODY: f32 = HEIGHT - PADDING * 2.0 - HEADER - GAP;
-pub fn module_size() -> Size<Pixels> {
-    size(px(WIDTH), px(HEIGHT))
+pub const WIDTH: f32 = 560.0;
+pub const HEIGHT: f32 = 562.0;
+pub const PADDING: f32 = 12.0;
+pub const GAP: f32 = 8.0;
+pub const HEADER: f32 = 28.0;
+pub const LEFT: f32 = 268.0;
+pub const RIGHT: f32 = WIDTH - PADDING * 2.0 - LEFT - GAP;
+pub const CONTROLS: f32 = 68.0;
+pub const CONTENT: f32 = CONTROLS * 3.0 + GAP * 2.0;
+pub const MEDIA_HEIGHT: f32 = CONTENT;
+pub const SLIDER: f32 = 80.0;
+pub const NOTIFICATIONS: f32 = 150.0;
+pub const FOOTER: f32 = 40.0;
+pub const BOTTOM_PADDING: f32 = 0.0;
+#[cfg(test)]
+pub const BODY: f32 = HEIGHT - PADDING - BOTTOM_PADDING - HEADER - GAP;
+
+pub fn module_size(has_tray: bool) -> Size<Pixels> {
+    let height = if has_tray {
+        HEIGHT
+    } else {
+        HEIGHT - FOOTER - GAP
+    };
+    size(px(WIDTH), px(height))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum DashboardView {
-    Home,
-    Wifi,
-    Bluetooth,
-    Calendar,
-    Audio,
-    Media,
-    Tray { bus: String, path: String },
-    Themes,
-    Wallpapers,
+pub(crate) fn card(theme: &Theme, cx: &gpui::App) -> gpui::Div {
+    super::style::card(
+        theme,
+        cx.global::<services::AppState>()
+            .config
+            .get()
+            .ui
+            .cards_round
+            .min(22.0),
+    )
 }
-impl DashboardView {
-    pub(crate) fn satellite_id(&self) -> Option<crate::new_capsule::satellite::SatelliteId> {
-        use crate::new_capsule::satellite::SatelliteId;
-        match self {
-            Self::Wifi => Some(SatelliteId::Wifi),
-            Self::Bluetooth => Some(SatelliteId::Bluetooth),
-            Self::Calendar => Some(SatelliteId::Calendar),
-            Self::Audio => Some(SatelliteId::Audio),
-            Self::Media => Some(SatelliteId::Media),
-            Self::Tray { bus, path } => Some(SatelliteId::Tray {
-                bus: bus.clone(),
-                path: path.clone(),
-            }),
-            _ => None,
-        }
-    }
 
-    pub fn title_key(&self) -> &'static str {
-        match self {
-            Self::Home => "dashboard_new.title",
-            Self::Wifi => "quick_settings.wifi_networks",
-            Self::Bluetooth => "quick_settings.bt_devices",
-            Self::Calendar => "dashboard_new.calendar",
-            Self::Audio => "dashboard_new.audio_output",
-            Self::Media => "settings.tab_media",
-            Self::Tray { .. } => "dashboard_new.tray",
-            Self::Themes => "dashboard_new.themes",
-            Self::Wallpapers => "dashboard_new.wallpapers",
-        }
-    }
+#[allow(dead_code)]
+pub(crate) fn separator(theme: &Theme) -> gpui::Div {
+    div()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(theme.foreground().opacity(0.1))
 }
+
 #[derive(Clone)]
 pub(crate) enum DashboardAction {
-    View(DashboardView),
-    Back,
+    Satellite(crate::new_capsule::satellite::SatelliteId),
     Close,
     CloseSatellite(crate::new_capsule::satellite::SatelliteId),
     Wifi,
     Bluetooth,
     Dnd,
     Mute,
+    Brightness(u32),
     Sink(String),
     ScanWifi,
     ScanBluetooth,
@@ -84,11 +75,9 @@ pub(crate) enum DashboardAction {
     BluetoothDevice(String),
     Month(i8),
     Settings,
-    Lock,
     ClearNotifications,
     RemoveNotification(u32),
     Notification(u32, String),
-    Player(String),
     Media(i8),
     Seek(f64),
     TrayActivate { bus: String, path: String },
@@ -112,20 +101,20 @@ pub(crate) fn button(
             .animation_duration_ms as u64,
     );
     let background = if active {
-        theme.accent().opacity(0.18)
+        super::style::selected(theme)
     } else {
-        theme.surface().opacity(0.35)
+        super::style::surface(theme)
     };
-    let hover = theme.surface().opacity(0.6);
+    let hover = super::style::hover(theme);
     div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(8.0))
-        .min_h(px(36.0))
+        .min_h(px(44.0))
         .min_w_0()
         .px(px(10.0))
-        .rounded(px(10.0))
+        .rounded(px(18.0))
         .bg(background)
         .cursor_pointer()
         .transitions(|t| t.bg(duration.with_easing(ease_in_out)))
@@ -155,15 +144,15 @@ pub(crate) fn icon_action(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    let hover = theme.surface().opacity(0.6);
+    let hover = super::style::hover(theme);
     div()
         .id(id)
-        .size(px(28.0))
+        .size(px(32.0))
         .flex_shrink_0()
         .flex()
         .items_center()
         .justify_center()
-        .rounded_full()
+        .rounded(px(8.0))
         .opacity(if enabled { 1.0 } else { 0.35 })
         .when(enabled, |s| {
             s.cursor_pointer()
@@ -176,7 +165,7 @@ pub(crate) fn icon_action(
         .child(
             svg()
                 .path(icon)
-                .size(px(14.0))
+                .size(px(18.0))
                 .text_color(theme.foreground_muted()),
         )
         .into_any_element()
@@ -205,7 +194,12 @@ mod tests {
     #[test]
     fn dimensions_match_columns_and_vertical_layout() {
         assert_eq!(PADDING * 2.0 + LEFT + GAP + RIGHT, WIDTH);
-        assert_eq!(PADDING * 2.0 + HEADER + GAP + BODY, HEIGHT);
-        assert_eq!(module_size(), size(px(640.0), px(480.0)));
+        assert_eq!(PADDING + BOTTOM_PADDING + HEADER + GAP + BODY, HEIGHT);
+        assert_eq!(CONTENT + SLIDER + NOTIFICATIONS + FOOTER + GAP * 3.0, BODY);
+        assert_eq!(module_size(true), size(px(WIDTH), px(HEIGHT)));
+        assert_eq!(
+            module_size(false),
+            size(px(WIDTH), px(HEIGHT - FOOTER - GAP))
+        );
     }
 }

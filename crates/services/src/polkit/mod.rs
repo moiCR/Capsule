@@ -69,6 +69,8 @@ pub type PolkitPendingAuth = (
     tokio::sync::oneshot::Sender<Result<(), String>>,
 );
 
+static POLKIT_EVENTS: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
 static POLKIT_QUEUE: OnceLock<Arc<Mutex<VecDeque<PolkitPendingAuth>>>> = OnceLock::new();
 static POLKIT_CANCELLED: OnceLock<Arc<Mutex<VecDeque<String>>>> = OnceLock::new();
 static POLKIT_AGENT_CONN: OnceLock<Arc<Mutex<Option<zbus::Connection>>>> = OnceLock::new();
@@ -97,6 +99,7 @@ pub fn push_polkit_request(
 ) {
     if let Ok(mut queue) = polkit_queue().lock() {
         queue.push_back((req, responder));
+        POLKIT_EVENTS.notify_one();
     }
 }
 
@@ -111,6 +114,7 @@ pub fn pop_polkit_request() -> Option<PolkitPendingAuth> {
 pub fn push_cancelled_cookie(cookie: &str) {
     if let Ok(mut queue) = cancelled_cookies().lock() {
         queue.push_back(cookie.to_string());
+        POLKIT_EVENTS.notify_one();
     }
 }
 
@@ -142,6 +146,10 @@ impl PolkitService {
         let _guard = crate::tokio_handle().enter();
         start_polkit_agent();
         Self
+    }
+
+    pub async fn wait_for_change(&self) {
+        POLKIT_EVENTS.notified().await;
     }
 
     pub fn pop_request(&self) -> Option<PolkitPendingAuth> {
@@ -240,6 +248,8 @@ impl PolkitAgentServer {
                 Ok(())
             }
             _ => {
+                cancel_polkit_request(&cookie);
+                push_cancelled_cookie(&cookie);
                 crate::log_warn!(
                     "POLKIT",
                     "Polkit authentication failed, cancelled by user, or timed out for cookie='{cookie}'!"
@@ -482,7 +492,8 @@ async fn run_helper_process(
     for arg in args {
         cmd.arg(arg);
     }
-    cmd.stdin(Stdio::piped())
+    cmd.kill_on_drop(true)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -670,11 +681,55 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_queue_and_cancellation() {
+    #[tokio::test]
+    async fn test_queue_and_cancellation() {
+        let service = PolkitService;
         let cookie = "test-cookie-1234";
         push_cancelled_cookie(cookie);
         assert_eq!(pop_cancelled_cookie(), Some(cookie.to_string()));
         assert_eq!(pop_cancelled_cookie(), None);
+        tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            service.wait_for_change(),
+        )
+        .await
+        .expect("retained cancellation event");
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(10),
+                service.wait_for_change()
+            )
+            .await
+            .is_err()
+        );
+        let request = |cookie: &str| PolkitAuthRequest {
+            action_id: "test.action".into(),
+            message: "Authenticate".into(),
+            icon_name: String::new(),
+            user_name: "test-user".into(),
+            cookie: cookie.into(),
+            uid: 1000,
+            identity_kind: "unix-user".into(),
+            identity_details: HashMap::new(),
+        };
+        let (first_sender, first_receiver) = tokio::sync::oneshot::channel();
+        let (second_sender, second_receiver) = tokio::sync::oneshot::channel();
+        push_polkit_request(request("first"), first_sender);
+        push_polkit_request(request("second"), second_sender);
+        tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            service.wait_for_change(),
+        )
+        .await
+        .expect("retained request event");
+        assert!(cancel_polkit_request("second"));
+        assert!(second_receiver.await.expect("cancelled responder").is_err());
+        let (first, responder) = service
+            .pop_request()
+            .expect("first request survives cancellation of second");
+        assert_eq!(first.cookie, "first");
+        responder.send(Ok(())).expect("reply to first request");
+        assert!(first_receiver.await.expect("successful responder").is_ok());
+        assert!(service.pop_request().is_none());
     }
 }

@@ -3,6 +3,7 @@ pub(crate) mod clipboard;
 pub(crate) mod dashboard;
 pub(crate) mod default;
 pub(crate) mod launcher;
+pub(crate) mod polkit;
 pub(crate) mod record;
 pub(crate) mod shelf;
 
@@ -25,6 +26,7 @@ pub struct CapsuleModuleManager {
     pub(super) clipboard: Entity<clipboard::ClipboardModule>,
     pub(super) shelf: Entity<shelf::ShelfModule>,
     pub(super) record: Entity<record::RecordModule>,
+    pub(super) polkit: Entity<polkit::PolkitModule>,
 }
 
 impl CapsuleModuleManager {
@@ -38,6 +40,7 @@ impl CapsuleModuleManager {
             clipboard: cx.new(clipboard::ClipboardModule::new),
             shelf: cx.new(shelf::ShelfModule::new),
             record: cx.new(record::RecordModule::new),
+            polkit: cx.new(polkit::PolkitModule::new),
         }
     }
 
@@ -51,6 +54,9 @@ impl CapsuleModuleManager {
 
     pub fn subscribe(&self, cx: &mut Context<Capsule>) -> Vec<Subscription> {
         vec![
+            cx.subscribe(&self.polkit, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
             cx.subscribe(&self.shelf, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
@@ -89,7 +95,8 @@ impl CapsuleModuleManager {
             gpui::px(super::widgets::record::WIDTH),
             gpui::px(super::widgets::record::MAX_HEIGHT),
         );
-        let dashboard = self.dashboard.read_with(cx, |module, _| module.size());
+        let dashboard = super::widgets::dashboard::module_size(true);
+        let polkit = self.polkit.read_with(cx, |module, _| module.size());
         let appearance = self.appearance.read_with(cx, |module, _| module.size());
         let clipboard = self.clipboard.read_with(cx, |module, _| module.size());
         Size {
@@ -100,7 +107,8 @@ impl CapsuleModuleManager {
                 .max(appearance.width)
                 .max(clipboard.width)
                 .max(shelf.width)
-                .max(record.width),
+                .max(record.width)
+                .max(polkit.width),
             height: default
                 .height
                 .max(launcher.height)
@@ -108,7 +116,8 @@ impl CapsuleModuleManager {
                 .max(appearance.height)
                 .max(clipboard.height)
                 .max(shelf.height)
-                .max(record.height),
+                .max(record.height)
+                .max(polkit.height),
         }
     }
 
@@ -134,6 +143,7 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Clipboard => self.clipboard.clone().into(),
             CapsuleModuleId::Shelf => self.shelf.clone().into(),
             CapsuleModuleId::Record => self.record.clone().into(),
+            CapsuleModuleId::Polkit => self.polkit.clone().into(),
             CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => self.appearance.clone().into(),
         }
     }
@@ -146,6 +156,7 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Clipboard => self.clipboard.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Shelf => self.shelf.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Record => self.record.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Polkit => self.polkit.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => {
                 self.appearance.read_with(cx, |module, _| module.size())
             }
@@ -163,12 +174,12 @@ pub enum CapsuleModuleId {
     Clipboard,
     Shelf,
     Record,
+    Polkit,
 }
 
 pub enum CapsuleModuleEvent {
     ToggleSatellite(super::satellite::SatelliteId),
     Close,
-    CloseSatellite,
     CloseSatelliteId(super::satellite::SatelliteId),
     SatelliteBounds(super::satellite::SatelliteId, gpui::Bounds<Pixels>),
     Open(CapsuleModuleId),
@@ -206,7 +217,7 @@ impl Capsule {
                         .animation_duration_ms as u64,
                 ),
             ),
-            animation_task: None,
+            animation_frame_pending: false,
             satellite,
             satellite_animation_task: None,
             _subscriptions: subscriptions,
@@ -221,6 +232,19 @@ impl Capsule {
         event: &CapsuleModuleEvent,
         cx: &mut Context<Self>,
     ) {
+        let previous_module = self.module_manager.current_id();
+        if self.module_manager.polkit.read(cx).has_request() {
+            match event {
+                CapsuleModuleEvent::Open(id) if *id != CapsuleModuleId::Polkit => return,
+                CapsuleModuleEvent::Close => {
+                    self.module_manager
+                        .polkit
+                        .update(cx, |module, cx| module.cancel(cx));
+                    return;
+                }
+                _ => {}
+            }
+        }
         match event {
             CapsuleModuleEvent::SatelliteBounds(id, bounds) => {
                 if self.satellite.contains(id) {
@@ -250,10 +274,6 @@ impl Capsule {
             }
             CapsuleModuleEvent::CloseSatelliteId(id) => {
                 self.close_satellite(id.clone(), cx);
-                return;
-            }
-            CapsuleModuleEvent::CloseSatellite => {
-                self.set_satellite_open(false, cx);
                 return;
             }
             CapsuleModuleEvent::ToggleSatellite(id) => {
@@ -315,38 +335,37 @@ impl Capsule {
         self.animator.set_duration(Duration::from_millis(
             state.config.get().ui.animation_duration_ms as u64,
         ));
-        let compositor = state.compositor.clone();
-        self.animator.transition_to(target, Instant::now());
+        let now = Instant::now();
+        if previous_module != self.module_manager.current_id() {
+            self.animator.reveal_content(now);
+        }
+        self.animator.transition_to(target, now);
         let animating = self.animator.advance(Instant::now());
         self.sync_window(cx);
-        if self.animation_task.is_none() && animating {
-            self.animation_task = Some(cx.spawn(async move |this, cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(
-                            compositor
-                                .get_frame_duration()
-                                .max(Duration::from_millis(2)),
-                        )
-                        .await;
-
-                    let running = this.update(cx, |capsule, cx| {
-                        let running = capsule.animator.advance(Instant::now());
-                        if !running {
-                            capsule.animation_task = None;
-                        }
-                        capsule.sync_window(cx);
-                        cx.notify();
-                        running
-                    });
-
-                    match running {
-                        Ok(true) => {}
-                        Ok(false) | Err(_) => break,
-                    }
-                }
-            }));
+        if !self.animation_frame_pending && animating {
+            self.animation_frame_pending = true;
+            let entity = cx.entity().downgrade();
+            let _ = self.window_state.handle.update(cx, |_, window, _| {
+                Self::queue_animation_frame(window, entity);
+            });
         }
         cx.notify();
+    }
+
+    fn queue_animation_frame(window: &gpui::Window, entity: gpui::WeakEntity<Self>) {
+        window.on_next_frame(move |window, cx| {
+            let _ = entity.update(cx, |capsule, cx| {
+                let previous_size = capsule.animator.size();
+                let running = capsule.animator.advance(Instant::now());
+                capsule.animation_frame_pending = running;
+                if previous_size != capsule.animator.size() {
+                    capsule.apply_window_geometry(window, cx);
+                }
+                cx.notify();
+                if running {
+                    Self::queue_animation_frame(window, cx.entity().downgrade());
+                }
+            });
+        });
     }
 }

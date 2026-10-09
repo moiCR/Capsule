@@ -1,5 +1,6 @@
-use super::{DashboardAction as Action, DashboardView, icon_action};
+use super::{DashboardAction as Action, icon_action};
 use crate::new_capsule::module::dashboard::DashboardModule;
+use crate::new_capsule::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, PathBuilder, StyledImage, div, img, point,
     prelude::*, px, svg,
@@ -7,39 +8,6 @@ use gpui::{
 use services::MediaTrack;
 use std::path::PathBuf;
 use ui::theme::Theme;
-
-pub(crate) fn artwork(track: &MediaTrack, size: f32, theme: &Theme) -> AnyElement {
-    let image = track.local_art_path.as_ref().map(PathBuf::from);
-    let frame = div()
-        .size(px(size))
-        .flex_shrink_0()
-        .rounded(px(12.0))
-        .overflow_hidden()
-        .bg(theme.surface())
-        .flex()
-        .items_center()
-        .justify_center();
-    if let Some(path) = image {
-        frame
-            .child(
-                img(path)
-                    .size(px(size))
-                    .aspect_ratio(1.0)
-                    .rounded(px(12.0))
-                    .object_fit(gpui::ObjectFit::Cover),
-            )
-            .into_any_element()
-    } else {
-        frame
-            .child(
-                svg()
-                    .path("music.svg")
-                    .size(px(size * 0.4))
-                    .text_color(theme.foreground_muted()),
-            )
-            .into_any_element()
-    }
-}
 
 pub(crate) fn position(track: &MediaTrack, elapsed: std::time::Duration) -> i64 {
     let position = track.position_micros.unwrap_or(0).max(0);
@@ -55,11 +23,6 @@ pub(crate) fn position(track: &MediaTrack, elapsed: std::time::Duration) -> i64 
         .map_or(next, |length| next.min(length))
 }
 
-fn timestamp(micros: i64) -> String {
-    let seconds = micros.max(0) / 1_000_000;
-    format!("{}:{:02}", seconds / 60, seconds % 60)
-}
-
 pub fn render(
     module: &DashboardModule,
     theme: &Theme,
@@ -70,20 +33,22 @@ pub fn render(
         .config
         .get()
         .ui
-        .cards_round;
+        .cards_round
+        .min(22.0);
     let card = div()
         .id("dashboard-media")
         .relative()
         .overflow_hidden()
-        .h(px(168.0))
+        .h(px(super::MEDIA_HEIGHT))
         .w_full()
         .flex_shrink_0()
         .flex()
         .flex_col()
-        .p(px(12.0))
-        .gap(px(6.0))
+        .p(px(8.0))
+        .gap(px(12.0))
+        .justify_center()
         .rounded(px(radius))
-        .bg(theme.surface().opacity(0.2));
+        .bg(style::surface(theme));
     let Some(track) = module.player() else {
         return card
             .justify_center()
@@ -106,7 +71,7 @@ pub fn render(
         .id("dashboard-seek")
         .relative()
         .w_full()
-        .h(px(22.0))
+        .h(px(12.0))
         .flex_shrink_0()
         .when(length > 0, |s| {
             s.cursor_pointer().on_mouse_down(
@@ -155,12 +120,7 @@ pub fn render(
             .w_full()
             .h_full(),
         );
-    let subtitle = [&track.artist, &track.album]
-        .into_iter()
-        .filter(|value| !value.is_empty())
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(" · ");
+
     let card = card.when_some(track.local_art_path.as_ref(), |card, path| {
         card.child(
             div()
@@ -171,7 +131,7 @@ pub fn render(
                         .absolute()
                         .inset_0()
                         .size_full()
-                        .aspect_ratio(super::RIGHT / 168.0)
+                        .aspect_ratio(super::RIGHT / super::MEDIA_HEIGHT)
                         .rounded(px(radius))
                         .object_fit(gpui::ObjectFit::Cover),
                 )
@@ -180,135 +140,102 @@ pub fn render(
                         .absolute()
                         .inset_0()
                         .rounded(px(radius))
-                        .backdrop_blur(px(18.0)),
+                        .backdrop_blur(px(18.0))
+                        .bg(theme.background().opacity(0.62)),
                 ),
         )
     });
     card.child(
         div()
             .relative()
-            .h(px(48.0))
+            .w_full()
+            .min_h(px(52.0))
             .flex_shrink_0()
+            .px(px(12.0))
             .flex()
             .items_center()
-            .gap(px(8.0))
-            .child(div().flex_1())
-            .child(
-                div()
-                    .id("dashboard-player-picker")
-                    .flex_shrink_0()
-                    .self_start()
-                    .h(px(28.0))
-                    .max_w(px(104.0))
-                    .px(px(6.0))
-                    .rounded(px(8.0))
-                    .flex()
-                    .items_center()
-                    .gap(px(5.0))
-                    .cursor_pointer()
-                    .hover({
-                        let hover = theme.surface().opacity(0.5);
-                        move |s| s.bg(hover)
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.dispatch(Action::View(DashboardView::Media), cx)
-                    }))
-                    .child(
-                        div()
-                            .min_w_0()
-                            .text_size(px(11.0))
-                            .text_ellipsis()
-                            .child(track.player_name.clone()),
-                    )
-                    .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(12.0))
-                            .flex_shrink_0()
-                            .text_color(theme.foreground_muted()),
-                    ),
-            ),
-    )
-    .child(
-        div()
-            .relative()
-            .h(px(44.0))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(8.0))
-            .justify_between()
+            .gap(px(12.0))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(2.0))
-                    .when(!subtitle.is_empty(), |s| {
-                        s.child(
-                            div()
-                                .text_size(px(11.0))
-                                .text_color(theme.foreground_muted())
-                                .text_ellipsis()
-                                .child(subtitle),
-                        )
-                    })
+                    .gap(px(4.0))
                     .child(
                         div()
-                            .text_size(px(14.0))
+                            .text_size(px(17.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .whitespace_nowrap()
                             .text_ellipsis()
                             .child(track.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(theme.foreground_muted())
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(track.artist.clone()),
                     ),
             )
             .child(
                 div()
+                    .id("dashboard-play")
+                    .size(px(36.0))
                     .flex_shrink_0()
+                    .rounded_full()
+                    .bg(theme.accent())
                     .flex()
-                    .gap(px(6.0))
-                    .child(icon_action(
-                        "dashboard-previous",
-                        "skip-back.svg",
-                        Action::Media(-1),
-                        track.can_go_previous,
-                        theme,
-                        cx,
-                    ))
-                    .child(div().rounded_full().bg(theme.accent().opacity(0.16)).child(
-                        icon_action(
-                            "dashboard-play",
-                            if track.is_playing {
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| this.dispatch(Action::Media(0), cx)))
+                    .child(
+                        svg()
+                            .path(if track.is_playing {
                                 "pause.svg"
                             } else {
                                 "play.svg"
-                            },
-                            Action::Media(0),
-                            true,
-                            theme,
-                            cx,
-                        ),
-                    ))
-                    .child(icon_action(
-                        "dashboard-next",
-                        "skip-forward.svg",
-                        Action::Media(1),
-                        track.can_go_next,
-                        theme,
-                        cx,
-                    )),
+                            })
+                            .size(px(22.0))
+                            .text_color(style::on_accent(theme)),
+                    ),
             ),
     )
-    .child(progress)
     .child(
         div()
             .relative()
+            .w_full()
+            .flex_shrink_0()
             .flex()
-            .justify_between()
-            .text_size(px(10.0))
-            .text_color(theme.foreground_muted())
-            .child(timestamp(position))
-            .child(timestamp(length)),
+            .items_center()
+            .gap(px(4.0))
+            .child(icon_action(
+                "dashboard-previous",
+                "skip-back.svg",
+                Action::Media(-1),
+                track.can_go_previous,
+                theme,
+                cx,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .h(px(32.0))
+                    .flex()
+                    .items_center()
+                    .child(progress),
+            )
+            .child(icon_action(
+                "dashboard-next",
+                "skip-forward.svg",
+                Action::Media(1),
+                track.can_go_next,
+                theme,
+                cx,
+            )),
     )
     .into_any_element()
 }

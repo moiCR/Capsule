@@ -1,7 +1,7 @@
 mod animator;
 pub(crate) mod layout;
 
-use super::{Capsule, module::CapsuleModuleId, widgets::dashboard::DashboardView};
+use super::{Capsule, module::CapsuleModuleId};
 use animator::SatelliteAnimator;
 use gpui::{Bounds, Context, Pixels, Size, px};
 use layout::{SatelliteLayout, Side};
@@ -13,28 +13,23 @@ pub enum SatelliteId {
     Wifi,
     Bluetooth,
     Audio,
-    Media,
     Tray { bus: String, path: String },
 }
 
 impl SatelliteId {
-    pub(crate) fn view(&self) -> DashboardView {
+    pub(crate) fn title_key(&self) -> &'static str {
         match self {
-            Self::Calendar => DashboardView::Calendar,
-            Self::Wifi => DashboardView::Wifi,
-            Self::Bluetooth => DashboardView::Bluetooth,
-            Self::Audio => DashboardView::Audio,
-            Self::Media => DashboardView::Media,
-            Self::Tray { bus, path } => DashboardView::Tray {
-                bus: bus.clone(),
-                path: path.clone(),
-            },
+            Self::Calendar => "dashboard_new.calendar",
+            Self::Wifi => "quick_settings.wifi_networks",
+            Self::Bluetooth => "quick_settings.bt_devices",
+            Self::Audio => "dashboard_new.audio_output",
+            Self::Tray { .. } => "dashboard_new.tray",
         }
     }
 
     fn preferred_side(&self) -> Side {
         match self {
-            Self::Media | Self::Tray { .. } => Side::Right,
+            Self::Tray { .. } => Side::Right,
             Self::Calendar | Self::Wifi | Self::Bluetooth | Self::Audio => Side::Left,
         }
     }
@@ -45,7 +40,6 @@ impl SatelliteId {
                 px(super::widgets::satellite::calendar::WIDTH),
                 px(super::widgets::satellite::calendar::HEIGHT),
             ),
-            Self::Media => gpui::size(px(320.0), px(320.0)),
             Self::Audio => gpui::size(px(320.0), px(300.0)),
             _ => gpui::size(px(320.0), px(400.0)),
         }
@@ -266,14 +260,38 @@ mod tests {
     fn opening_and_closing_panels_preserves_the_others() {
         let mut satellites = Satellite::new();
         satellites.transition(SatelliteId::Wifi, true, Duration::ZERO);
-        satellites.transition(SatelliteId::Media, true, Duration::ZERO);
+        satellites.transition(
+            SatelliteId::Tray {
+                bus: "test".into(),
+                path: "/test".into(),
+            },
+            true,
+            Duration::ZERO,
+        );
         assert_eq!(satellites.panels.len(), 2);
-        satellites.transition(SatelliteId::Media, false, Duration::ZERO);
+        satellites.transition(
+            SatelliteId::Tray {
+                bus: "test".into(),
+                path: "/test".into(),
+            },
+            false,
+            Duration::ZERO,
+        );
         assert!(!satellites.advance(Instant::now()));
         assert!(satellites.contains(&SatelliteId::Wifi));
-        assert!(!satellites.contains(&SatelliteId::Media));
+        assert!(!satellites.contains(&SatelliteId::Tray {
+            bus: "test".into(),
+            path: "/test".into()
+        }));
         assert!(satellites.open());
-        satellites.transition(SatelliteId::Media, true, Duration::ZERO);
+        satellites.transition(
+            SatelliteId::Tray {
+                bus: "test".into(),
+                path: "/test".into(),
+            },
+            true,
+            Duration::ZERO,
+        );
         assert_eq!(satellites.panels.len(), 2);
     }
 
@@ -281,11 +299,21 @@ mod tests {
     fn one_panel_per_side_is_centered_on_the_capsule() {
         let mut satellites = Satellite::new();
         satellites.transition(SatelliteId::Wifi, true, Duration::ZERO);
-        satellites.transition(SatelliteId::Media, true, Duration::ZERO);
+        satellites.transition(
+            SatelliteId::Tray {
+                bus: "test".into(),
+                path: "/test".into(),
+            },
+            true,
+            Duration::ZERO,
+        );
         satellites.transition(SatelliteId::Calendar, true, Duration::ZERO);
         assert_eq!(satellites.panels.len(), 2);
         assert!(!satellites.contains(&SatelliteId::Wifi));
-        assert!(satellites.contains(&SatelliteId::Media));
+        assert!(satellites.contains(&SatelliteId::Tray {
+            bus: "test".into(),
+            path: "/test".into()
+        }));
         assert!(satellites.contains(&SatelliteId::Calendar));
         let viewport = gpui::size(px(1400.0), px(900.0));
         let capsule = Bounds {
@@ -294,7 +322,10 @@ mod tests {
         };
         for height in [72.0, 150.0, 320.0] {
             let measured = [(
-                SatelliteId::Media,
+                SatelliteId::Tray {
+                    bus: "test".into(),
+                    path: "/test".into(),
+                },
                 Bounds {
                     origin: gpui::point(px(0.0), px(0.0)),
                     size: gpui::size(px(320.0), px(height)),
@@ -302,13 +333,19 @@ mod tests {
             )];
             let visuals = satellites.layout(viewport, capsule, px(8.0), &measured);
             assert_eq!(visuals.len(), 2);
-            let media = visuals
+            let tray = visuals
                 .iter()
-                .find(|visual| visual.id == SatelliteId::Media)
-                .expect("media satellite");
-            assert_eq!(media.layout.side, Side::Right);
+                .find(|visual| {
+                    visual.id
+                        == SatelliteId::Tray {
+                            bus: "test".into(),
+                            path: "/test".into(),
+                        }
+                })
+                .expect("tray satellite");
+            assert_eq!(tray.layout.side, Side::Right);
             assert_eq!(
-                media.layout.bounds.origin.y + px(height / 2.0),
+                tray.layout.bounds.origin.y + px(height / 2.0),
                 capsule.origin.y + capsule.size.height / 2.0
             );
             let calendar = visuals
@@ -316,7 +353,7 @@ mod tests {
                 .find(|visual| visual.id == SatelliteId::Calendar)
                 .expect("calendar satellite");
             assert_eq!(calendar.layout.side, Side::Left);
-            assert_eq!(calendar.layout.content_size.height, px(350.0));
+            assert_eq!(calendar.layout.content_size.height, px(300.0));
         }
     }
 }

@@ -1,5 +1,6 @@
 use crate::new_capsule::module::record::{PendingAction, RecordModule};
-use gpui::{ColorExt, Context, FontWeight, div, prelude::*, px, svg};
+use crate::new_capsule::widgets::style;
+use gpui::{Context, FontWeight, div, prelude::*, px, svg};
 use services::{AppState, RecordStatus};
 use ui::theme::Theme;
 
@@ -30,7 +31,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
         _ if module.status == RecordStatus::Paused => "record.paused",
         _ => "record.record_screen",
     });
-    let hover = theme.surface().opacity(0.65);
+    let hover = style::hover(&theme);
     let paused = module.status == RecordStatus::Paused;
     let mut bar = div()
         .w_full()
@@ -59,7 +60,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     })
                     .child(
                         div()
-                            .size(px(8.0))
+                            .size(px(10.0))
                             .flex_shrink_0()
                             .rounded_full()
                             .bg(theme.red()),
@@ -75,13 +76,15 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
             .child(
                 div()
                     .id("record-cancel")
-                    .size(px(24.0))
+                    .size(px(26.0))
                     .flex_shrink_0()
                     .rounded_full()
+                    .bg(style::surface(&theme))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
+                    .hover(move |s| s.bg(hover))
                     .on_click(cx.listener(|module, _, _, cx| {
                         cx.stop_propagation();
                         module.close(cx);
@@ -98,7 +101,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
             .px(px(4.0))
             .child(
                 div()
-                    .size(px(8.0))
+                    .size(px(10.0))
                     .flex_shrink_0()
                     .rounded_full()
                     .bg(if paused {
@@ -131,7 +134,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .size(px(28.0))
                     .flex_shrink_0()
                     .rounded_full()
-                    .bg(theme.surface().opacity(0.35))
+                    .bg(style::surface(&theme))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -144,7 +147,7 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .child(
                         svg()
                             .path(if paused { "play.svg" } else { "pause.svg" })
-                            .size(px(12.0))
+                            .size(px(13.0))
                             .text_color(theme.foreground()),
                     ),
             )
@@ -154,16 +157,45 @@ pub fn render(module: &RecordModule, cx: &mut Context<RecordModule>) -> gpui::St
                     .size(px(28.0))
                     .flex_shrink_0()
                     .rounded_full()
-                    .bg(theme.red().opacity(0.15))
+                    .bg(style::surface(&theme))
                     .flex()
                     .items_center()
                     .justify_center()
                     .opacity(if module.pending.is_some() { 0.4 } else { 1.0 })
                     .when(module.pending.is_none(), |s| {
                         s.cursor_pointer()
+                            .hover(move |s| s.bg(hover))
                             .on_click(cx.listener(|module, _, _, cx| module.stop(cx)))
                     })
-                    .child(div().size(px(9.0)).rounded(px(2.0)).bg(theme.red())),
+                    .child(
+                        svg()
+                            .path("square.svg")
+                            .size(px(13.0))
+                            .text_color(theme.red()),
+                    ),
+            )
+            .child(
+                div()
+                    .id("record-cancel")
+                    .size(px(28.0))
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(style::surface(&theme))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(hover))
+                    .on_click(cx.listener(|module, _, _, cx| {
+                        cx.stop_propagation();
+                        module.close(cx);
+                    }))
+                    .child(
+                        svg()
+                            .path("close.svg")
+                            .size(px(12.0))
+                            .text_color(theme.foreground_muted()),
+                    ),
             );
     }
     div()
