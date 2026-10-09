@@ -5,12 +5,13 @@ All notable changes to Capsule are documented in this file.
 ## v2.0.0-b.2
 
 ### Features
-- Added the new integration for polkit module
+- Added a polkit integration so authentication prompts from supported applications can be handled directly by Capsule.
+- Added a terminal-based (TUI) installer to guide users through the installation process without requiring a graphical interface.
 
 ### Improvements
-- CPU performance improvements
-- Animations performance improvements
-- UI improvements (All modules)
+- Improved CPU performance by reducing unnecessary work during normal operation.
+- Improved animation performance to make transitions smoother and more responsive.
+- Refined the user interface across all modules for a more consistent and polished experience.
 
 ### Bug Fixes
-- The clipboard bug was fixed; previously, cliphist would return an error, and a text-only fallback was used.
+- Fixed clipboard integration when using `cliphist`. Previously, `cliphist` could return an error, causing Capsule to fall back to text-only clipboard handling; the integration now uses the expected clipboard history behavior.
