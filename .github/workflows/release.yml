@@ -89,6 +89,11 @@ jobs:
           chmod +x dist/capsule
           tar -czvf capsule-x86_64-unknown-linux-gnu.tar.gz -C dist capsule
 
+          mkdir -p dist_installer
+          cp target/x86_64-unknown-linux-gnu/release/capsule-installer dist_installer/capsule-installer
+          chmod +x dist_installer/capsule-installer
+          tar -czvf capsule-installer-x86_64-unknown-linux-gnu.tar.gz -C dist_installer capsule-installer
+
       - name: Prepare Release Body
         id: release_body
         run: |
@@ -108,6 +113,7 @@ jobs:
           body_path: ${{ steps.release_body.outputs.BODY_PATH }}
           files: |
             capsule-x86_64-unknown-linux-gnu.tar.gz
+            capsule-installer-x86_64-unknown-linux-gnu.tar.gz
           draft: false
           prerelease: false
         env:
