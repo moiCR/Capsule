@@ -249,6 +249,7 @@ impl SettingsPanel {
             titlebar: None,
             window_bounds: display_bounds.map(WindowBounds::Windowed),
             app_id: Some("capsule-settings".to_string()),
+            inactive_frame_interval: None,
             linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
                 namespace: "capsule-settings".to_string(),

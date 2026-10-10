@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent,
-    ParentElement, Render, ScrollHandle, Styled, Task, Window, canvas, div, prelude::*, px, svg,
+    AnyElement, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
+    Render, ScrollHandle, Styled, Task, Window, canvas, div, prelude::*, px,
 };
 use services::{AppState, CapsuleStyle};
 use std::cell::Cell;
@@ -11,8 +11,14 @@ use ui::theme::Theme;
 use crate::capsule::widgets::settings::{
     render_apps_section, render_lockscreen_formats_subsection, render_lockscreen_section,
     render_media_section, render_music_players_subsection, render_record_section,
-    render_search_results, render_sidebar, render_system_section, render_ui_section,
+    render_search_results, render_system_section,
 };
+
+use crate::new_capsule::animator::Animator;
+use crate::new_capsule::widgets::settings::{
+    HEIGHT, WIDTH, render_header, render_tabs, render_ui_section,
+};
+use crate::new_capsule::widgets::style;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SettingsTab {
@@ -60,6 +66,8 @@ pub enum SettingsEvent {
 pub type SliderDragState = (SettingsField, f32, f32, f32, Rc<Cell<(f32, f32)>>);
 
 pub struct SettingsModule {
+    pub motion_preview: Animator,
+    motion_preview_generation: u64,
     pub active_tab: SettingsTab,
     pub active_field: Option<SettingsField>,
     pub capsule_style: CapsuleStyle,
@@ -95,7 +103,9 @@ pub struct SettingsModule {
     pub search_query: String,
     pub active_subsection: Option<SettingsSubSection>,
     pub section_anim_progress: f32,
-    pub section_anim_task: Option<Task<()>>,
+    section_anim_generation: u64,
+    section_anim_running: bool,
+    window_handle: Option<gpui::AnyWindowHandle>,
     pub active_slider_drag: Option<SliderDragState>,
 
     pub settings_bounds: Rc<Cell<(f32, f32)>>,
@@ -130,6 +140,8 @@ impl SettingsModule {
         let scroll_handle = ScrollHandle::new();
 
         let mut module = Self {
+            motion_preview: Animator::new(gpui::size(px(72.0), px(22.0)), Duration::ZERO),
+            motion_preview_generation: 0,
             active_tab: SettingsTab::Capsule,
             active_field: None,
             capsule_style: CapsuleStyle::Normal,
@@ -160,7 +172,9 @@ impl SettingsModule {
             search_query: String::new(),
             active_subsection: None,
             section_anim_progress: 1.0,
-            section_anim_task: None,
+            section_anim_generation: 0,
+            section_anim_running: false,
+            window_handle: None,
             active_slider_drag: None,
             settings_bounds: Rc::new(Cell::new((0.0, 560.0))),
             language_trigger_bounds: Rc::new(Cell::new((0.0, 0.0))),
@@ -270,6 +284,8 @@ impl SettingsModule {
         let changed = self.active_tab != tab
             || self.active_subsection.is_some()
             || !self.search_query.is_empty();
+        self.motion_preview_generation += 1;
+        self.active_slider_drag = None;
         self.active_tab = tab;
         self.active_subsection = None;
         self.search_query.clear();
@@ -312,54 +328,137 @@ impl SettingsModule {
         self.close_subsection(cx);
     }
 
-    pub fn navigate_forward(&mut self, _cx: &mut Context<Self>) {}
-
     pub fn can_navigate_back(&self) -> bool {
         self.active_subsection.is_some()
     }
 
-    pub fn can_navigate_forward(&self) -> bool {
-        false
+    pub fn play_motion_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.motion_preview_generation += 1;
+        let duration = self.anim_duration_input.parse::<u64>().unwrap_or(250);
+        self.motion_preview
+            .set_duration(Duration::from_millis(duration));
+        if duration == 0 {
+            self.motion_preview
+                .transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
+            self.motion_preview.advance(Instant::now());
+            cx.notify();
+            return;
+        }
+        self.motion_preview
+            .transition_to(gpui::size(px(152.0), px(42.0)), Instant::now());
+        Self::queue_preview_frame(
+            window,
+            cx.entity().downgrade(),
+            self.motion_preview_generation,
+            false,
+        );
+        cx.notify();
+    }
+
+    fn queue_preview_frame(
+        window: &Window,
+        entity: gpui::WeakEntity<Self>,
+        generation: u64,
+        returning: bool,
+    ) {
+        window.on_next_frame(move |window, cx| {
+            let _ = entity.update(cx, |this, cx| {
+                if this.motion_preview_generation != generation
+                    || this.active_tab != SettingsTab::Capsule
+                    || !this.search_query.is_empty()
+                    || this.active_subsection.is_some()
+                {
+                    return;
+                }
+                let running = this.motion_preview.advance(Instant::now());
+                if running {
+                    Self::queue_preview_frame(
+                        window,
+                        cx.entity().downgrade(),
+                        generation,
+                        returning,
+                    );
+                } else if !returning {
+                    this.motion_preview
+                        .transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
+                    Self::queue_preview_frame(window, cx.entity().downgrade(), generation, true);
+                }
+                cx.notify();
+            });
+        });
     }
 
     pub fn start_section_transition(&mut self, cx: &mut Context<Self>) {
-        let compositor = if cx.has_global::<AppState>() {
-            Some(cx.global::<AppState>().compositor.clone())
-        } else {
-            None
+        self.section_anim_generation += 1;
+        let Some(handle) = self.window_handle else {
+            self.section_anim_progress = 1.0;
+            return;
         };
-        self.section_anim_progress = 0.0;
-        let start = Instant::now();
+        let duration = if cx.has_global::<AppState>() {
+            Duration::from_millis(
+                cx.global::<AppState>()
+                    .config
+                    .get()
+                    .ui
+                    .animation_duration_ms as u64,
+            )
+        } else {
+            Duration::from_millis(250)
+        };
+        let from = if self.section_anim_running {
+            self.section_anim_progress
+        } else {
+            0.0
+        };
+        self.section_anim_progress = if duration.is_zero() { 1.0 } else { from };
+        self.section_anim_running = !duration.is_zero();
+        if self.section_anim_running {
+            let entity = cx.entity().downgrade();
+            let generation = self.section_anim_generation;
+            cx.defer(move |cx| {
+                let _ = handle.update(cx, |_, window, _| {
+                    Self::queue_section_frame(
+                        window,
+                        entity,
+                        generation,
+                        Instant::now(),
+                        duration,
+                        from,
+                    );
+                });
+            });
+        }
+    }
 
-        let anim_task = cx.spawn(async move |this, cx| {
-            let duration_ms = 160.0;
-            loop {
-                let frame_dur = if let Some(ref comp) = compositor {
-                    comp.get_frame_duration()
-                } else {
-                    Duration::from_millis(16)
-                };
-
-                cx.background_executor().timer(frame_dur).await;
-
-                let finished = this
-                    .update(cx, |module: &mut Self, cx| {
-                        let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-                        let p = (elapsed / duration_ms).min(1.0);
-                        let ease = 1.0 - (1.0 - p) * (1.0 - p);
-                        module.section_anim_progress = ease;
-                        cx.notify();
-                        p >= 1.0
-                    })
-                    .unwrap_or(true);
-
-                if finished {
-                    break;
+    fn queue_section_frame(
+        window: &Window,
+        entity: gpui::WeakEntity<Self>,
+        generation: u64,
+        start: Instant,
+        duration: Duration,
+        from: f32,
+    ) {
+        window.on_next_frame(move |window, cx| {
+            let _ = entity.update(cx, |this, cx| {
+                if this.section_anim_generation != generation {
+                    return;
                 }
-            }
+                let progress = (start.elapsed().as_secs_f32() / duration.as_secs_f32()).min(1.0);
+                this.section_anim_progress = from + (1.0 - from) * (1.0 - (1.0 - progress).powi(3));
+                this.section_anim_running = progress < 1.0;
+                cx.notify();
+                if this.section_anim_running {
+                    Self::queue_section_frame(
+                        window,
+                        cx.entity().downgrade(),
+                        generation,
+                        start,
+                        duration,
+                        from,
+                    );
+                }
+            });
         });
-
-        self.section_anim_task = Some(anim_task);
     }
 
     pub fn toggle_dropdown(&mut self, field: SettingsField, cx: &mut Context<Self>) {
@@ -394,7 +493,9 @@ impl SettingsModule {
                     Duration::from_millis(16)
                 };
 
-                cx.background_executor().timer(frame_dur).await;
+                cx.background_executor()
+                    .timer(frame_dur.max(Duration::from_millis(2)))
+                    .await;
 
                 let finished = this
                     .update(cx, |module: &mut Self, cx| {
@@ -604,11 +705,13 @@ impl SettingsModule {
     }
 
     pub fn close(&mut self, cx: &mut Context<Self>) {
+        self.motion_preview_generation += 1;
         self.active_field = None;
         self.open_dropdown = None;
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
-        self.section_anim_task = None;
+        self.section_anim_generation += 1;
+        self.section_anim_running = false;
         self.active_slider_drag = None;
         self.search_query.clear();
         self.active_subsection = None;
@@ -659,19 +762,30 @@ impl SettingsModule {
     }
 
     #[allow(dead_code)]
-    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.window_handle = Some(window.window_handle());
         window.focus(&self.focus_handle, cx);
     }
 
     fn handle_key_down(
         &mut self,
         event: &KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
         let key = event.keystroke.key.as_str();
         let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
+        if ctrl && key == "f" {
+            self.set_active_field(Some(SettingsField::Search), cx);
+            return;
+        }
+        if key == "space" && self.active_field.is_none() && self.active_tab == SettingsTab::Capsule
+        {
+            self.play_motion_preview(window, cx);
+            return;
+        }
         if key == "escape" {
             if self.open_dropdown.is_some() {
                 self.open_dropdown = None;
@@ -894,9 +1008,12 @@ impl Render for SettingsModule {
             )
             .on_mouse_up(
                 gpui::MouseButton::Left,
-                cx.listener(|this, _event, _window, cx| {
+                cx.listener(|this, _event, window, cx| {
                     if let Some((field, _, _, _, _)) = this.active_slider_drag {
                         this.active_slider_drag = None;
+                        if field == SettingsField::AnimDuration {
+                            this.play_motion_preview(window, cx);
+                        }
                         if (field == SettingsField::VolumeOutput
                             || field == SettingsField::VolumeInput)
                             && cx.has_global::<AppState>()
@@ -911,9 +1028,14 @@ impl Render for SettingsModule {
                 }),
             )
             .flex()
-            .flex_row()
-            .w(px(840.0))
-            .h(px(560.0))
+            .flex_col()
+            .gap(px(10.0))
+            .p(px(12.0))
+            .w(px(WIDTH))
+            .h(px(HEIGHT))
+            .bg(style::background(&theme))
+            .font_family(theme.font_family())
+            .text_color(theme.foreground())
             .rounded(px(capsule_radius))
             .overflow_hidden()
             .child(
@@ -932,158 +1054,29 @@ impl Render for SettingsModule {
                 .inset_0()
                 .absolute(),
             )
-            .child(render_sidebar(self, &theme, cx))
+            .child(render_header(self, &theme, cx))
+            .child(render_tabs(self, &theme, cx))
             .child(
                 div()
+                    .id("settings-content-scroll")
+                    .track_scroll(&self.scroll_handle)
                     .flex()
                     .flex_col()
                     .flex_1()
+                    .min_h_0()
                     .min_w_0()
-                    .h_full()
-                    .child(render_top_navigation_bar(self, &theme, cx))
+                    .overflow_y_scroll()
                     .child(
                         div()
-                            .id("settings-content-scroll")
-                            .track_scroll(&self.scroll_handle)
                             .flex()
                             .flex_col()
-                            .flex_1()
+                            .w_full()
                             .min_w_0()
-                            .h_full()
-                            .px_6()
-                            .pb_6()
-                            .overflow_scroll()
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .w_full()
-                                    .min_w_0()
-                                    .opacity(self.section_anim_progress)
-                                    .mt(px((1.0 - self.section_anim_progress) * 8.0))
-                                    .child(content_view),
-                            ),
+                            .flex_shrink_0()
+                            .opacity(self.section_anim_progress)
+                            .mt(px((1.0 - self.section_anim_progress) * 8.0))
+                            .child(content_view),
                     ),
             )
     }
-}
-
-fn render_top_navigation_bar(
-    module: &SettingsModule,
-    theme: &Theme,
-    cx: &mut Context<SettingsModule>,
-) -> impl IntoElement {
-    let can_back = module.can_navigate_back();
-    let can_fwd = module.can_navigate_forward();
-
-    div()
-        .flex()
-        .flex_row()
-        .items_center()
-        .justify_between()
-        .w_full()
-        .min_w_0()
-        .h(px(46.0))
-        .px_6()
-        .pt_2()
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap(px(6.0))
-                .child(
-                    div()
-                        .id("settings-nav-back")
-                        .w(px(26.0))
-                        .h(px(26.0))
-                        .rounded_full()
-                        .bg(theme.surface().opacity(if can_back { 0.5 } else { 0.2 }))
-                        .hover(|s| {
-                            if can_back {
-                                s.bg(theme.surface().opacity(0.8))
-                            } else {
-                                s
-                            }
-                        })
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor(if can_back {
-                            gpui::CursorStyle::PointingHand
-                        } else {
-                            gpui::CursorStyle::Arrow
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.can_navigate_back() {
-                                this.navigate_back(cx);
-                            }
-                        }))
-                        .child(svg().path("chevron-left.svg").size(px(14.0)).text_color(
-                            if can_back {
-                                theme.foreground()
-                            } else {
-                                theme.foreground_muted().opacity(0.4)
-                            },
-                        )),
-                )
-                .child(
-                    div()
-                        .id("settings-nav-fwd")
-                        .w(px(26.0))
-                        .h(px(26.0))
-                        .rounded_full()
-                        .bg(theme.surface().opacity(if can_fwd { 0.5 } else { 0.2 }))
-                        .hover(|s| {
-                            if can_fwd {
-                                s.bg(theme.surface().opacity(0.8))
-                            } else {
-                                s
-                            }
-                        })
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor(if can_fwd {
-                            gpui::CursorStyle::PointingHand
-                        } else {
-                            gpui::CursorStyle::Arrow
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.can_navigate_forward() {
-                                this.navigate_forward(cx);
-                            }
-                        }))
-                        .child(svg().path("chevron-right.svg").size(px(14.0)).text_color(
-                            if can_fwd {
-                                theme.foreground()
-                            } else {
-                                theme.foreground_muted().opacity(0.4)
-                            },
-                        )),
-                ),
-        )
-        .child(
-            div()
-                .id("settings-close-btn")
-                .w(px(26.0))
-                .h(px(26.0))
-                .rounded_full()
-                .bg(theme.surface().opacity(0.45))
-                .hover(|s| s.bg(theme.surface().opacity(0.8)))
-                .active(|s| s.bg(theme.surface()))
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.close(cx);
-                }))
-                .child(
-                    svg()
-                        .path("close.svg")
-                        .size(px(12.0))
-                        .text_color(theme.foreground_muted()),
-                ),
-        )
 }

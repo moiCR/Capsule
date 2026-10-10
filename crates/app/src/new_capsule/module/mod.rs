@@ -220,6 +220,24 @@ impl Capsule {
         let size = module_manager.current_size(cx);
 
         let ipc_task = Self::start_ipc(cx);
+        let mut config_changes = cx.global::<services::AppState>().config.subscribe();
+        let config_task = cx.spawn(async move |this, cx| {
+            loop {
+                match config_changes.recv().await {
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+                if this
+                    .update(cx, |capsule, cx| {
+                        let current = capsule.module_manager.current_id();
+                        capsule.handle_module_event(&CapsuleModuleEvent::SizeChanged(current), cx);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
 
         let mut capsule = Self {
             location: CapsuleLocation::TOP,
@@ -240,6 +258,7 @@ impl Capsule {
             satellite_animation_task: None,
             _subscriptions: subscriptions,
             _ipc_task: ipc_task,
+            _config_task: config_task,
         };
         capsule.apply_window_geometry(window, cx);
         capsule

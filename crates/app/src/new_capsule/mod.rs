@@ -5,7 +5,7 @@ use gpui::{
 
 use crate::new_capsule::{animator::Animator, module::CapsuleModuleManager};
 
-mod animator;
+pub(crate) mod animator;
 mod ipc_handler;
 pub(crate) mod module;
 pub(crate) mod satellite;
@@ -27,6 +27,7 @@ pub struct Capsule {
     animation_frame_pending: bool,
     _subscriptions: Vec<Subscription>,
     _ipc_task: Task<()>,
+    _config_task: Task<()>,
 }
 
 impl Capsule {
@@ -40,8 +41,12 @@ impl Render for Capsule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let size = self.animator.size();
         let theme = cx.global::<ui::theme::Theme>().clone();
+        let concave = self.window_state.style == services::CapsuleStyle::Concave;
+        let bottom = matches!(self.location, CapsuleLocation::BOTTOM);
+        let (radius, _) = widgets::style::concave_radii(size, self.window_state.radius);
         let container = div()
             .id("capsule-drop-target")
+            .relative()
             .on_drop(cx.listener(|capsule, paths: &gpui::ExternalPaths, _, cx| {
                 capsule
                     .module_manager
@@ -58,8 +63,18 @@ impl Render for Capsule {
                 self.module_manager.current_id() != module::CapsuleModuleId::Dashboard,
                 |s| s.overflow_hidden(),
             )
-            .rounded(gpui::px(self.window_state.radius))
-            .bg(widgets::style::background(&theme))
+            .when(!concave, |s| {
+                s.rounded(gpui::px(self.window_state.radius))
+                    .bg(widgets::style::background(&theme))
+            })
+            .when(concave, |s| {
+                s.when(bottom, |s| {
+                    s.rounded_tl(gpui::px(radius)).rounded_tr(gpui::px(radius))
+                })
+                .when(!bottom, |s| {
+                    s.rounded_bl(gpui::px(radius)).rounded_br(gpui::px(radius))
+                })
+            })
             .font_family(theme.font_family())
             .text_color(theme.foreground())
             .child(
@@ -69,6 +84,20 @@ impl Render for Capsule {
                     .opacity(self.animator.content_opacity())
                     .child(self.module_manager.current()),
             );
+        let container = div()
+            .relative()
+            .w(size.width)
+            .h(size.height)
+            .flex_shrink_0()
+            .when(concave, |s| {
+                s.child(widgets::style::concave_background(
+                    size,
+                    self.window_state.radius,
+                    bottom,
+                    widgets::style::background(&theme),
+                ))
+            })
+            .child(container);
         let root = div()
             .relative()
             .size_full()

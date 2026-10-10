@@ -401,7 +401,7 @@ pub fn render_search_results(
                 &module.capsule_round_input,
                 "px",
                 0.0,
-                24.0,
+                48.0,
                 1.0,
                 theme,
                 cx,

@@ -1,17 +1,23 @@
 use gpui::{
-    ColorExt, Context, Entity, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render,
-    Styled, Window, div, prelude::*, px,
+    Context, Entity, FocusHandle, IntoElement, KeyDownEvent, ParentElement, Render, Styled, Window,
+    div, prelude::*, px,
 };
 use std::time::Instant;
 use ui::theme::Theme;
 
 use crate::capsule::modules::settings::{SettingsEvent, SettingsModule};
+use crate::new_capsule::widgets::{
+    settings::{HEIGHT, WIDTH},
+    style,
+};
 use crate::panel::SettingsPanel;
 
 pub struct SettingsWindow {
     focus_handle: FocusHandle,
     settings_module: Entity<SettingsModule>,
-    entry_start_time: Option<Instant>,
+    entry_start_time: Instant,
+    handle: gpui::AnyWindowHandle,
+    frame_pending: bool,
     is_closing: bool,
     close_start_time: Option<Instant>,
     offset_y: f32,
@@ -50,7 +56,9 @@ impl SettingsWindow {
         let window_obj = Self {
             focus_handle,
             settings_module,
-            entry_start_time: None,
+            entry_start_time: Instant::now(),
+            handle: window.window_handle(),
+            frame_pending: true,
             is_closing: false,
             close_start_time: None,
             offset_y: 16.0,
@@ -60,7 +68,10 @@ impl SettingsWindow {
             animation_duration,
         };
 
-        window.focus(&window_obj.focus_handle, cx);
+        window_obj
+            .settings_module
+            .update(cx, |module, cx| module.focus(window, cx));
+        Self::queue_frame(window, cx.entity().downgrade());
         window_obj
     }
 
@@ -72,7 +83,53 @@ impl SettingsWindow {
         self.close_opacity = self.card_opacity;
         self.is_closing = true;
         self.close_start_time = Some(Instant::now());
+        if !self.frame_pending {
+            self.frame_pending = true;
+            let entity = cx.entity().downgrade();
+            let handle = self.handle;
+            cx.defer(move |cx| {
+                let _ = handle.update(cx, |_, window, _| Self::queue_frame(window, entity));
+            });
+        }
         cx.notify();
+    }
+
+    fn queue_frame(window: &Window, entity: gpui::WeakEntity<Self>) {
+        window.on_next_frame(move |window, cx| {
+            let _ = entity.update(cx, |this, cx| {
+                let running = if let Some(start) = this.close_start_time {
+                    let duration = this.animation_duration * 0.6;
+                    let elapsed = start.elapsed().as_secs_f32();
+                    if elapsed >= duration {
+                        window.remove_window();
+                        false
+                    } else {
+                        let progress = (elapsed / duration).clamp(0.0, 1.0).powi(2);
+                        this.offset_y = this.close_offset_y + 8.0 * progress;
+                        this.card_opacity = this.close_opacity * (1.0 - progress);
+                        true
+                    }
+                } else {
+                    let duration = this.animation_duration * 0.88;
+                    let elapsed = this.entry_start_time.elapsed().as_secs_f32();
+                    if elapsed >= duration {
+                        this.offset_y = 0.0;
+                        this.card_opacity = 1.0;
+                        false
+                    } else {
+                        let remaining = (1.0 - elapsed / duration).powi(3);
+                        this.offset_y = 16.0 * remaining;
+                        this.card_opacity = 1.0 - remaining;
+                        true
+                    }
+                };
+                this.frame_pending = running;
+                cx.notify();
+                if running {
+                    Self::queue_frame(window, cx.entity().downgrade());
+                }
+            });
+        });
     }
 }
 
@@ -83,7 +140,7 @@ impl Drop for SettingsWindow {
 }
 
 impl Render for SettingsWindow {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
         let capsule_radius = if cx.has_global::<services::AppState>() {
             cx.global::<services::AppState>()
@@ -95,46 +152,16 @@ impl Render for SettingsWindow {
             24.0
         };
 
-        if self.is_closing {
-            let start = self.close_start_time.get_or_insert_with(Instant::now);
-            let elapsed = start.elapsed().as_secs_f32();
-            let duration = self.animation_duration * 0.6;
-            if elapsed >= duration {
-                window.remove_window();
-                return div().into_any_element();
-            }
-
-            let t = (elapsed / duration).clamp(0.0, 1.0);
-            let progress = t * t;
-            self.offset_y = self.close_offset_y + 8.0 * progress;
-            self.card_opacity = self.close_opacity * (1.0 - progress);
-            window.request_animation_frame();
-        } else {
-            let start = self.entry_start_time.get_or_insert_with(Instant::now);
-            let elapsed = start.elapsed().as_secs_f32();
-            let duration = self.animation_duration * 0.88;
-            if elapsed >= duration {
-                self.offset_y = 0.0;
-                self.card_opacity = 1.0;
-            } else {
-                let t = (elapsed / duration).clamp(0.0, 1.0);
-                let remaining = (1.0 - t).powi(3);
-                self.offset_y = 16.0 * remaining;
-                self.card_opacity = 1.0 - remaining;
-                window.request_animation_frame();
-            }
-        }
-
         let card = div()
             .id("settings-modal-card")
             .relative()
             .top(px(self.offset_y))
-            .w(px(840.0))
-            .h(px(560.0))
+            .w(px(WIDTH))
+            .h(px(HEIGHT))
             .rounded(px(capsule_radius))
-            .bg(theme.background())
+            .bg(style::background(&theme))
             .border_1()
-            .border_color(theme.surface().opacity(0.6))
+            .border_color(style::border(&theme))
             .shadow_xl()
             .overflow_hidden()
             .opacity(self.card_opacity)
@@ -150,8 +177,8 @@ impl Render for SettingsWindow {
                     .overflow_hidden()
                     .child(
                         div()
-                            .w(px(840.0))
-                            .h(px(560.0))
+                            .w(px(WIDTH))
+                            .h(px(HEIGHT))
                             .flex_shrink_0()
                             .child(self.settings_module.clone()),
                     ),

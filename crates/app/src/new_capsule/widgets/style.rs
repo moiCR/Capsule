@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use gpui::{Hsla, div, prelude::*, px};
+use gpui::{Bounds, Hsla, PathBuilder, Pixels, Size, div, point, prelude::*, px};
 use ui::theme::Theme;
 
 fn opaque(mut color: Hsla) -> Hsla {
@@ -22,6 +22,111 @@ pub(crate) fn tint(base: Hsla, color: Hsla, amount: f32) -> Hsla {
 
 pub(crate) fn background(theme: &Theme) -> Hsla {
     opaque(theme.background())
+}
+
+pub(crate) fn concave_radii(size: Size<Pixels>, radius: f32) -> (f32, f32) {
+    let width = f32::from(size.width).max(0.0);
+    let height = f32::from(size.height).max(0.0);
+    let radius = radius.max(0.0).min(width / 2.0).min(height / 2.0);
+    let shoulder = 12.0_f32.min(height / 4.0).min(width / 4.0);
+    (radius, shoulder)
+}
+
+pub(crate) fn concave_background(
+    size: Size<Pixels>,
+    radius: f32,
+    bottom: bool,
+    color: Hsla,
+) -> impl IntoElement {
+    let (radius, shoulder) = concave_radii(size, radius);
+    gpui::canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let width = f32::from(size.width);
+            let height = f32::from(size.height);
+            let p = |x, y| {
+                bounds.origin + point(px(x + shoulder), px(if bottom { height - y } else { y }))
+            };
+            let k = 0.552_284_8;
+            let mut path = PathBuilder::fill();
+            path.move_to(p(-shoulder, 0.0));
+            path.line_to(p(width + shoulder, 0.0));
+            path.cubic_bezier_to(
+                p(width, shoulder),
+                p(width + shoulder * (1.0 - k), 0.0),
+                p(width, shoulder * (1.0 - k)),
+            );
+            path.line_to(p(width, height - radius));
+            path.cubic_bezier_to(
+                p(width - radius, height),
+                p(width, height - radius * (1.0 - k)),
+                p(width - radius * (1.0 - k), height),
+            );
+            path.line_to(p(radius, height));
+            path.cubic_bezier_to(
+                p(0.0, height - radius),
+                p(radius * (1.0 - k), height),
+                p(0.0, height - radius * (1.0 - k)),
+            );
+            path.line_to(p(0.0, shoulder));
+            path.cubic_bezier_to(
+                p(-shoulder, 0.0),
+                p(0.0, shoulder * (1.0 - k)),
+                p(-shoulder * (1.0 - k), 0.0),
+            );
+            path.close();
+            if let Ok(path) = path.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left(px(-shoulder))
+    .w(size.width + px(shoulder * 2.0))
+    .h(size.height)
+}
+
+pub(crate) fn concave_input_regions(
+    bounds: Bounds<Pixels>,
+    radius: f32,
+    bottom: bool,
+) -> Vec<Bounds<Pixels>> {
+    let (radius, shoulder) = concave_radii(bounds.size, radius);
+    let height = f32::from(bounds.size.height);
+    let mut regions = Vec::new();
+    let mut y = 0.0;
+    while y < height {
+        let band_height = if y >= shoulder && y < height - radius {
+            height - radius - y
+        } else {
+            (height - y).min(1.0)
+        };
+        let sample = y + band_height / 2.0;
+        let inset = if sample < shoulder {
+            -shoulder
+                + (shoulder * shoulder - (sample - shoulder).powi(2))
+                    .max(0.0)
+                    .sqrt()
+        } else if sample > height - radius {
+            radius
+                - (radius * radius - (sample - height + radius).powi(2))
+                    .max(0.0)
+                    .sqrt()
+        } else {
+            0.0
+        };
+        regions.push(Bounds {
+            origin: bounds.origin
+                + point(
+                    px(inset),
+                    px(if bottom { height - y - band_height } else { y }),
+                ),
+            size: gpui::size(bounds.size.width - px(inset * 2.0), px(band_height)),
+        });
+        y += band_height;
+    }
+    regions
 }
 
 pub(crate) fn surface(theme: &Theme) -> Hsla {
@@ -262,6 +367,53 @@ pub(crate) fn search_field(theme: &Theme) -> gpui::Div {
 mod tests {
     use super::*;
     use ui::theme::{Color, ThemeMode};
+
+    #[test]
+    fn concave_curves_fit_compact_and_expanded_capsules() {
+        for width in [1.0, 40.0, 250.0, 560.0] {
+            for height in [1.0, 25.0, 40.0, 212.0, 562.0] {
+                for configured_radius in [0.0, 12.0, 24.0, 100.0, 1000.0] {
+                    let size = gpui::size(px(width), px(height));
+                    let (radius, shoulder) = concave_radii(size, configured_radius);
+                    assert!(radius + shoulder <= height);
+                    assert!(radius * 2.0 <= width);
+                    assert!(shoulder <= 12.0);
+                    assert_eq!(shoulder, concave_radii(size, 0.0).1);
+                    assert_eq!(shoulder, concave_radii(size, 1000.0).1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn concave_input_regions_follow_the_outline_on_both_edges() {
+        let bounds = Bounds {
+            origin: point(px(100.0), px(50.0)),
+            size: gpui::size(px(250.0), px(40.0)),
+        };
+        let top = concave_input_regions(bounds, 1000.0, false);
+        let bottom = concave_input_regions(bounds, 1000.0, true);
+        assert_eq!(top.len(), bottom.len());
+        assert!(top[0].origin.x < bounds.origin.x);
+        assert!(top[top.len() - 1].origin.x > bounds.origin.x);
+        assert!(top.len() < 40);
+        let mut covered_height = px(0.0);
+        for (top, bottom) in top.iter().zip(&bottom) {
+            assert!(top.size.width > px(0.0));
+            assert!(top.size.height > px(0.0));
+            assert_eq!(top.size, bottom.size);
+            assert_eq!(top.origin.x, bottom.origin.x);
+            assert_eq!(
+                bottom.origin.y,
+                bounds.origin.y + bounds.size.height
+                    - (top.origin.y - bounds.origin.y)
+                    - top.size.height,
+            );
+            assert_eq!(top.origin.y, bounds.origin.y + covered_height);
+            covered_height += top.size.height;
+        }
+        assert_eq!(covered_height, bounds.size.height);
+    }
 
     #[test]
     fn tint_preserves_base_at_low_strength() {

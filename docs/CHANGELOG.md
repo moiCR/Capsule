@@ -2,7 +2,7 @@
 
 All notable changes to Capsule are documented in this file.
 
-## v2.0.0-b.2
+## v2.0.0
 
 ### Features
 - Added a polkit integration so authentication prompts from supported applications can be handled directly by Capsule.

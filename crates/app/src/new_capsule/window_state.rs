@@ -1,5 +1,5 @@
 use gpui::{AnyWindowHandle, Bounds, Context, Pixels, Size, Window, point, px};
-use services::AppState;
+use services::{AppState, CapsuleStyle};
 
 use super::{Capsule, CapsuleLocation, module::CapsuleModuleId};
 
@@ -7,6 +7,7 @@ pub(super) struct WindowState {
     pub handle: AnyWindowHandle,
     pub margin: f32,
     pub radius: f32,
+    pub style: CapsuleStyle,
     region: Option<Vec<Bounds<Pixels>>>,
     requested_size: Option<Size<Pixels>>,
     exclusive_zone: Option<Pixels>,
@@ -22,6 +23,7 @@ impl WindowState {
             handle: window.window_handle(),
             margin: 0.0,
             radius: 0.0,
+            style: CapsuleStyle::Normal,
             region: None,
             requested_size: None,
             exclusive_zone: None,
@@ -30,6 +32,14 @@ impl WindowState {
             notification_popup: false,
             satellite_bounds: Vec::new(),
         }
+    }
+}
+
+fn effective_margin(style: CapsuleStyle, margin: f32) -> f32 {
+    if style == CapsuleStyle::Concave {
+        0.0
+    } else {
+        margin.max(0.0)
     }
 }
 
@@ -56,10 +66,16 @@ impl Capsule {
         cx: &gpui::App,
     ) -> Size<Pixels> {
         let config = cx.global::<AppState>().config.get();
-        let margin = px(config.ui.margin_top.max(0.0));
+        let margin = px(effective_margin(
+            config.ui.capsule_style,
+            config.ui.margin_top,
+        ));
         let gap = px(config.ui.gap.max(0.0));
         let mut maximum = module_manager.maximum_size(cx);
         maximum.width *= 1.1;
+        if config.ui.capsule_style == CapsuleStyle::Concave {
+            maximum.width += px(24.0);
+        }
         maximum.height *= 1.1;
         maximum.height += margin;
         let satellite = super::satellite::Satellite::maximum_size();
@@ -139,7 +155,8 @@ impl Capsule {
             }
         }
         let config = cx.global::<AppState>().config.get();
-        let margin = config.ui.margin_top.max(0.0);
+        let style = config.ui.capsule_style;
+        let margin = effective_margin(style, config.ui.margin_top);
         let radius = config.ui.capsule_round;
         let exclusive_zone =
             super::widgets::default::module_size(config.ui.idle_height).height + px(margin);
@@ -159,7 +176,15 @@ impl Capsule {
             px(margin),
             &self.location,
         );
-        let mut regions = vec![region];
+        let mut regions = if style == CapsuleStyle::Concave {
+            super::widgets::style::concave_input_regions(
+                region,
+                radius,
+                matches!(self.location, CapsuleLocation::BOTTOM),
+            )
+        } else {
+            vec![region]
+        };
         let mut visual = if current == CapsuleModuleId::Dashboard {
             self.satellite.layout(
                 window.viewport_size(),
@@ -211,9 +236,13 @@ impl Capsule {
             self.window_state.region = Some(regions);
             window.refresh();
         }
-        if self.window_state.margin != margin || self.window_state.radius != radius {
+        if self.window_state.margin != margin
+            || self.window_state.radius != radius
+            || self.window_state.style != style
+        {
             self.window_state.margin = margin;
             self.window_state.radius = radius;
+            self.window_state.style = style;
             window.refresh();
         }
     }
@@ -223,6 +252,13 @@ impl Capsule {
 mod tests {
     use super::*;
     use gpui::size;
+
+    #[test]
+    fn concave_attaches_to_the_edge_without_losing_normal_margin() {
+        assert_eq!(effective_margin(CapsuleStyle::Concave, 24.0), 0.0);
+        assert_eq!(effective_margin(CapsuleStyle::Normal, 24.0), 24.0);
+        assert_eq!(effective_margin(CapsuleStyle::Normal, -24.0), 0.0);
+    }
 
     #[test]
     fn centered_bounds_keep_the_screen_edge_fixed_during_growth() {

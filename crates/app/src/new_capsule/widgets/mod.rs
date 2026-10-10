@@ -1,4 +1,5 @@
 pub mod default;
+pub(crate) mod settings;
 pub(crate) mod style;
 
 pub mod launcher;

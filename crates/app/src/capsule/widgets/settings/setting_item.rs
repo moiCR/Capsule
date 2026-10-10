@@ -1,3 +1,4 @@
+use crate::new_capsule::widgets::style;
 use gpui::{
     App, ColorExt, Context, Div, ElementId, FontWeight, InteractiveElement, IntoElement,
     ParentElement, Styled, Window, canvas, div, prelude::*, px, svg,
@@ -16,46 +17,35 @@ pub fn render_hero_header(
 ) -> impl IntoElement {
     div()
         .flex()
-        .flex_col()
         .items_center()
-        .justify_center()
+        .gap(px(12.0))
         .w_full()
         .min_w_0()
-        .py_6()
-        .px_4()
-        .rounded(px(18.0))
-        .bg(theme.surface().opacity(0.35))
-        .border_1()
-        .border_color(theme.surface().opacity(0.2))
+        .py(px(8.0))
+        .child(style::circle_button(
+            "settings-section-icon",
+            icon,
+            36.0,
+            theme,
+        ))
         .child(
             div()
-                .w(px(56.0))
-                .h(px(56.0))
-                .rounded_full()
-                .bg(theme.accent().opacity(0.15))
-                .border_1()
-                .border_color(theme.accent().opacity(0.3))
                 .flex()
-                .items_center()
-                .justify_center()
-                .child(svg().path(icon).size(px(26.0)).text_color(theme.accent())),
-        )
-        .child(
-            div()
-                .mt_3()
-                .font_weight(FontWeight::BOLD)
-                .text_size(px(17.0))
-                .text_color(theme.foreground())
-                .child(title.to_string()),
-        )
-        .child(
-            div()
-                .mt_1()
-                .text_size(px(12.0))
-                .text_color(theme.foreground_muted())
-                .text_center()
-                .max_w(px(460.0))
-                .child(subtitle.to_string()),
+                .flex_col()
+                .min_w_0()
+                .gap(px(3.0))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(16.0))
+                        .child(title.to_owned()),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_color(theme.foreground_muted())
+                        .child(subtitle.to_owned()),
+                ),
         )
 }
 
@@ -65,15 +55,17 @@ pub fn render_card_container(theme: &Theme) -> Div {
         .flex_col()
         .w_full()
         .min_w_0()
-        .rounded(px(18.0))
-        .bg(theme.surface().opacity(0.35))
-        .border_1()
-        .border_color(theme.surface().opacity(0.2))
+        .rounded(px(style::CARD_RADIUS))
+        .bg(style::surface(theme))
         .overflow_hidden()
 }
 
 pub fn render_row_divider(theme: &Theme) -> impl IntoElement {
-    div().w_full().h(px(1.0)).bg(theme.surface().opacity(0.25))
+    div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(theme))
 }
 
 pub fn render_toggle_row(
@@ -87,7 +79,7 @@ pub fn render_toggle_row(
     let bg = if is_on {
         theme.accent()
     } else {
-        theme.surface().opacity(0.65)
+        style::raised(theme)
     };
 
     div()
@@ -97,6 +89,7 @@ pub fn render_toggle_row(
         .justify_between()
         .w_full()
         .min_w_0()
+        .flex_shrink_0()
         .px_4()
         .py_3()
         .child(
@@ -109,7 +102,9 @@ pub fn render_toggle_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(13.0))
+                        .text_size(px(12.0))
+                        .min_w_0()
+                        .text_ellipsis()
                         .text_color(theme.foreground())
                         .child(title.to_string()),
                 )
@@ -137,7 +132,7 @@ pub fn render_toggle_row(
                         .w(px(16.0))
                         .h(px(16.0))
                         .rounded_full()
-                        .bg(gpui::white())
+                        .bg(theme.foreground())
                         .shadow_sm()
                         .ml(if is_on { px(16.0) } else { px(0.0) }),
                 ),
@@ -155,7 +150,7 @@ pub fn render_slider_row(
     step: f32,
     theme: &Theme,
     cx: &mut Context<SettingsModule>,
-) -> impl IntoElement {
+) -> impl IntoElement + use<> {
     let current_val: f32 = val_str.parse().unwrap_or(min);
     let pct = if max > min {
         ((current_val - min) / (max - min)).clamp(0.0, 1.0)
@@ -177,9 +172,10 @@ pub fn render_slider_row(
         .flex_col()
         .w_full()
         .min_w_0()
+        .flex_shrink_0()
         .px_4()
-        .py_3()
-        .gap(px(8.0))
+        .py(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
                 .flex()
@@ -191,15 +187,22 @@ pub fn render_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(13.0))
+                        .text_size(px(12.0))
+                        .min_w_0()
+                        .text_ellipsis()
                         .text_color(theme.foreground())
                         .child(title.to_string()),
                 )
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.5))
-                        .text_color(theme.foreground_muted())
+                        .text_size(px(11.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .rounded(px(8.0))
+                        .bg(style::raised(theme))
+                        .flex_shrink_0()
+                        .text_color(theme.foreground())
                         .child(display_val),
                 ),
         )
@@ -246,7 +249,7 @@ pub fn render_slider_row(
                         .w_full()
                         .h(px(5.0))
                         .rounded_full()
-                        .bg(theme.surface().opacity(0.65))
+                        .bg(style::raised(theme))
                         .overflow_hidden()
                         .child(
                             div()
@@ -265,7 +268,7 @@ pub fn render_slider_row(
                         .w(px(14.0))
                         .h(px(14.0))
                         .rounded_full()
-                        .bg(gpui::white())
+                        .bg(theme.foreground())
                         .shadow_sm(),
                 ),
         )
@@ -305,9 +308,10 @@ pub fn render_int_slider_row(
         .flex_col()
         .w_full()
         .min_w_0()
+        .flex_shrink_0()
         .px_4()
         .py_3()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
                 .flex()
@@ -319,15 +323,22 @@ pub fn render_int_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(13.0))
+                        .text_size(px(12.0))
+                        .min_w_0()
+                        .text_ellipsis()
                         .text_color(theme.foreground())
                         .child(title.to_string()),
                 )
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.5))
-                        .text_color(theme.foreground_muted())
+                        .text_size(px(11.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .rounded(px(8.0))
+                        .bg(style::raised(theme))
+                        .flex_shrink_0()
+                        .text_color(theme.foreground())
                         .child(display_val),
                 ),
         )
@@ -378,7 +389,7 @@ pub fn render_int_slider_row(
                         .w_full()
                         .h(px(5.0))
                         .rounded_full()
-                        .bg(theme.surface().opacity(0.65))
+                        .bg(style::raised(theme))
                         .overflow_hidden()
                         .child(
                             div()
@@ -397,7 +408,7 @@ pub fn render_int_slider_row(
                         .w(px(14.0))
                         .h(px(14.0))
                         .rounded_full()
-                        .bg(gpui::white())
+                        .bg(theme.foreground())
                         .shadow_sm(),
                 ),
         )
@@ -416,6 +427,7 @@ pub fn render_control_row(
         .justify_between()
         .w_full()
         .min_w_0()
+        .flex_shrink_0()
         .px_4()
         .py_3()
         .child(
@@ -428,7 +440,9 @@ pub fn render_control_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(13.0))
+                        .text_size(px(12.0))
+                        .min_w_0()
+                        .text_ellipsis()
                         .text_color(theme.foreground())
                         .child(title.to_string()),
                 )
