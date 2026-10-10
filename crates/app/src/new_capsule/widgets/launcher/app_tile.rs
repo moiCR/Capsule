@@ -95,7 +95,7 @@ pub fn render_app_tile(
     let icon = match &app.icon_path {
         Some(path) => gpui::img(path.clone()).size(px(44.0)).into_any_element(),
         None => svg()
-            .path("sparkles.svg")
+            .path("question-mark.svg")
             .size(px(44.0))
             .text_color(theme.accent())
             .into_any_element(),

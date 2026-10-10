@@ -50,8 +50,6 @@ pub fn render_search_results(
         editor_sub,
         file_manager_title,
         file_manager_sub,
-        idle_lyrics_title,
-        idle_lyrics_sub,
         output_vol_title,
         output_vol_sub,
         input_vol_title,
@@ -98,8 +96,6 @@ pub fn render_search_results(
             lang.get("settings.editor_subtitle"),
             lang.get("settings.file_manager_title"),
             lang.get("settings.file_manager_subtitle"),
-            lang.get("settings.idle_lyrics_title"),
-            lang.get("settings.idle_lyrics_subtitle"),
             lang.get("settings.output_volume_title"),
             lang.get("settings.output_volume_subtitle"),
             lang.get("settings.input_volume_title"),
@@ -146,8 +142,6 @@ pub fn render_search_results(
             "Lanzado con 'capsule editor'. Si es CLI, se ejecuta en terminal.".to_string(),
             "Gestor de Archivos".to_string(),
             "Lanzado con 'capsule files' o explorador del sistema.".to_string(),
-            "Letras en Reposo".to_string(),
-            "Muestra la letra sincronizada de la canción en la cápsula idle.".to_string(),
             "Salida de Audio".to_string(),
             "Control de volumen y selección del dispositivo de reproducción.".to_string(),
             "Entrada de Audio (Micrófono)".to_string(),
@@ -287,25 +281,67 @@ pub fn render_search_results(
         "capsule style",
         "capsula concava",
     ]) {
-        let is_concave = module.capsule_style == CapsuleStyle::Concave;
         matched_rows.push(
-            render_toggle_row(
-                ElementId::Name("search-capsule-concave".into()),
+            crate::new_capsule::widgets::settings::render_switch_row(
+                SettingsField::CapsuleStyle,
                 &concave_title,
-                Some(&concave_sub),
-                is_concave,
+                &concave_sub,
+                module.capsule_style == CapsuleStyle::Concave,
                 theme,
-                cx.listener(|this, _, _, cx| {
-                    let next = if this.capsule_style == CapsuleStyle::Concave {
-                        CapsuleStyle::Normal
-                    } else {
-                        CapsuleStyle::Concave
-                    };
-                    this.set_capsule_style(next, cx);
-                }),
+                cx,
             )
             .into_any_element(),
         );
+    }
+
+    let state = cx.global::<AppState>();
+    let config = state.config.get();
+    let controls = [
+        (
+            SettingsField::DynamicColors,
+            "settings.dynamic_colors",
+            "settings.dynamic_colors_hint",
+            config.ui.dynamic_colors,
+            "dynamic wallpaper colors colores fondo temas",
+        ),
+        (
+            SettingsField::DarkMode,
+            "settings.dark_mode",
+            "settings.color_mode_hint",
+            config.ui.dark_mode,
+            "dark light oscuro claro modo",
+        ),
+        (
+            SettingsField::ClockFormat,
+            "settings.clock_24",
+            "settings.clock_format_hint",
+            config.ui.clock_24_hour,
+            "clock time hora reloj 24h 12h",
+        ),
+        (
+            SettingsField::LegacyCapsule,
+            "settings.old_capsule",
+            "settings.restart_hint",
+            !config.ui.use_new_capsule,
+            "old capsule deprecated antigua obsoleta",
+        ),
+    ];
+    for (field, title_key, hint_key, enabled, terms) in controls {
+        let lang = &cx.global::<AppState>().language;
+        let title = lang.get(title_key);
+        let hint = lang.get(hint_key);
+        if matches_query(&[&title, &hint])
+            || terms
+                .split_whitespace()
+                .any(|term| term.contains(&query) || query.contains(term))
+        {
+            matched_rows.push(
+                crate::new_capsule::widgets::settings::render_switch_row(
+                    field, &title, &hint, enabled, theme, cx,
+                )
+                .into_any_element(),
+            );
+        }
     }
 
     if matches_query(&[
@@ -612,31 +648,6 @@ pub fn render_search_results(
                     cx,
                 ),
                 theme,
-            )
-            .into_any_element(),
-        );
-    }
-
-    if matches_query(&[
-        &idle_lyrics_title,
-        &idle_lyrics_sub,
-        "letras en reposo",
-        "idle lyrics",
-        "letras",
-        "lyrics",
-        "cancion",
-        "musica letras",
-    ]) {
-        matched_rows.push(
-            render_toggle_row(
-                ElementId::Name("search-idle-lyrics".into()),
-                &idle_lyrics_title,
-                Some(&idle_lyrics_sub),
-                module.show_lyrics,
-                theme,
-                cx.listener(|this, _, _, cx| {
-                    this.toggle_show_lyrics(cx);
-                }),
             )
             .into_any_element(),
         );

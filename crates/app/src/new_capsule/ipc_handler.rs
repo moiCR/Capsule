@@ -145,10 +145,21 @@ impl Capsule {
             IpcCommand::Hide | IpcCommand::Default => {
                 self.handle_module_event(&CapsuleModuleEvent::Close, cx);
             }
-            IpcCommand::ShowSettings => {
-                crate::panel::SettingsPanel::open(cx);
+            command @ (IpcCommand::ShowSettings | IpcCommand::ToggleSettings) => {
+                if matches!(
+                    self.module_manager.current_id(),
+                    CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers
+                ) && (command == IpcCommand::ShowSettings
+                    || !crate::panel::SettingsPanel::is_open())
+                {
+                    self.handle_module_event(&CapsuleModuleEvent::Close, cx);
+                }
+                if command == IpcCommand::ShowSettings {
+                    crate::panel::SettingsPanel::open(cx);
+                } else {
+                    crate::panel::SettingsPanel::toggle(cx);
+                }
             }
-            IpcCommand::ToggleSettings => crate::panel::SettingsPanel::toggle(cx),
             IpcCommand::Lock => {
                 crate::panel::LockScreenPanel::open_all(cx);
             }

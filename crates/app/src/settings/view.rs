@@ -140,7 +140,7 @@ impl Drop for SettingsWindow {
 }
 
 impl Render for SettingsWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
         let capsule_radius = if cx.has_global::<services::AppState>() {
             cx.global::<services::AppState>()
@@ -152,12 +152,15 @@ impl Render for SettingsWindow {
             24.0
         };
 
+        let viewport = window.viewport_size();
+        let width = (f32::from(viewport.width) - 48.0).clamp(320.0, WIDTH);
+        let height = (f32::from(viewport.height) - 48.0).clamp(240.0, HEIGHT);
         let card = div()
             .id("settings-modal-card")
             .relative()
             .top(px(self.offset_y))
-            .w(px(WIDTH))
-            .h(px(HEIGHT))
+            .w(px(width))
+            .h(px(height))
             .rounded(px(capsule_radius))
             .bg(style::background(&theme))
             .border_1()

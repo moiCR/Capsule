@@ -72,7 +72,7 @@ pub fn render_app_item(
                         .into_any_element()
                 } else {
                     svg()
-                        .path("sparkles.svg")
+                        .path("question-mark.svg")
                         .w(px(20.0))
                         .h(px(20.0))
                         .text_color(theme.accent())

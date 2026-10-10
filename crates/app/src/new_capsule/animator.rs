@@ -182,6 +182,24 @@ mod tests {
     }
 
     #[test]
+    fn rapid_content_changes_restart_the_reveal_and_settle() {
+        let now = Instant::now();
+        let mut animator = Animator::new(size(100.0), Duration::from_millis(250));
+        animator.reveal_content(now);
+        for millis in [40, 80, 120, 160, 200] {
+            let switched_at = now + Duration::from_millis(millis);
+            assert!(animator.advance(switched_at));
+            assert!(animator.content_progress() > 0.0);
+            animator.reveal_content(switched_at);
+            assert_eq!(animator.content_progress(), 0.0);
+        }
+        assert!(animator.advance(now + Duration::from_millis(280)));
+        assert!(!animator.advance(now + Duration::from_millis(360)));
+        assert_eq!(animator.content_progress(), 1.0);
+        assert!(!animator.advance(now + Duration::from_secs(1)));
+    }
+
+    #[test]
     fn zero_duration_finishes_immediately() {
         let mut animator = Animator::new(size(100.0), Duration::ZERO);
         animator.transition_to(size(300.0), Instant::now());

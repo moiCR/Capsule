@@ -49,6 +49,62 @@ impl Default for Theme {
 }
 
 impl Theme {
+    pub fn with_mode(mut self, dark: bool) -> Self {
+        let mode = if dark {
+            ThemeMode::Dark
+        } else {
+            ThemeMode::Light
+        };
+        if self.mode == mode {
+            return self;
+        }
+        self.mode = mode;
+        let colors = if dark {
+            ["#09090B", "#18181B", "#27272A", "#FAFAFA", "#A1A1AA"]
+        } else {
+            ["#FAFAFA", "#F0F0F2", "#E4E4E7", "#18181B", "#71717A"]
+        };
+        self.background_color = Color::from(colors[0]);
+        self.background_color_alt = Color::from(colors[1]);
+        self.surface_color = Color::from(colors[2]);
+        self.foreground_color = Color::from(colors[3]);
+        self.foreground_color_muted = Color::from(colors[4]);
+        self
+    }
+
+    pub fn from_wallpaper(rgb: [u8; 3], dark: bool, font: String) -> Self {
+        let color = rgb_to_hsla(Rgba::new(
+            rgb[0] as f32 / 255.0,
+            rgb[1] as f32 / 255.0,
+            rgb[2] as f32 / 255.0,
+            1.0,
+        ));
+        let to_color = |saturation: f32, lightness: f32| {
+            let rgba = gpui::hsla_to_rgba(gpui::hsla(
+                color.hue.into_positive_degrees() / 360.0,
+                saturation,
+                lightness,
+                1.0,
+            ));
+            Color::new(format!(
+                "#{:02X}{:02X}{:02X}",
+                (rgba.red * 255.0).round() as u8,
+                (rgba.green * 255.0).round() as u8,
+                (rgba.blue * 255.0).round() as u8
+            ))
+        };
+        let mut theme = Self::default().with_mode(dark);
+        theme.font_family = font;
+        theme.accent_color = to_color(
+            color.saturation.clamp(0.4, 0.8),
+            if dark { 0.65 } else { 0.4 },
+        );
+        theme.background_color = to_color(0.12, if dark { 0.055 } else { 0.98 });
+        theme.background_color_alt = to_color(0.1, if dark { 0.09 } else { 0.94 });
+        theme.surface_color = to_color(0.12, if dark { 0.16 } else { 0.89 });
+        theme
+    }
+
     pub fn font_family(&self) -> SharedString {
         if self.font_family.is_empty() {
             SharedString::from("Geist")
@@ -157,3 +213,35 @@ pub fn parse_hex_to_hsla(hex: &str) -> Hsla {
 }
 
 impl gpui::Global for Theme {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_mode_is_independent_of_the_selected_palette() {
+        let theme = Theme {
+            accent_color: Color::from("#B23388"),
+            ..Theme::default()
+        };
+        let light = theme.clone().with_mode(false);
+        assert_eq!(light.mode, ThemeMode::Light);
+        assert_eq!(light.accent_color, theme.accent_color);
+        assert_ne!(light.background_color, theme.background_color);
+        let dark = light.with_mode(true);
+        assert_eq!(dark.mode, ThemeMode::Dark);
+        assert_eq!(dark.accent_color, theme.accent_color);
+    }
+
+    #[test]
+    fn dynamic_palette_changes_with_wallpaper_and_respects_mode() {
+        let warm = Theme::from_wallpaper([210, 70, 40], true, "Geist".into());
+        let cool = Theme::from_wallpaper([40, 70, 210], true, "Geist".into());
+        let light = Theme::from_wallpaper([210, 70, 40], false, "Geist".into());
+        assert_ne!(warm.accent_color, cool.accent_color);
+        assert_eq!(warm.mode, ThemeMode::Dark);
+        assert_eq!(light.mode, ThemeMode::Light);
+        assert!(warm.background().lightness < warm.foreground().lightness);
+        assert!(light.background().lightness > light.foreground().lightness);
+    }
+}

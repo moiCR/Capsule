@@ -500,6 +500,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn embedded_languages_parse_and_include_appearance_controls() {
+        for content in [EMBEDDED_ES, EMBEDDED_EN] {
+            let _: toml::Table = toml::from_str(content).expect("valid embedded language");
+            let bundle = LanguageBundle::parse(content);
+            for key in [
+                "settings.tab_appearance",
+                "settings.dynamic_colors",
+                "settings.color_mode",
+                "settings.clock_format",
+                "settings.themes_locked",
+            ] {
+                assert!(bundle.strings.contains_key(key), "missing {key}");
+            }
+        }
+    }
+
+    #[test]
     fn test_parse_and_get() {
         let toml_data = r#"
             name = "Test"

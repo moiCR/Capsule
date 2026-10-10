@@ -220,6 +220,47 @@ pub(crate) fn render(
     theme: &Theme,
     cx: &mut Context<AppearanceModule>,
 ) -> gpui::Stateful<gpui::Div> {
+    if module.themes_locked(cx) {
+        return div()
+            .id("appearance-themes-locked")
+            .size_full()
+            .p(px(20.0))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.0))
+            .font_family(theme.font_family())
+            .text_color(theme.foreground())
+            .child(
+                svg()
+                    .path("lock.svg")
+                    .size(px(30.0))
+                    .text_color(theme.foreground_muted()),
+            )
+            .child(
+                div()
+                    .text_size(px(16.0))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(module.text("settings.themes_locked", cx)),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(theme.foreground_muted())
+                    .text_center()
+                    .child(module.text("settings.themes_locked_hint", cx)),
+            )
+            .child(
+                style::primary_button(
+                    "appearance-lock-back",
+                    module.text("common.close", cx),
+                    true,
+                    theme,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
+            );
+    }
     let count = module.count();
     let selected = module.carousel().selected;
     let position = module.carousel().position;
@@ -379,10 +420,12 @@ pub(crate) fn render(
         )
     });
     let applied = match module.kind {
-        AppearanceKind::Themes => module
-            .themes
-            .get(selected)
-            .is_some_and(|item| item.theme == *theme),
+        AppearanceKind::Themes => module.themes.get(selected).is_some_and(|item| {
+            item.theme
+                .clone()
+                .with_mode(cx.global::<services::AppState>().config.get().ui.dark_mode)
+                == *theme
+        }),
         AppearanceKind::Wallpapers => module
             .wallpapers
             .get(selected)

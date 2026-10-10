@@ -92,8 +92,16 @@ impl SelectThemeModule {
     }
 
     pub fn select_theme(&mut self, theme: Theme, cx: &mut Context<Self>) {
+        let config = cx.global::<AppState>().config.get();
+        if config.ui.dynamic_colors {
+            return;
+        }
+        let selected = theme.clone();
+        let theme = theme.with_mode(config.ui.dark_mode);
         if cx.has_global::<ThemeManager>() {
             cx.global_mut::<ThemeManager>().set_theme(theme);
+            cx.global_mut::<ThemeManager>().selected_theme = selected.clone();
+            let _ = ThemeManager::save_selected_theme(&selected);
             cx.set_global(cx.global::<ThemeManager>().current_theme.clone());
         }
         cx.emit(SelectThemeEvent::ThemeSelected);
@@ -296,6 +304,34 @@ impl Render for SelectThemeModule {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
+        if cx.global::<AppState>().config.get().ui.dynamic_colors {
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(12.0))
+                .child(
+                    svg()
+                        .path("lock.svg")
+                        .size(px(30.0))
+                        .text_color(theme.foreground_muted()),
+                )
+                .child(
+                    cx.global::<AppState>()
+                        .language
+                        .get("settings.themes_locked"),
+                )
+                .child(
+                    div().text_size(px(12.0)).child(
+                        cx.global::<AppState>()
+                            .language
+                            .get("settings.themes_locked_hint"),
+                    ),
+                )
+                .into_any_element();
+        }
         let (search_placeholder, no_themes, apply_hint) = if cx.has_global::<services::AppState>() {
             let lang = &cx.global::<services::AppState>().language;
             (
@@ -463,5 +499,6 @@ impl Render for SelectThemeModule {
             .child(header)
             .child(carousel_row)
             .child(footer)
+            .into_any_element()
     }
 }

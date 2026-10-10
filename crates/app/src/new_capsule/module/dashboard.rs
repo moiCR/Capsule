@@ -265,7 +265,10 @@ fn format_date(state: &AppState) -> String {
         .replace("{weekday}", &weekday)
         .replace("{day}", &now.day().to_string())
         .replace("{month}", &month);
-    format!("{date} · {}", now.format("%H:%M"))
+    format!(
+        "{date} · {}",
+        now.format(state.config.get().ui.clock_format())
+    )
 }
 
 pub(crate) fn retain_player(current: Option<&str>, players: &[MediaTrack]) -> Option<String> {

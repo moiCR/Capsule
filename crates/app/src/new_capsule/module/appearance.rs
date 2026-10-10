@@ -267,7 +267,7 @@ impl AppearanceModule {
         self.apply(cx);
     }
     pub fn apply(&mut self, cx: &mut Context<Self>) {
-        if self.pending {
+        if self.themes_locked(cx) || self.pending {
             return;
         }
         let selected = self.carousel().selected;
@@ -280,12 +280,14 @@ impl AppearanceModule {
         if theme.is_none() && path.is_none() {
             return;
         }
-        if theme
+        if theme.as_ref().is_some_and(|theme| {
+            theme
+                .clone()
+                .with_mode(cx.global::<AppState>().config.get().ui.dark_mode)
+                == *cx.global::<Theme>()
+        }) || path
             .as_ref()
-            .is_some_and(|theme| theme == cx.global::<Theme>())
-            || path
-                .as_ref()
-                .is_some_and(|path| Some(path) == self.current_wallpaper.as_ref())
+            .is_some_and(|path| Some(path) == self.current_wallpaper.as_ref())
         {
             return;
         }
@@ -296,7 +298,7 @@ impl AppearanceModule {
         services::spawn_tokio(async move {
             let result = tokio::task::spawn_blocking(move || {
                 if let Some(theme) = theme {
-                    ThemeManager::save_current_theme(&theme).map(|_| Some(theme))
+                    ThemeManager::save_selected_theme(&theme).map(|_| Some(theme))
                 } else if let Some(path) = path {
                     if state.wallpaper.set_wallpaper(path) {
                         Ok(None)
@@ -318,11 +320,21 @@ impl AppearanceModule {
                 module.pending = false;
                 match result {
                     Ok(Ok(Some(theme))) => {
+                        cx.global_mut::<ThemeManager>().selected_theme = theme.clone();
+                        if module.themes_locked(cx) {
+                            cx.notify();
+                            return;
+                        }
+                        let selected = theme.clone();
+                        let theme =
+                            theme.with_mode(cx.global::<AppState>().config.get().ui.dark_mode);
                         if cx.has_global::<ThemeManager>() {
                             let manager = cx.global_mut::<ThemeManager>();
+                            manager.selected_theme = selected;
                             manager.current_theme = theme.clone();
                             manager.apply_theme_to_apps();
                         }
+                        crate::settings::appearance::persist_theme(theme.clone(), cx);
                         cx.set_global(theme);
                     }
                     Ok(Ok(None)) => {}
@@ -347,6 +359,11 @@ impl AppearanceModule {
         }));
         cx.notify();
     }
+    pub fn themes_locked(&self, cx: &gpui::App) -> bool {
+        self.kind == AppearanceKind::Themes
+            && cx.global::<AppState>().config.get().ui.dynamic_colors
+    }
+
     pub fn text(&self, key: &str, cx: &gpui::App) -> String {
         cx.global::<AppState>().language.get(key)
     }

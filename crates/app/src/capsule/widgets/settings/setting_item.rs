@@ -37,12 +37,12 @@ pub fn render_hero_header(
                 .child(
                     div()
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_size(px(16.0))
+                        .text_size(px(26.0))
                         .child(title.to_owned()),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(14.0))
                         .text_color(theme.foreground_muted())
                         .child(subtitle.to_owned()),
                 ),
@@ -90,7 +90,7 @@ pub fn render_toggle_row(
         .w_full()
         .min_w_0()
         .flex_shrink_0()
-        .px_4()
+        .px(px(18.0))
         .py_3()
         .child(
             div()
@@ -102,7 +102,8 @@ pub fn render_toggle_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.0))
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
                         .min_w_0()
                         .text_ellipsis()
                         .text_color(theme.foreground())
@@ -111,7 +112,7 @@ pub fn render_toggle_row(
                 .when_some(subtitle, |this, sub| {
                     this.child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(12.0))
                             .text_color(theme.foreground_muted())
                             .child(sub.to_string()),
                     )
@@ -120,8 +121,8 @@ pub fn render_toggle_row(
         .child(
             div()
                 .id(id)
-                .w(px(38.0))
-                .h(px(22.0))
+                .w(px(44.0))
+                .h(px(26.0))
                 .rounded_full()
                 .bg(bg)
                 .p(px(3.0))
@@ -129,12 +130,12 @@ pub fn render_toggle_row(
                 .on_click(on_click)
                 .child(
                     div()
-                        .w(px(16.0))
-                        .h(px(16.0))
+                        .w(px(20.0))
+                        .h(px(20.0))
                         .rounded_full()
                         .bg(theme.foreground())
                         .shadow_sm()
-                        .ml(if is_on { px(16.0) } else { px(0.0) }),
+                        .ml(if is_on { px(18.0) } else { px(0.0) }),
                 ),
         )
 }
@@ -173,8 +174,8 @@ pub fn render_slider_row(
         .w_full()
         .min_w_0()
         .flex_shrink_0()
-        .px_4()
-        .py(px(8.0))
+        .px(px(18.0))
+        .py(px(3.0))
         .gap(px(6.0))
         .child(
             div()
@@ -187,7 +188,8 @@ pub fn render_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.0))
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
                         .min_w_0()
                         .text_ellipsis()
                         .text_color(theme.foreground())
@@ -196,7 +198,8 @@ pub fn render_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(11.0))
+                        .text_size(px(12.0))
+                        .line_height(px(16.0))
                         .px(px(8.0))
                         .py(px(3.0))
                         .rounded(px(8.0))
@@ -309,7 +312,7 @@ pub fn render_int_slider_row(
         .w_full()
         .min_w_0()
         .flex_shrink_0()
-        .px_4()
+        .px(px(18.0))
         .py_3()
         .gap(px(6.0))
         .child(
@@ -323,7 +326,8 @@ pub fn render_int_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.0))
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
                         .min_w_0()
                         .text_ellipsis()
                         .text_color(theme.foreground())
@@ -332,7 +336,8 @@ pub fn render_int_slider_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(11.0))
+                        .text_size(px(12.0))
+                        .line_height(px(16.0))
                         .px(px(8.0))
                         .py(px(3.0))
                         .rounded(px(8.0))
@@ -428,7 +433,7 @@ pub fn render_control_row(
         .w_full()
         .min_w_0()
         .flex_shrink_0()
-        .px_4()
+        .px(px(18.0))
         .py_3()
         .child(
             div()
@@ -440,7 +445,8 @@ pub fn render_control_row(
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_size(px(12.0))
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
                         .min_w_0()
                         .text_ellipsis()
                         .text_color(theme.foreground())
@@ -449,7 +455,7 @@ pub fn render_control_row(
                 .when_some(subtitle, |this, sub| {
                     this.child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(12.0))
                             .text_color(theme.foreground_muted())
                             .child(sub.to_string()),
                     )
@@ -494,7 +500,7 @@ pub fn render_subsection_trigger_button(
         .on_click(on_click)
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(14.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(theme.accent())
                 .child(text),

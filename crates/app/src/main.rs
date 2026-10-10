@@ -80,9 +80,14 @@ fn run_application() {
         let app_state = services::AppState::new();
         cx.set_global(app_state);
 
-        let theme_manager = ui::theme::theme_manager::ThemeManager::new();
+        let mut theme_manager = ui::theme::theme_manager::ThemeManager::new();
+        theme_manager.current_theme = theme_manager
+            .selected_theme
+            .clone()
+            .with_mode(cx.global::<services::AppState>().config.get().ui.dark_mode);
         cx.set_global(theme_manager.current_theme.clone());
         cx.set_global(theme_manager);
+        settings::appearance::initialize(cx);
 
         if cx
             .global::<services::AppState>()

@@ -155,8 +155,6 @@ pub fn render_media_section(
     let (
         hero_title,
         hero_sub,
-        idle_lyrics_title,
-        idle_lyrics_sub,
         media_title,
         media_sub,
         music_title,
@@ -171,8 +169,6 @@ pub fn render_media_section(
         (
             lang.get("settings.media_header_title"),
             lang.get("settings.media_header_subtitle"),
-            lang.get("settings.idle_lyrics_title"),
-            lang.get("settings.idle_lyrics_subtitle"),
             lang.get("settings.show_media_title"),
             lang.get("settings.show_media_subtitle"),
             lang.get("settings.music_players_title"),
@@ -187,8 +183,6 @@ pub fn render_media_section(
         (
             "Multimedia".to_string(),
             "Control de reproductores multimedia y dispositivos de audio.".to_string(),
-            "Letras en Reposo".to_string(),
-            "Muestra la letra sincronizada de la canción en la cápsula idle.".to_string(),
             "Reproductor en Bloqueo".to_string(),
             "Muestra controles MPRIS y letras de canciones en el lockscreen.".to_string(),
             "Reproductores Autorizados".to_string(),
@@ -238,17 +232,6 @@ pub fn render_media_section(
         ))
         .child(
             render_card_container(theme)
-                .child(render_toggle_row(
-                    ElementId::Name("media-idle-lyrics".into()),
-                    &idle_lyrics_title,
-                    Some(&idle_lyrics_sub),
-                    module.show_lyrics,
-                    theme,
-                    cx.listener(|this, _, _, cx| {
-                        this.toggle_show_lyrics(cx);
-                    }),
-                ))
-                .child(render_row_divider(theme))
                 .child(render_toggle_row(
                     ElementId::Name("media-show-lockscreen".into()),
                     &media_title,

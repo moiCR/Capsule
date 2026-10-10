@@ -16,13 +16,13 @@ use crate::capsule::widgets::settings::{
 
 use crate::new_capsule::animator::Animator;
 use crate::new_capsule::widgets::settings::{
-    HEIGHT, WIDTH, render_header, render_tabs, render_ui_section,
+    HEIGHT, render_header, render_tabs, render_ui_section,
 };
 use crate::new_capsule::widgets::style;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SettingsTab {
-    Capsule = 0,
+    Appearance = 0,
     Apps = 1,
     Media = 2,
     LockScreen = 3,
@@ -57,6 +57,11 @@ pub enum SettingsField {
     FileManager = 16,
     VolumeOutput = 17,
     VolumeInput = 18,
+    DynamicColors = 19,
+    DarkMode = 20,
+    ClockFormat = 21,
+    CapsuleStyle = 22,
+    LegacyCapsule = 23,
 }
 
 pub enum SettingsEvent {
@@ -66,6 +71,7 @@ pub enum SettingsEvent {
 pub type SliderDragState = (SettingsField, f32, f32, f32, Rc<Cell<(f32, f32)>>);
 
 pub struct SettingsModule {
+    pub appearance_error: Option<String>,
     pub motion_preview: Animator,
     motion_preview_generation: u64,
     pub active_tab: SettingsTab,
@@ -80,7 +86,6 @@ pub struct SettingsModule {
 
     pub music_players: Vec<String>,
     pub music_player_input: String,
-    pub show_lyrics: bool,
 
     pub capsule_round_input: String,
     pub satellite_round_input: String,
@@ -102,9 +107,8 @@ pub struct SettingsModule {
 
     pub search_query: String,
     pub active_subsection: Option<SettingsSubSection>,
-    pub section_anim_progress: f32,
+    section_animator: Animator,
     section_anim_generation: u64,
-    section_anim_running: bool,
     window_handle: Option<gpui::AnyWindowHandle>,
     pub active_slider_drag: Option<SliderDragState>,
 
@@ -140,9 +144,10 @@ impl SettingsModule {
         let scroll_handle = ScrollHandle::new();
 
         let mut module = Self {
+            appearance_error: None,
             motion_preview: Animator::new(gpui::size(px(72.0), px(22.0)), Duration::ZERO),
             motion_preview_generation: 0,
-            active_tab: SettingsTab::Capsule,
+            active_tab: SettingsTab::Appearance,
             active_field: None,
             capsule_style: CapsuleStyle::Normal,
             use_new_capsule: false,
@@ -152,7 +157,6 @@ impl SettingsModule {
             file_manager_input: String::new(),
             music_players: Vec::new(),
             music_player_input: String::new(),
-            show_lyrics: true,
             capsule_round_input: String::new(),
             satellite_round_input: String::new(),
             cards_round_input: String::new(),
@@ -171,9 +175,8 @@ impl SettingsModule {
             dropdown_anim_task: None,
             search_query: String::new(),
             active_subsection: None,
-            section_anim_progress: 1.0,
+            section_animator: Animator::new(gpui::size(px(1.0), px(1.0)), Duration::ZERO),
             section_anim_generation: 0,
-            section_anim_running: false,
             window_handle: None,
             active_slider_drag: None,
             settings_bounds: Rc::new(Cell::new((0.0, 560.0))),
@@ -229,7 +232,6 @@ impl SettingsModule {
 
         self.music_players = cfg.mpris.players.clone();
         self.music_player_input.clear();
-        self.show_lyrics = cfg.mpris.show_lyrics;
 
         self.capsule_round_input = format!("{:.0}", cfg.ui.capsule_round);
         self.satellite_round_input = format!("{:.0}", cfg.ui.satellite_round);
@@ -364,7 +366,7 @@ impl SettingsModule {
         window.on_next_frame(move |window, cx| {
             let _ = entity.update(cx, |this, cx| {
                 if this.motion_preview_generation != generation
-                    || this.active_tab != SettingsTab::Capsule
+                    || this.active_tab != SettingsTab::Appearance
                     || !this.search_query.is_empty()
                     || this.active_subsection.is_some()
                 {
@@ -391,7 +393,8 @@ impl SettingsModule {
     pub fn start_section_transition(&mut self, cx: &mut Context<Self>) {
         self.section_anim_generation += 1;
         let Some(handle) = self.window_handle else {
-            self.section_anim_progress = 1.0;
+            self.section_animator.set_duration(Duration::ZERO);
+            self.section_animator.reveal_content(Instant::now());
             return;
         };
         let duration = if cx.has_global::<AppState>() {
@@ -405,57 +408,29 @@ impl SettingsModule {
         } else {
             Duration::from_millis(250)
         };
-        let from = if self.section_anim_running {
-            self.section_anim_progress
-        } else {
-            0.0
-        };
-        self.section_anim_progress = if duration.is_zero() { 1.0 } else { from };
-        self.section_anim_running = !duration.is_zero();
-        if self.section_anim_running {
+        self.section_animator.set_duration(duration);
+        self.section_animator.reveal_content(Instant::now());
+        if !duration.is_zero() {
             let entity = cx.entity().downgrade();
             let generation = self.section_anim_generation;
             cx.defer(move |cx| {
                 let _ = handle.update(cx, |_, window, _| {
-                    Self::queue_section_frame(
-                        window,
-                        entity,
-                        generation,
-                        Instant::now(),
-                        duration,
-                        from,
-                    );
+                    Self::queue_section_frame(window, entity, generation);
                 });
             });
         }
     }
 
-    fn queue_section_frame(
-        window: &Window,
-        entity: gpui::WeakEntity<Self>,
-        generation: u64,
-        start: Instant,
-        duration: Duration,
-        from: f32,
-    ) {
+    fn queue_section_frame(window: &Window, entity: gpui::WeakEntity<Self>, generation: u64) {
         window.on_next_frame(move |window, cx| {
             let _ = entity.update(cx, |this, cx| {
                 if this.section_anim_generation != generation {
                     return;
                 }
-                let progress = (start.elapsed().as_secs_f32() / duration.as_secs_f32()).min(1.0);
-                this.section_anim_progress = from + (1.0 - from) * (1.0 - (1.0 - progress).powi(3));
-                this.section_anim_running = progress < 1.0;
+                let running = this.section_animator.advance(Instant::now());
                 cx.notify();
-                if this.section_anim_running {
-                    Self::queue_section_frame(
-                        window,
-                        cx.entity().downgrade(),
-                        generation,
-                        start,
-                        duration,
-                        from,
-                    );
+                if running {
+                    Self::queue_section_frame(window, cx.entity().downgrade(), generation);
                 }
             });
         });
@@ -600,12 +575,6 @@ impl SettingsModule {
         cx.notify();
     }
 
-    pub fn toggle_show_lyrics(&mut self, cx: &mut Context<Self>) {
-        self.show_lyrics = !self.show_lyrics;
-        self.save_to_app_config(cx);
-        cx.notify();
-    }
-
     pub fn toggle_output_devices(&mut self, cx: &mut Context<Self>) {
         self.show_output_devices = !self.show_output_devices;
         cx.notify();
@@ -616,15 +585,30 @@ impl SettingsModule {
         cx.notify();
     }
 
-    pub fn toggle_new_capsule(&mut self, cx: &mut Context<Self>) {
-        self.use_new_capsule = !self.use_new_capsule;
-        self.save_to_app_config(cx);
-        cx.notify();
-    }
-
-    pub fn set_capsule_style(&mut self, style: CapsuleStyle, cx: &mut Context<Self>) {
-        self.capsule_style = style;
-        self.save_to_app_config(cx);
+    pub fn toggle_setting(&mut self, field: SettingsField, cx: &mut Context<Self>) {
+        let config = cx.global::<AppState>().config.clone();
+        let result = config.update(|cfg| match field {
+            SettingsField::DynamicColors => cfg.ui.dynamic_colors = !cfg.ui.dynamic_colors,
+            SettingsField::DarkMode => cfg.ui.dark_mode = !cfg.ui.dark_mode,
+            SettingsField::ClockFormat => cfg.ui.clock_24_hour = !cfg.ui.clock_24_hour,
+            SettingsField::LegacyCapsule => cfg.ui.use_new_capsule = !cfg.ui.use_new_capsule,
+            SettingsField::CapsuleStyle => {
+                cfg.ui.capsule_style = if cfg.ui.capsule_style == CapsuleStyle::Normal {
+                    CapsuleStyle::Concave
+                } else {
+                    CapsuleStyle::Normal
+                }
+            }
+            _ => {}
+        });
+        self.appearance_error = result.err().map(|error| error.to_string());
+        let cfg = config.get();
+        self.use_new_capsule = cfg.ui.use_new_capsule;
+        self.capsule_style = cfg.ui.capsule_style;
+        self.open_dropdown = None;
+        self.dropdown_anim_field = None;
+        self.dropdown_anim_task = None;
+        self.active_field = Some(field);
         cx.notify();
     }
 
@@ -645,7 +629,6 @@ impl SettingsModule {
         let browser = self.browser_input.clone();
         let editor = self.editor_input.clone();
         let file_manager = self.file_manager_input.clone();
-        let show_lyrics = self.show_lyrics;
 
         let capsule_round = self.capsule_round_input.parse::<f32>().unwrap_or(24.0);
         let satellite_round = self.satellite_round_input.parse::<f32>().unwrap_or(20.0);
@@ -678,7 +661,6 @@ impl SettingsModule {
             cfg.defaults.editor = editor;
             cfg.defaults.file_manager = file_manager;
             cfg.mpris.players = music_players;
-            cfg.mpris.show_lyrics = show_lyrics;
 
             cfg.ui.capsule_round = capsule_round;
             cfg.ui.satellite_round = satellite_round;
@@ -711,11 +693,12 @@ impl SettingsModule {
         self.dropdown_anim_field = None;
         self.dropdown_anim_task = None;
         self.section_anim_generation += 1;
-        self.section_anim_running = false;
+        self.section_animator.set_duration(Duration::ZERO);
+        self.section_animator.reveal_content(Instant::now());
         self.active_slider_drag = None;
         self.search_query.clear();
         self.active_subsection = None;
-        self.set_tab(SettingsTab::Capsule, cx);
+        self.set_tab(SettingsTab::Appearance, cx);
         cx.emit(SettingsEvent::Close);
     }
 
@@ -777,11 +760,31 @@ impl SettingsModule {
         let key = event.keystroke.key.as_str();
         let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
+        if let Some(
+            field @ (SettingsField::DynamicColors
+            | SettingsField::DarkMode
+            | SettingsField::ClockFormat
+            | SettingsField::CapsuleStyle
+            | SettingsField::LegacyCapsule),
+        ) = self.active_field
+        {
+            if key == "space" || key == "enter" {
+                self.toggle_setting(field, cx);
+                return;
+            }
+            if key == "tab" {
+                self.active_field = None;
+            } else if key != "escape" && !(ctrl && key == "f") {
+                return;
+            }
+        }
         if ctrl && key == "f" {
             self.set_active_field(Some(SettingsField::Search), cx);
             return;
         }
-        if key == "space" && self.active_field.is_none() && self.active_tab == SettingsTab::Capsule
+        if key == "space"
+            && self.active_field.is_none()
+            && self.active_tab == SettingsTab::Appearance
         {
             self.play_motion_preview(window, cx);
             return;
@@ -815,12 +818,12 @@ impl SettingsModule {
 
         if key == "tab" && self.active_field.is_none() {
             let next_tab = match self.active_tab {
-                SettingsTab::Capsule => SettingsTab::Apps,
+                SettingsTab::Appearance => SettingsTab::Apps,
                 SettingsTab::Apps => SettingsTab::Media,
                 SettingsTab::Media => SettingsTab::LockScreen,
                 SettingsTab::LockScreen => SettingsTab::System,
                 SettingsTab::System => SettingsTab::Record,
-                SettingsTab::Record => SettingsTab::Capsule,
+                SettingsTab::Record => SettingsTab::Appearance,
             };
             self.set_tab(next_tab, cx);
             return;
@@ -898,7 +901,14 @@ impl SettingsModule {
             SettingsField::TimeFormat => &mut self.time_format_input,
             SettingsField::DateFormat => &mut self.date_format_input,
             SettingsField::Search => &mut self.search_query,
-            SettingsField::Language | SettingsField::VolumeOutput | SettingsField::VolumeInput => {
+            SettingsField::Language
+            | SettingsField::VolumeOutput
+            | SettingsField::VolumeInput
+            | SettingsField::DynamicColors
+            | SettingsField::DarkMode
+            | SettingsField::ClockFormat
+            | SettingsField::CapsuleStyle
+            | SettingsField::LegacyCapsule => {
                 return;
             }
         };
@@ -923,7 +933,14 @@ impl SettingsModule {
             SettingsField::TimeFormat => &mut self.time_format_input,
             SettingsField::DateFormat => &mut self.date_format_input,
             SettingsField::Search => &mut self.search_query,
-            SettingsField::Language | SettingsField::VolumeOutput | SettingsField::VolumeInput => {
+            SettingsField::Language
+            | SettingsField::VolumeOutput
+            | SettingsField::VolumeInput
+            | SettingsField::DynamicColors
+            | SettingsField::DarkMode
+            | SettingsField::ClockFormat
+            | SettingsField::CapsuleStyle
+            | SettingsField::LegacyCapsule => {
                 return;
             }
         };
@@ -948,7 +965,7 @@ impl Render for SettingsModule {
             }
         } else {
             match self.active_tab {
-                SettingsTab::Capsule => render_ui_section(self, &theme, cx).into_any_element(),
+                SettingsTab::Appearance => render_ui_section(self, &theme, cx).into_any_element(),
                 SettingsTab::Apps => render_apps_section(self, &theme, cx).into_any_element(),
                 SettingsTab::Media => render_media_section(self, &theme, cx).into_any_element(),
                 SettingsTab::LockScreen => {
@@ -1029,10 +1046,10 @@ impl Render for SettingsModule {
             )
             .flex()
             .flex_col()
-            .gap(px(10.0))
-            .p(px(12.0))
-            .w(px(WIDTH))
-            .h(px(HEIGHT))
+            .gap(px(20.0))
+            .p(px(24.0))
+            .w_full()
+            .h_full()
             .bg(style::background(&theme))
             .font_family(theme.font_family())
             .text_color(theme.foreground())
@@ -1045,7 +1062,7 @@ impl Render for SettingsModule {
                         let height: f32 = if bounds.size.height > px(0.0) {
                             bounds.size.height.into()
                         } else {
-                            560.0
+                            HEIGHT
                         };
                         modal_bounds_cell.set((top, top + height));
                     },
@@ -1055,27 +1072,38 @@ impl Render for SettingsModule {
                 .absolute(),
             )
             .child(render_header(self, &theme, cx))
-            .child(render_tabs(self, &theme, cx))
             .child(
                 div()
-                    .id("settings-content-scroll")
-                    .track_scroll(&self.scroll_handle)
                     .flex()
-                    .flex_col()
+                    .gap(px(28.0))
                     .flex_1()
                     .min_h_0()
-                    .min_w_0()
-                    .overflow_y_scroll()
+                    .w_full()
+                    .child(render_tabs(self, &theme, cx))
                     .child(
                         div()
+                            .id("settings-content-scroll")
+                            .track_scroll(&self.scroll_handle)
                             .flex()
                             .flex_col()
-                            .w_full()
+                            .flex_1()
+                            .min_h_0()
                             .min_w_0()
-                            .flex_shrink_0()
-                            .opacity(self.section_anim_progress)
-                            .mt(px((1.0 - self.section_anim_progress) * 8.0))
-                            .child(content_view),
+                            .overflow_y_scroll()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .w_full()
+                                    .min_w_0()
+                                    .flex_shrink_0()
+                                    .when(self.section_animator.content_progress() < 1.0, |s| {
+                                        s.blur(px(
+                                            (1.0 - self.section_animator.content_progress()) * 5.0
+                                        ))
+                                    })
+                                    .child(content_view),
+                            ),
                     ),
             )
     }

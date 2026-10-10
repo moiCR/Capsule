@@ -1,4 +1,4 @@
-use chrono::{Local, Timelike};
+use chrono::Local;
 use gpui::{Context, EventEmitter, IntoElement, Render, Task, Window, div, prelude::*, px};
 use services::{
     AppState, MediaTrack, MprisService, NetworkService, NotificationStore, PowerService,
@@ -48,7 +48,13 @@ impl DefaultModule {
         let special_anim_progress = if initial_ws.is_special { 1.0 } else { 0.0 };
 
         let now = Local::now();
-        let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
+        let time_str = now
+            .format(if cx.global::<AppState>().config.get().ui.clock_24_hour {
+                "%H:%M"
+            } else {
+                "%I:%M"
+            })
+            .to_string();
         let flip_clock = FlipClock::new(&time_str);
 
         cx.spawn(async move |this, cx| {
@@ -61,9 +67,15 @@ impl DefaultModule {
                     .await;
 
                 let now = Local::now();
-                let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
 
                 let res = this.update(cx, |this: &mut Self, cx| {
+                    let time_str = now
+                        .format(if cx.global::<AppState>().config.get().ui.clock_24_hour {
+                            "%H:%M"
+                        } else {
+                            "%I:%M"
+                        })
+                        .to_string();
                     let mut changed = false;
                     if this.time_str != time_str {
                         this.time_str = time_str.clone();

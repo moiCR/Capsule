@@ -123,7 +123,7 @@ impl DefaultModule {
                         let height = config.ui.idle_height;
                         let duration =
                             Duration::from_millis(config.ui.animation_duration_ms as u64);
-                        let time = Local::now().format("%H:%M").to_string();
+                        let time = Local::now().format(config.ui.clock_format()).to_string();
                         let resized = module.height != height;
                         let mut changed = resized
                             || module.animation_duration != duration
@@ -171,10 +171,13 @@ impl DefaultModule {
             }
         });
 
+        let time = Local::now()
+            .format(state.config.get().ui.clock_format())
+            .to_string();
         let theme_subscription = cx.observe_global::<Theme>(|_, cx| cx.notify());
         Self {
             _theme_subscription: theme_subscription,
-            time: Local::now().format("%H:%M").to_string(),
+            time,
             keys: workspace_keys(&initial, &[]),
             special: initial.is_special,
             status,

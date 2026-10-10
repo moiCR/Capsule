@@ -12,6 +12,7 @@ pub struct ThemeItem {
 
 pub struct ThemeManager {
     pub current_theme: Theme,
+    pub selected_theme: Theme,
     pub last_modified: Option<std::time::SystemTime>,
     apps: Vec<Arc<dyn AppTheme>>,
 }
@@ -51,10 +52,15 @@ impl ThemeManager {
         ];
 
         let manager = Self {
+            selected_theme: Self::load(&Self::selected_theme_path())
+                .unwrap_or_else(|_| theme.clone()),
             current_theme: theme,
             last_modified: mtime,
             apps,
         };
+        if let Err(error) = Self::save_selected_theme(&manager.selected_theme) {
+            eprintln!("Failed to preserve selected theme: {error}");
+        }
         manager.apply_theme_to_apps();
         manager
     }
@@ -159,11 +165,23 @@ impl ThemeManager {
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
+        self.selected_theme = theme.clone();
+        if let Err(error) = Self::save_selected_theme(&theme) {
+            eprintln!("Failed to save selected theme: {error}");
+        }
         self.current_theme = theme;
         if let Err(error) = Self::save(&Self::theme_path(), &self.current_theme) {
             eprintln!("Failed to save theme: {error}");
         }
         self.apply_theme_to_apps();
+    }
+
+    pub fn save_selected_theme(theme: &Theme) -> Result<(), String> {
+        Self::save(&Self::selected_theme_path(), theme).map_err(|error| error.to_string())
+    }
+
+    fn selected_theme_path() -> PathBuf {
+        Self::theme_path().with_file_name("selected.toml")
     }
 
     pub fn theme_path() -> PathBuf {

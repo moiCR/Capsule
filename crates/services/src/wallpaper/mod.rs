@@ -41,6 +41,7 @@ pub struct WallpaperService {
     pub engine: WallpaperEngine,
     compositor: CompositorService,
     config_file: PathBuf,
+    changed: tokio::sync::broadcast::Sender<PathBuf>,
 }
 
 impl WallpaperService {
@@ -52,11 +53,13 @@ impl WallpaperService {
         let config_file = config_dir.join("current_wallpaper");
         let engine = WallpaperEngine::detect();
 
+        let (changed, _) = tokio::sync::broadcast::channel(16);
         let service = Self {
             current: Arc::new(Mutex::new(None)),
             engine,
             compositor,
             config_file,
+            changed,
         };
 
         service.ensure_daemon_in_background();
@@ -229,8 +232,10 @@ impl WallpaperService {
         let compositor = self.compositor.clone();
 
         if let Ok(mut current_guard) = self.current.lock() {
-            *current_guard = Some(path_buf);
+            *current_guard = Some(path_buf.clone());
         }
+
+        let _ = self.changed.send(path_buf);
 
         let blur_target = path.to_path_buf();
         crate::spawn_tokio(async move {
@@ -292,7 +297,62 @@ impl WallpaperService {
         true
     }
 
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<PathBuf> {
+        self.changed.subscribe()
+    }
+
+    pub fn dominant_color(path: &Path) -> Result<[u8; 3], String> {
+        let image = image::open(path)
+            .map_err(|error| error.to_string())?
+            .thumbnail(96, 96)
+            .to_rgba8();
+        Self::palette_color(image.pixels().map(|pixel| pixel.0))
+            .ok_or_else(|| "Wallpaper has no visible pixels".to_owned())
+    }
+
+    fn palette_color(pixels: impl Iterator<Item = [u8; 4]>) -> Option<[u8; 3]> {
+        let mut bins = vec![(0u32, [0u32; 3]); 4096];
+        for [r, g, b, alpha] in pixels {
+            if alpha < 128 {
+                continue;
+            }
+            let index = ((r as usize >> 4) << 8) | ((g as usize >> 4) << 4) | (b as usize >> 4);
+            let bin = &mut bins[index];
+            bin.0 += 1;
+            for (sum, value) in bin.1.iter_mut().zip([r, g, b]) {
+                *sum += value as u32;
+            }
+        }
+        let bin = bins
+            .into_iter()
+            .filter(|(count, _)| *count > 0)
+            .max_by_key(|(count, channels)| {
+                let max = channels.iter().copied().max().unwrap_or(0) / count;
+                let min = channels.iter().copied().min().unwrap_or(0) / count;
+                *count * (64 + max - min)
+            })?;
+        Some(bin.1.map(|sum| (sum / bin.0) as u8))
+    }
+
     pub fn get_current(&self) -> Option<PathBuf> {
         self.current.lock().ok().and_then(|guard| guard.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn palette_uses_wallpaper_pixels_and_ignores_transparency() {
+        let pixels = [[210, 70, 40, 255], [211, 71, 41, 255], [0, 0, 255, 0]];
+        assert_eq!(
+            WallpaperService::palette_color(pixels.into_iter()),
+            Some([210, 70, 40])
+        );
+        assert_eq!(
+            WallpaperService::palette_color([[0, 0, 0, 0]].into_iter()),
+            None
+        );
     }
 }
