@@ -41,8 +41,9 @@ impl AppConfig {
     pub fn load() -> Self {
         let config_path = Self::get_config_path();
         if let Ok(content) = fs::read_to_string(&config_path)
-            && let Ok(cfg) = toml::from_str::<AppConfig>(&content)
+            && let Ok(mut cfg) = toml::from_str::<AppConfig>(&content)
         {
+            cfg.ui.capsule_round = cfg.ui.capsule_round.clamp(0.0, 24.0);
             return cfg;
         }
 
@@ -94,7 +95,8 @@ impl ConfigService {
         self.config.load_full()
     }
 
-    pub fn set(&self, new_config: AppConfig) -> std::io::Result<()> {
+    pub fn set(&self, mut new_config: AppConfig) -> std::io::Result<()> {
+        new_config.ui.capsule_round = new_config.ui.capsule_round.clamp(0.0, 24.0);
         AppConfig::save(&new_config)?;
         let arc_config = Arc::new(new_config);
         self.config.store(arc_config.clone());
@@ -108,6 +110,7 @@ impl ConfigService {
     {
         let mut current = (**self.config.load()).clone();
         f(&mut current);
+        current.ui.capsule_round = current.ui.capsule_round.clamp(0.0, 24.0);
         AppConfig::save(&current)?;
         let arc_config = Arc::new(current);
         self.config.store(arc_config.clone());

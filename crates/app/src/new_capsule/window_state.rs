@@ -70,7 +70,7 @@ impl Capsule {
             config.ui.capsule_style,
             config.ui.margin_top,
         ));
-        let gap = px(config.ui.gap.max(0.0));
+        let gap = super::orbit::Orbit::satellite_gap(px(config.ui.gap));
         let mut maximum = module_manager.maximum_size(cx);
         maximum.width *= 1.1;
         if config.ui.capsule_style == CapsuleStyle::Concave {
@@ -115,13 +115,17 @@ impl Capsule {
             self.window_state.satellite_open = satellite_open;
             self.window_state.notification_popup = passive_notification;
             let keyboard = if !passive_notification
-                && !matches!(current, CapsuleModuleId::Default | CapsuleModuleId::Shelf)
+                && !matches!(
+                    current,
+                    CapsuleModuleId::Default | CapsuleModuleId::Shelf | CapsuleModuleId::ShelfDrop
+                )
                 || satellite_open
             {
                 gpui::layer_shell::KeyboardInteractivity::Exclusive
             } else {
                 gpui::layer_shell::KeyboardInteractivity::OnDemand
             };
+
             window.set_keyboard_interactivity(keyboard);
             if satellite_open {
                 window.focus(&self.module_manager.dashboard_focus_handle(cx), cx);
@@ -144,6 +148,9 @@ impl Capsule {
             } else if current == CapsuleModuleId::Clipboard {
                 let focus = self.module_manager.clipboard.read(cx).focus_handle();
                 window.focus(&focus, cx);
+            } else if current == CapsuleModuleId::Emoji {
+                let focus = self.module_manager.emoji.read(cx).focus_handle();
+                window.focus(&focus, cx);
             } else if matches!(
                 current,
                 CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers
@@ -154,28 +161,34 @@ impl Capsule {
                 window.blur(cx);
             }
         }
+
         let config = cx.global::<AppState>().config.get();
         let style = config.ui.capsule_style;
         let margin = effective_margin(style, config.ui.margin_top);
         let radius = config.ui.capsule_round;
+
         let exclusive_zone =
             super::widgets::default::module_size(config.ui.idle_height).height + px(margin);
         if self.window_state.exclusive_zone != Some(exclusive_zone) {
             self.window_state.exclusive_zone = Some(exclusive_zone);
             window.set_exclusive_zone(exclusive_zone);
         }
+
         let available = window.display(cx).map(|display| display.bounds().size);
         let maximum = Self::maximum_window_size(&self.module_manager, available, cx);
+
         if self.window_state.requested_size != Some(maximum) {
             self.window_state.requested_size = Some(maximum);
             window.resize(maximum);
         }
+
         let region = visible_bounds(
             window.viewport_size(),
             self.animator.size(),
             px(margin),
             &self.location,
         );
+
         let mut regions = if style == CapsuleStyle::Concave {
             super::widgets::style::concave_input_regions(
                 region,
@@ -185,16 +198,26 @@ impl Capsule {
         } else {
             vec![region]
         };
+
+        regions.extend(
+            self.orbit
+                .read(cx)
+                .layout(window.viewport_size(), region, px(config.ui.gap))
+                .filter(|visual| visual.interactive)
+                .map(|visual| visual.bounds),
+        );
+
         let mut visual = if current == CapsuleModuleId::Dashboard {
             self.satellite.layout(
                 window.viewport_size(),
                 region,
-                px(config.ui.gap),
+                super::orbit::Orbit::satellite_gap(px(config.ui.gap)),
                 &self.window_state.satellite_bounds,
             )
         } else {
             Vec::new()
         };
+
         self.window_state
             .satellite_bounds
             .retain(|(id, _)| self.satellite.contains(id));
@@ -209,12 +232,15 @@ impl Capsule {
             );
             visual.layout.bounds.origin -= region.origin;
         }
+
         self.module_manager.notification.update(cx, |module, _| {
             module.set_active(current == CapsuleModuleId::Notification);
         });
+
         self.module_manager.shelf.update(cx, |module, _| {
             module.set_active(current == CapsuleModuleId::Shelf)
         });
+
         self.module_manager.record.update(cx, |module, _| {
             module.set_active(current == CapsuleModuleId::Record)
         });

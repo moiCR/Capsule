@@ -337,7 +337,7 @@ pub(crate) fn render_ui_section(
             SettingsField::CapsuleRound,
             "settings.capsule_radius_short",
             &module.capsule_round_input,
-            48.0,
+            24.0,
         ),
         (
             SettingsField::SatelliteRound,

@@ -14,26 +14,121 @@ fn visible_action(key: &str, label: &str, replying: bool) -> bool {
         && !(replying && key == "inline-reply")
 }
 
-pub fn popup_height(item: Option<&NotificationItem>, replying: bool) -> f32 {
-    let content = item.map_or(144.0, |item| {
-        let body_lines = item
-            .body
-            .lines()
-            .map(|line| line.chars().count().div_ceil(64).max(1))
-            .sum::<usize>();
-        100.0
-            + (body_lines.min(4) as f32 * 18.0)
-            + if item
-                .actions
-                .iter()
-                .any(|(key, label)| visible_action(key, label, replying))
-            {
-                40.0
-            } else {
-                0.0
+fn action_label(key: &str, label: &str, cx: &gpui::App) -> String {
+    if !label.trim().is_empty() {
+        return label.to_owned();
+    }
+    cx.global::<services::AppState>()
+        .language
+        .get(if key == "inline-reply" {
+            "notifications_module.reply"
+        } else {
+            "notifications_module.open"
+        })
+}
+
+fn measure(
+    text: &str,
+    font_size: f32,
+    weight: FontWeight,
+    wrap: bool,
+    cx: &gpui::App,
+    text_system: &gpui::WindowTextSystem,
+) -> gpui::Size<gpui::Pixels> {
+    let theme = cx.global::<Theme>();
+    let runs = [gpui::TextRun {
+        len: text.len(),
+        font: gpui::Font {
+            weight,
+            ..gpui::font(theme.font_family())
+        },
+        color: theme.foreground(),
+        ..Default::default()
+    }];
+    text_system
+        .shape_text(
+            text.to_owned(),
+            px(font_size),
+            &runs,
+            wrap.then(|| px(WIDTH - 32.0)),
+            wrap.then_some(4),
+        )
+        .map(|shaped| {
+            let line_height = px(if font_size == 15.0 { 21.0 } else { 18.0 });
+            let mut size = shaped.size(line_height);
+            if wrap {
+                size.height = size.height.min(line_height * 4.0);
             }
+            size
+        })
+        .unwrap_or_else(|_| gpui::size(px(text.chars().count() as f32 * font_size), px(84.0)))
+}
+
+fn actions_height(
+    item: &NotificationItem,
+    replying: bool,
+    cx: &gpui::App,
+    text_system: &gpui::WindowTextSystem,
+) -> f32 {
+    let mut rows: usize = 0;
+    let mut used = 0.0;
+    let width = WIDTH - 32.0;
+    for (key, label) in &item.actions {
+        if !visible_action(key, label, replying) {
+            continue;
+        }
+        let label = action_label(key, label, cx);
+        let button =
+            (f32::from(measure(&label, 11.0, FontWeight::NORMAL, false, cx, text_system).width)
+                + 30.0)
+                .min(width);
+        if rows == 0 || used + 6.0 + button > width {
+            rows += 1;
+            used = button;
+        } else {
+            used += 6.0 + button;
+        }
+    }
+    let rows = rows.min(3);
+    rows as f32 * 28.0 + rows.saturating_sub(1) as f32 * 6.0
+}
+
+pub fn popup_height(
+    item: Option<&NotificationItem>,
+    replying: bool,
+    failed: bool,
+    cx: &gpui::App,
+    text_system: &gpui::WindowTextSystem,
+) -> f32 {
+    let content = item.map_or(144.0, |item| {
+        let summary = f32::from(
+            measure(
+                &item.summary,
+                15.0,
+                FontWeight::SEMIBOLD,
+                true,
+                cx,
+                text_system,
+            )
+            .height,
+        )
+        .max(21.0);
+        let body = if item.body.is_empty() {
+            0.0
+        } else {
+            5.0 + f32::from(
+                measure(&item.body, 13.0, FontWeight::NORMAL, true, cx, text_system).height,
+            )
+        };
+        let actions = actions_height(item, replying, cx, text_system);
+        32.0 + 32.0 + 10.0 + summary + body + if actions > 0.0 { 10.0 + actions } else { 0.0 }
     });
-    content.max(126.0) + if replying { 84.0 } else { 0.0 }
+    content.max(126.0)
+        + if replying {
+            84.0 + if failed { 24.0 } else { 0.0 }
+        } else {
+            0.0
+        }
 }
 
 pub fn render(
@@ -175,12 +270,16 @@ fn card(
     };
     let mut content = div()
         .id(format!("notification-content-{id}"))
+        .w_full()
+        .min_w_0()
         .when(popup, |s| s.flex_1().min_h_0().overflow_y_scroll())
         .flex()
         .flex_col()
         .gap(px(5.0))
         .child(
             div()
+                .w_full()
+                .flex_shrink_0()
                 .text_size(px(15.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .line_height(px(21.0))
@@ -189,6 +288,8 @@ fn card(
         .when(!item.body.is_empty(), |s| {
             s.child(
                 div()
+                    .w_full()
+                    .flex_shrink_0()
                     .text_size(px(13.0))
                     .line_height(px(18.0))
                     .text_color(theme.foreground_muted())
@@ -263,25 +364,25 @@ fn card(
         )
         .child(content);
     let replying = module.reply.as_ref().is_some_and(|reply| reply.id == id);
-    let mut actions = div().flex_shrink_0().flex().flex_wrap().gap(px(6.0));
+    let mut actions = div()
+        .id(format!("notification-actions-{id}"))
+        .w_full()
+        .min_w_0()
+        .flex_shrink_0()
+        .flex()
+        .flex_wrap()
+        .gap(px(6.0))
+        .when(popup, |s| {
+            s.h(px(actions_height(item, replying, cx, &module.text_system)))
+                .overflow_y_scroll()
+        });
     let mut has_actions = false;
     for (key, label) in &item.actions {
         if !visible_action(key, label, replying) {
             continue;
         }
         has_actions = true;
-        let label = if label.trim().is_empty() {
-            module.text(
-                if key == "inline-reply" {
-                    "notifications_module.reply"
-                } else {
-                    "notifications_module.open"
-                },
-                cx,
-            )
-        } else {
-            label.clone()
-        };
+        let label = action_label(key, label, cx);
         let key = key.clone();
         actions = actions.child(
             style::chip(
@@ -291,6 +392,7 @@ fn card(
                 theme,
             )
             .max_w_full()
+            .text_ellipsis()
             .overflow_hidden()
             .on_click(cx.listener(move |module, _, window, cx| {
                 cx.stop_propagation();
@@ -330,7 +432,7 @@ fn card(
                 )
                 .child(
                     div()
-                        .h(px(28.0))
+                        .h(px(32.0))
                         .flex()
                         .items_center()
                         .justify_between()
@@ -364,6 +466,7 @@ fn card(
                     s.child(
                         div()
                             .text_size(px(12.0))
+                            .line_height(px(18.0))
                             .text_color(theme.red())
                             .child(module.text("notifications_module.reply_failed", cx)),
                     )
@@ -376,22 +479,41 @@ fn card(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn popup_geometry_bounds_long_content_and_reserves_reply_space() {
-        let mut item = NotificationItem {
-            id: 1,
-            app_name: String::new(),
-            app_icon: String::new(),
-            summary: "Title".into(),
-            body: String::new(),
-            actions: vec![],
-            received_at: std::time::Instant::now(),
-            timeout: std::time::Duration::from_secs(5),
-        };
-        assert_eq!(popup_height(Some(&item), false), 126.0);
-        item.body = "Long message\n".repeat(1000);
-        item.actions.push(("inline-reply".into(), "Reply".into()));
-        assert_eq!(popup_height(Some(&item), false), 212.0);
-        assert_eq!(popup_height(Some(&item), true), 256.0);
+    fn popup_reserves_wrapped_summary_actions_and_reply_space() {
+        gpui_platform::headless().with_assets(assets::Assets {}).run(|cx| {
+            cx.set_global(Theme::default());
+            let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+            let mut item = NotificationItem {
+                id: 1,
+                app_name: String::new(),
+                app_icon: String::new(),
+                summary: "Title".into(),
+                body: String::new(),
+                actions: vec![],
+                received_at: std::time::Instant::now(),
+                timeout: std::time::Duration::from_secs(5),
+            };
+            assert_eq!(popup_height(Some(&item), false, false, cx, &text_system), 126.0);
+            item.summary = "Ajustado: subí el contador y corregí la altura de línea para centrar el número en la insignia. Binario recompilado; reinicia Capsule.".into();
+            item.actions.push(("default".into(), "Abrir".into()));
+            let summary_height = f32::from(measure(&item.summary, 15.0, FontWeight::SEMIBOLD, true, cx, &text_system).height);
+            assert!(summary_height > 21.0);
+            assert_eq!(popup_height(Some(&item), false, false, cx, &text_system), 32.0 + 32.0 + 10.0 + summary_height + 10.0 + 28.0);
+            item.summary = "Title".into();
+            item.body = "Long message\n".repeat(1000);
+            item.actions = vec![("inline-reply".into(), "Reply".into())];
+            assert_eq!(popup_height(Some(&item), false, false, cx, &text_system), 210.0);
+            assert_eq!(popup_height(Some(&item), true, false, cx, &text_system), 256.0);
+            assert_eq!(popup_height(Some(&item), true, true, cx, &text_system), 280.0);
+            item.actions = (0..6).map(|i| (format!("action-{i}"), "Very long action label ".repeat(20))).collect();
+            assert_eq!(actions_height(&item, false, cx, &text_system), 96.0);
+            let app = cx.to_async();
+            cx.foreground_executor().spawn(async move {
+                app.background_executor().timer(std::time::Duration::from_millis(10)).await;
+                app.update(|cx| cx.quit());
+            }).detach();
+        });
     }
 }

@@ -14,6 +14,8 @@ pub(crate) struct NotificationModule {
     pub history: bool,
     pub reply: Option<Reply>,
     active: bool,
+    popup_height: f32,
+    pub text_system: gpui::WindowTextSystem,
     focus: FocusHandle,
     _events: Task<()>,
     expiry: Option<Task<()>>,
@@ -42,22 +44,52 @@ impl NotificationModule {
                 }
             }
         });
+        let latest = store.get_latest_active_notification();
+        let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        let popup_height = widgets::popup_height(latest.as_ref(), false, false, cx, &text_system);
         Self {
             items: store.get_all_notifications(),
-            latest: store.get_latest_active_notification(),
+            latest,
             history: false,
             reply: None,
             active: false,
+            popup_height,
+            text_system,
             focus: cx.focus_handle(),
             _events: events,
             expiry: None,
             response: None,
-            _theme: cx.observe_global::<Theme>(|_, cx| cx.notify()),
+            _theme: cx.observe_global::<Theme>(|module, cx| {
+                module.update_popup_height(cx);
+                cx.notify();
+            }),
         }
     }
 
     pub fn focus_handle(&self) -> FocusHandle {
         self.focus.clone()
+    }
+
+    fn update_popup_height(&mut self, cx: &mut Context<Self>) {
+        let reply = self
+            .reply
+            .as_ref()
+            .filter(|reply| self.latest.as_ref().is_some_and(|item| item.id == reply.id));
+        let height = widgets::popup_height(
+            self.latest.as_ref(),
+            reply.is_some(),
+            reply.is_some_and(|reply| reply.failed),
+            cx,
+            &self.text_system,
+        );
+        if self.popup_height != height {
+            self.popup_height = height;
+            if self.active && !self.history {
+                cx.emit(CapsuleModuleEvent::SizeChanged(
+                    CapsuleModuleId::Notification,
+                ));
+            }
+        }
     }
 
     pub fn text(&self, key: &str, cx: &gpui::App) -> String {
@@ -69,6 +101,7 @@ impl NotificationModule {
         self.active = true;
         self.items = NotificationStore::global().get_all_notifications();
         self.latest = NotificationStore::global().get_latest_active_notification();
+        self.update_popup_height(cx);
         self.schedule_expiry(cx);
         cx.notify();
     }
@@ -84,7 +117,6 @@ impl NotificationModule {
     }
 
     fn refresh(&mut self, cx: &mut Context<Self>) {
-        let previous_size = self.size();
         let previous_id = self.latest.as_ref().map(|item| item.id);
         let store = NotificationStore::global();
         self.items = store.get_all_notifications();
@@ -98,14 +130,10 @@ impl NotificationModule {
             store.set_hovered(false);
         }
         self.schedule_expiry(cx);
+        self.update_popup_height(cx);
         let next_id = self.latest.as_ref().map(|item| item.id);
         if previous_id != next_id {
             cx.emit(CapsuleModuleEvent::NotificationChanged);
-        }
-        if previous_size != self.size() {
-            cx.emit(CapsuleModuleEvent::SizeChanged(
-                CapsuleModuleId::Notification,
-            ));
         }
         cx.notify();
     }
@@ -156,9 +184,7 @@ impl NotificationModule {
         window.focus(&self.focus, cx);
         cx.global::<AppState>().compositor.request_layer_focus();
         self.expiry = None;
-        cx.emit(CapsuleModuleEvent::SizeChanged(
-            CapsuleModuleId::Notification,
-        ));
+        self.update_popup_height(cx);
         cx.notify();
     }
 
@@ -167,11 +193,9 @@ impl NotificationModule {
             return;
         }
         self.reply = None;
+        self.update_popup_height(cx);
         NotificationStore::global().set_hovered(false);
         self.schedule_expiry(cx);
-        cx.emit(CapsuleModuleEvent::SizeChanged(
-            CapsuleModuleId::Notification,
-        ));
         cx.notify();
     }
 
@@ -201,6 +225,7 @@ impl NotificationModule {
                     if !reply.failed {
                         module.reply = None;
                     }
+                    module.update_popup_height(cx);
                     cx.notify();
                 }
             });
@@ -250,6 +275,7 @@ impl NotificationModule {
                 .extend(text.chars().filter(|ch| !ch.is_control()));
         }
         reply.failed = false;
+        self.update_popup_height(cx);
         cx.stop_propagation();
         cx.notify();
     }
@@ -263,12 +289,7 @@ impl CapsuleModule for NotificationModule {
             gpui::px(if self.history {
                 widgets::HISTORY_HEIGHT
             } else {
-                widgets::popup_height(
-                    self.latest.as_ref(),
-                    self.reply.as_ref().is_some_and(|reply| {
-                        self.latest.as_ref().is_some_and(|item| item.id == reply.id)
-                    }),
-                )
+                self.popup_height
             }),
         )
     }

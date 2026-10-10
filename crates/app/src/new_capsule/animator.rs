@@ -11,7 +11,7 @@ pub struct Animator {
     started_at: Option<Instant>,
     duration: Duration,
     content_started_at: Option<Instant>,
-    content_opacity: f32,
+    content_progress: f32,
 }
 
 impl Animator {
@@ -23,7 +23,7 @@ impl Animator {
             started_at: None,
             duration,
             content_started_at: None,
-            content_opacity: 1.0,
+            content_progress: 1.0,
         }
     }
 
@@ -45,13 +45,17 @@ impl Animator {
         self.advance(now);
     }
 
-    pub fn content_opacity(&self) -> f32 {
-        self.content_opacity
+    pub fn content_progress(&self) -> f32 {
+        self.content_progress
+    }
+
+    pub fn content_scale(&self) -> f32 {
+        0.98 + self.content_progress * 0.02
     }
 
     pub fn reveal_content(&mut self, now: Instant) {
         self.content_started_at = Some(now);
-        self.content_opacity = 0.0;
+        self.content_progress = 0.0;
         self.advance(now);
     }
 
@@ -59,13 +63,14 @@ impl Animator {
         let size_running = self.advance_size(now);
         let content_running = if let Some(started_at) = self.content_started_at {
             let elapsed = now.saturating_duration_since(started_at);
-            if elapsed >= self.duration {
-                self.content_opacity = 1.0;
+            let duration = self.duration.min(Duration::from_millis(160));
+            if elapsed >= duration {
+                self.content_progress = 1.0;
                 self.content_started_at = None;
                 false
             } else {
-                let progress = elapsed.as_secs_f32() / self.duration.as_secs_f32();
-                self.content_opacity = progress * progress * (3.0 - 2.0 * progress);
+                let progress = elapsed.as_secs_f32() / duration.as_secs_f32();
+                self.content_progress = 1.0 - (1.0 - progress).powi(3);
                 true
             }
         } else {
@@ -151,12 +156,12 @@ mod tests {
         let mut animator = Animator::new(size(100.0), Duration::from_millis(200));
         animator.transition_to(size(100.0), now);
         animator.reveal_content(now);
-        assert_eq!(animator.content_opacity(), 0.0);
-        assert!(animator.advance(now + Duration::from_millis(100)));
-        assert_eq!(animator.content_opacity(), 0.5);
+        assert_eq!(animator.content_scale(), 0.98);
+        assert!(animator.advance(now + Duration::from_millis(80)));
+        assert!((animator.content_scale() - 0.9975).abs() < f32::EPSILON);
         assert_eq!(animator.size(), size(100.0));
-        assert!(!animator.advance(now + Duration::from_millis(200)));
-        assert_eq!(animator.content_opacity(), 1.0);
+        assert!(!animator.advance(now + Duration::from_millis(160)));
+        assert_eq!(animator.content_scale(), 1.0);
         assert!(!animator.advance(now + Duration::from_secs(1)));
     }
 
@@ -173,7 +178,7 @@ mod tests {
         assert!(animator.advance(now + Duration::from_millis(200)));
         assert_eq!(animator.size(), size(300.0));
         assert!(!animator.advance(now + Duration::from_millis(300)));
-        assert_eq!(animator.content_opacity(), 1.0);
+        assert_eq!(animator.content_scale(), 1.0);
     }
 
     #[test]
@@ -182,7 +187,7 @@ mod tests {
         animator.transition_to(size(300.0), Instant::now());
         assert_eq!(animator.size(), size(300.0));
         animator.reveal_content(Instant::now());
-        assert_eq!(animator.content_opacity(), 1.0);
+        assert_eq!(animator.content_scale(), 1.0);
         assert!(!animator.advance(Instant::now()));
     }
 }

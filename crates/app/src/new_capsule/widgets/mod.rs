@@ -10,9 +10,11 @@ pub(crate) mod satellite;
 pub(crate) mod appearance;
 
 pub(crate) mod clipboard;
+pub(crate) mod emoji;
 
 pub(crate) mod record;
 pub(crate) mod shelf;
+pub(crate) mod shelf_drop;
 
 pub(crate) mod polkit;
 

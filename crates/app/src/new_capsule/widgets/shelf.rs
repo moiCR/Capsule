@@ -42,8 +42,8 @@ pub fn next_selection(current: usize, count: usize, key: &str) -> usize {
 }
 
 #[derive(Clone)]
-struct DraggedFile {
-    path: std::path::PathBuf,
+pub(in crate::new_capsule) struct DraggedFile {
+    pub(in crate::new_capsule) path: std::path::PathBuf,
     is_dir: bool,
 }
 impl Render for DraggedFile {
@@ -215,7 +215,6 @@ pub fn render(module: &ShelfModule, cx: &mut Context<ShelfModule>) -> gpui::Stat
         "shelf.navigate_hint"
     });
     let empty = language.get("shelf.empty_title");
-    let drop_background = style::selected(&theme);
     let mut gallery = div()
         .id("shelf-gallery")
         .w_full()
@@ -248,11 +247,6 @@ pub fn render(module: &ShelfModule, cx: &mut Context<ShelfModule>) -> gpui::Stat
         .gap(px(8.0))
         .font_family(theme.font_family())
         .on_mouse_move(cx.listener(|module, _, _, _| module.mouse_moved = true))
-        .drag_over::<gpui::ExternalPaths>(move |s, _, _, _| s.bg(drop_background))
-        .on_drop(cx.listener(|module, paths: &gpui::ExternalPaths, _, cx| {
-            cx.stop_propagation();
-            module.add_paths(paths.paths().to_vec());
-        }))
         .child(
             div()
                 .w_full()

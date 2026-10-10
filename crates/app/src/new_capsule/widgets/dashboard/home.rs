@@ -423,9 +423,12 @@ pub fn render(
         .child(
             div()
                 .w_full()
+                .min_w_0()
+                .max_w_full()
                 .min_h(px(NOTIFICATIONS))
                 .h(px(NOTIFICATIONS))
                 .flex_shrink_0()
+                .overflow_hidden()
                 .child(super::notifications::render(module, theme, cx)),
         )
         .when(!module.snapshot.tray.is_empty(), |s| {

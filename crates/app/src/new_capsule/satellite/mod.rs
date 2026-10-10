@@ -187,7 +187,12 @@ impl Capsule {
                     px(self.window_state.margin),
                     &self.location,
                 );
-                let gap = px(cx.global::<services::AppState>().config.get().ui.gap);
+                let gap = super::orbit::Orbit::satellite_gap(px(cx
+                    .global::<services::AppState>()
+                    .config
+                    .get()
+                    .ui
+                    .gap));
                 let side = |id: &SatelliteId| {
                     SatelliteLayout::new(
                         viewport,

@@ -23,6 +23,7 @@ All notable changes to Capsule are documented in this file.
 - Migrated `gpui-capsule` from a fork of `gpui` to `gpui-ce` as part of the rewrite.
 
 ### Bug Fixes
+### Bug Fixes
 - Fixed clipboard integration when using `cliphist`. Previously, `cliphist` could return an error, causing Capsule to fall back to text-only clipboard handling; the integration now uses the expected clipboard history behavior.
 - Fixed a clipboard issue that prevented items from being copied.
 - Fixed the lock screen continuously rechecking authentication.

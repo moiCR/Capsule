@@ -12,6 +12,8 @@ pub fn render(
 ) -> AnyElement {
     let count = module.snapshot.notifications.len();
     let header = div()
+        .w_full()
+        .min_w_0()
         .h(px(32.0))
         .flex_shrink_0()
         .flex()
@@ -54,6 +56,9 @@ pub fn render(
         .flex_1()
         .min_h_0()
         .w_full()
+        .min_w_0()
+        .max_w_full()
+        .overflow_x_hidden()
         .overflow_y_scroll()
         .flex()
         .flex_col()
@@ -114,6 +119,9 @@ pub fn render(
             .id(format!("dashboard-notification-{}", notification.id))
             .flex_shrink_0()
             .w_full()
+            .min_w_0()
+            .max_w_full()
+            .overflow_hidden()
             .min_h(px(64.0))
             .p(px(8.0))
             .rounded(px(style::INNER_RADIUS))
@@ -135,11 +143,16 @@ pub fn render(
         let mut content = div()
             .flex_1()
             .min_w_0()
+            .max_w_full()
+            .overflow_hidden()
+            .whitespace_normal()
             .flex()
             .flex_col()
             .gap(px(2.0))
             .child(
                 div()
+                    .w_full()
+                    .min_w_0()
                     .min_h(px(22.0))
                     .flex_shrink_0()
                     .flex()
@@ -156,6 +169,7 @@ pub fn render(
                     )
                     .child(
                         div()
+                            .flex_shrink_0()
                             .text_size(px(12.0))
                             .text_color(theme.foreground_muted())
                             .child(age),
@@ -163,6 +177,10 @@ pub fn render(
             )
             .child(
                 div()
+                    .w_full()
+                    .min_w_0()
+                    .max_w_full()
+                    .flex_shrink_0()
                     .text_size(px(12.0))
                     .line_height(px(18.0))
                     .text_color(theme.foreground_muted())
@@ -172,7 +190,13 @@ pub fn render(
                         format!("{} · {}", notification.app_name, notification.body)
                     }),
             );
-        let mut actions = div().flex().flex_wrap().gap(px(6.0));
+        let mut actions = div()
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.0));
         let mut has_actions = false;
         for (key, label) in &notification.actions {
             if key == "default" || label.trim().is_empty() {
@@ -184,6 +208,8 @@ pub fn render(
             actions = actions.child(
                 div()
                     .id(format!("dashboard-notification-{}-{key}", notification.id))
+                    .min_w_0()
+                    .max_w_full()
                     .min_h(px(26.0))
                     .px(px(8.0))
                     .rounded(px(8.0))
@@ -229,6 +255,8 @@ pub fn render(
         .flex_1()
         .min_h_0()
         .w_full()
+        .min_w_0()
+        .max_w_full()
         .h_full()
         .px(px(2.0))
         .overflow_hidden()

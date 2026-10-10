@@ -12,7 +12,7 @@ use gpui::{
 use ui::theme::Theme;
 
 pub const WIDTH: f32 = 560.0;
-pub const HEIGHT: f32 = 562.0;
+pub const HEIGHT: f32 = 574.0;
 pub const PADDING: f32 = 12.0;
 pub const GAP: f32 = 8.0;
 pub const HEADER: f32 = 28.0;
@@ -24,7 +24,7 @@ pub const MEDIA_HEIGHT: f32 = CONTENT;
 pub const SLIDER: f32 = 80.0;
 pub const NOTIFICATIONS: f32 = 150.0;
 pub const FOOTER: f32 = 40.0;
-pub const BOTTOM_PADDING: f32 = 0.0;
+pub const BOTTOM_PADDING: f32 = PADDING;
 #[cfg(test)]
 pub const BODY: f32 = HEIGHT - PADDING - BOTTOM_PADDING - HEADER - GAP;
 

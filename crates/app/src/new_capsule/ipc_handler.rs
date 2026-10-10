@@ -93,6 +93,16 @@ impl Capsule {
                 };
                 self.handle_module_event(&event, cx);
             }
+            command @ (IpcCommand::ShowEmoji | IpcCommand::ToggleEmoji) => {
+                let event = if command == IpcCommand::ToggleEmoji
+                    && self.module_manager.current_id() == CapsuleModuleId::Emoji
+                {
+                    CapsuleModuleEvent::Close
+                } else {
+                    CapsuleModuleEvent::Open(CapsuleModuleId::Emoji)
+                };
+                self.handle_module_event(&event, cx);
+            }
             IpcCommand::ShowShelf => {
                 self.handle_module_event(&CapsuleModuleEvent::Open(CapsuleModuleId::Shelf), cx)
             }
@@ -144,9 +154,6 @@ impl Capsule {
             }
             IpcCommand::Quit => cx.quit(),
             IpcCommand::Ping => {}
-            other => {
-                services::log_warn!("IPC", "Command not implemented in new Capsule: {:?}", other)
-            }
         }
     }
 }

@@ -2,11 +2,13 @@ pub(crate) mod appearance;
 pub(crate) mod clipboard;
 pub(crate) mod dashboard;
 pub(crate) mod default;
+pub(crate) mod emoji;
 pub(crate) mod launcher;
 pub(crate) mod notification;
 pub(crate) mod polkit;
 pub(crate) mod record;
 pub(crate) mod shelf;
+pub(crate) mod shelf_drop;
 
 use std::time::{Duration, Instant};
 
@@ -25,7 +27,9 @@ pub struct CapsuleModuleManager {
     pub(super) dashboard: Entity<DashboardModule>,
     pub(super) appearance: Entity<appearance::AppearanceModule>,
     pub(super) clipboard: Entity<clipboard::ClipboardModule>,
+    pub(super) emoji: Entity<emoji::EmojiModule>,
     pub(super) shelf: Entity<shelf::ShelfModule>,
+    pub(super) shelf_drop: Entity<shelf_drop::ShelfDropModule>,
     pub(super) record: Entity<record::RecordModule>,
     pub(super) notification: Entity<notification::NotificationModule>,
     pub(super) polkit: Entity<polkit::PolkitModule>,
@@ -40,7 +44,9 @@ impl CapsuleModuleManager {
             dashboard: cx.new(DashboardModule::new),
             appearance: cx.new(appearance::AppearanceModule::new),
             clipboard: cx.new(clipboard::ClipboardModule::new),
+            emoji: cx.new(emoji::EmojiModule::new),
             shelf: cx.new(shelf::ShelfModule::new),
+            shelf_drop: cx.new(shelf_drop::ShelfDropModule::new),
             record: cx.new(record::RecordModule::new),
             notification: cx.new(notification::NotificationModule::new),
             polkit: cx.new(polkit::PolkitModule::new),
@@ -63,6 +69,9 @@ impl CapsuleModuleManager {
             cx.subscribe(&self.polkit, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
+            cx.subscribe(&self.shelf_drop, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
             cx.subscribe(&self.shelf, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
@@ -70,6 +79,9 @@ impl CapsuleModuleManager {
                 capsule.handle_module_event(event, cx)
             }),
             cx.subscribe(&self.clipboard, |capsule, _, event, cx| {
+                capsule.handle_module_event(event, cx)
+            }),
+            cx.subscribe(&self.emoji, |capsule, _, event, cx| {
                 capsule.handle_module_event(event, cx)
             }),
             cx.subscribe(&self.appearance, |capsule, _, event, cx| {
@@ -109,6 +121,7 @@ impl CapsuleModuleManager {
         let polkit = self.polkit.read_with(cx, |module, _| module.size());
         let appearance = self.appearance.read_with(cx, |module, _| module.size());
         let clipboard = self.clipboard.read_with(cx, |module, _| module.size());
+        let emoji = self.emoji.read_with(cx, |module, _| module.size());
         Size {
             width: default
                 .width
@@ -116,6 +129,7 @@ impl CapsuleModuleManager {
                 .max(dashboard.width)
                 .max(appearance.width)
                 .max(clipboard.width)
+                .max(emoji.width)
                 .max(shelf.width)
                 .max(record.width)
                 .max(polkit.width)
@@ -126,6 +140,7 @@ impl CapsuleModuleManager {
                 .max(dashboard.height)
                 .max(appearance.height)
                 .max(clipboard.height)
+                .max(emoji.height)
                 .max(shelf.height)
                 .max(record.height)
                 .max(polkit.height)
@@ -153,7 +168,9 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Launcher => self.launcher.clone().into(),
             CapsuleModuleId::Dashboard => self.dashboard.clone().into(),
             CapsuleModuleId::Clipboard => self.clipboard.clone().into(),
+            CapsuleModuleId::Emoji => self.emoji.clone().into(),
             CapsuleModuleId::Shelf => self.shelf.clone().into(),
+            CapsuleModuleId::ShelfDrop => self.shelf_drop.clone().into(),
             CapsuleModuleId::Record => self.record.clone().into(),
             CapsuleModuleId::Polkit => self.polkit.clone().into(),
             CapsuleModuleId::Notification => self.notification.clone().into(),
@@ -167,7 +184,9 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Launcher => self.launcher.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Dashboard => self.dashboard.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Clipboard => self.clipboard.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::Emoji => self.emoji.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Shelf => self.shelf.read_with(cx, |module, _| module.size()),
+            CapsuleModuleId::ShelfDrop => self.shelf_drop.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Record => self.record.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Polkit => self.polkit.read_with(cx, |module, _| module.size()),
             CapsuleModuleId::Notification => {
@@ -188,7 +207,9 @@ pub enum CapsuleModuleId {
     Themes,
     Wallpapers,
     Clipboard,
+    Emoji,
     Shelf,
+    ShelfDrop,
     Record,
     Polkit,
     Notification,
@@ -196,6 +217,10 @@ pub enum CapsuleModuleId {
 
 pub enum CapsuleModuleEvent {
     NotificationChanged,
+    ShelfDropFinished {
+        return_to: CapsuleModuleId,
+        epoch: u64,
+    },
     ToggleSatellite(super::satellite::SatelliteId),
     Close,
     CloseSatelliteId(super::satellite::SatelliteId),
@@ -215,6 +240,8 @@ impl Capsule {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut subscriptions = module_manager.subscribe(cx);
+        let orbit = cx.new(super::orbit::Orbit::new);
+        subscriptions.push(cx.subscribe(&orbit, |capsule, _, _, cx| capsule.orbit_changed(cx)));
         let satellite = super::satellite::Satellite::new();
         subscriptions.push(cx.observe_global::<ui::theme::Theme>(|_, cx| cx.notify()));
         let size = module_manager.current_size(cx);
@@ -253,6 +280,8 @@ impl Capsule {
                         .animation_duration_ms as u64,
                 ),
             ),
+            outgoing_content: None,
+            orbit,
             animation_frame_pending: false,
             satellite,
             satellite_animation_task: None,
@@ -302,8 +331,30 @@ impl Capsule {
                 _ => {}
             }
         }
+        let outgoing = matches!(
+            event,
+            CapsuleModuleEvent::Open(_) | CapsuleModuleEvent::Close
+        )
+        .then(|| super::OutgoingContent {
+            view: self.module_manager.current(),
+            size: self.animator.size(),
+            scale: self.animator.content_scale(),
+            opacity: if self.outgoing_content.is_some() {
+                self.animator.content_progress()
+            } else {
+                1.0
+            },
+        });
         match event {
             CapsuleModuleEvent::NotificationChanged => return,
+            CapsuleModuleEvent::ShelfDropFinished { return_to, epoch } => {
+                if previous_module == CapsuleModuleId::ShelfDrop
+                    && self.module_manager.shelf_drop.read(cx).epoch() == *epoch
+                {
+                    self.handle_module_event(&CapsuleModuleEvent::Open(*return_to), cx);
+                }
+                return;
+            }
             CapsuleModuleEvent::SatelliteBounds(id, bounds) => {
                 if self.satellite.contains(id) {
                     let previous = self
@@ -339,6 +390,19 @@ impl Capsule {
                 return;
             }
             CapsuleModuleEvent::Open(id) => {
+                if *id == CapsuleModuleId::ShelfDrop {
+                    if self.module_manager.shelf_drop.read(cx).return_to() != Some(previous_module)
+                    {
+                        self.module_manager
+                            .shelf_drop
+                            .update(cx, |module, _| module.cancel());
+                        return;
+                    }
+                } else {
+                    self.module_manager
+                        .shelf_drop
+                        .update(cx, |module, _| module.cancel());
+                }
                 self.set_satellite_open(false, cx);
                 if *id == CapsuleModuleId::Launcher && self.module_manager.current_id() != *id {
                     self.module_manager
@@ -365,6 +429,11 @@ impl Capsule {
                         .clipboard
                         .update(cx, |module, cx| module.open(cx));
                 }
+                if *id == CapsuleModuleId::Emoji && self.module_manager.current_id() != *id {
+                    self.module_manager
+                        .emoji
+                        .update(cx, |module, cx| module.open(cx));
+                }
                 if *id == CapsuleModuleId::Shelf && self.module_manager.current_id() != *id {
                     self.module_manager
                         .shelf
@@ -378,6 +447,9 @@ impl Capsule {
                 self.module_manager.open(*id);
             }
             CapsuleModuleEvent::Close => {
+                self.module_manager
+                    .shelf_drop
+                    .update(cx, |module, _| module.cancel());
                 self.set_satellite_open(false, cx);
                 self.module_manager.close();
             }
@@ -395,28 +467,44 @@ impl Capsule {
         ));
         let now = Instant::now();
         if previous_module != self.module_manager.current_id() {
+            self.outgoing_content = outgoing.filter(|outgoing| {
+                outgoing.view.entity_id() != self.module_manager.current().entity_id()
+            });
             self.animator.reveal_content(now);
         }
         self.animator.transition_to(target, now);
         let animating = self.animator.advance(Instant::now());
+        if self.animator.content_progress() >= 1.0 {
+            self.outgoing_content = None;
+        }
         self.sync_window(cx);
-        if !self.animation_frame_pending && animating {
-            self.animation_frame_pending = true;
+        self.start_animation(animating, cx);
+        cx.notify();
+    }
+
+    pub(super) fn start_animation(&mut self, running: bool, cx: &mut Context<Self>) {
+        if !self.animation_frame_pending && running {
             let entity = cx.entity().downgrade();
-            let _ = self.window_state.handle.update(cx, |_, window, _| {
+            let queued = self.window_state.handle.update(cx, |_, window, _| {
                 Self::queue_animation_frame(window, entity);
             });
+            self.animation_frame_pending = queued.is_ok();
         }
-        cx.notify();
     }
 
     fn queue_animation_frame(window: &gpui::Window, entity: gpui::WeakEntity<Self>) {
         window.on_next_frame(move |window, cx| {
             let _ = entity.update(cx, |capsule, cx| {
                 let previous_size = capsule.animator.size();
-                let running = capsule.animator.advance(Instant::now());
+                let now = Instant::now();
+                let orbits_were_running = capsule.orbit.read(cx).animating();
+                let orbits_running = capsule.orbit.update(cx, |orbit, _| orbit.advance(now));
+                let running = capsule.animator.advance(now) || orbits_running;
+                if capsule.animator.content_progress() >= 1.0 {
+                    capsule.outgoing_content = None;
+                }
                 capsule.animation_frame_pending = running;
-                if previous_size != capsule.animator.size() {
+                if previous_size != capsule.animator.size() || orbits_were_running {
                     capsule.apply_window_geometry(window, cx);
                 }
                 cx.notify();
