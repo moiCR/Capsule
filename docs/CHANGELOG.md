@@ -20,3 +20,12 @@ All notable changes to Capsule are documented in this file.
 * **Simplified Theme Selector**: Streamlined the in-capsule appearance module to focus entirely on themes, removing redundant wallpaper browsing for a lighter, faster experience.
 * **Settings Focus & IPC Isolation**: Opening settings now automatically closes any active capsule modules to default and blocks external IPC commands, ensuring your keyboard focus stays right where you need it.
 * **Refined Staggered Spacing**: Fixed satellite gaps and decoupled screen corners so expanding one side leaves the opposite corner completely undisturbed.
+
+
+<div align="center">
+
+## Preview
+
+</div>
+
+https://github.com/user-attachments/assets/baf17a29-27d1-4f04-a97b-43b860c84d84
