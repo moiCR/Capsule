@@ -21,6 +21,12 @@ All notable changes to Capsule are documented in this file.
 * **Settings Focus & IPC Isolation**: Opening settings now automatically closes any active capsule modules to default and blocks external IPC commands, ensuring your keyboard focus stays right where you need it.
 * **Refined Staggered Spacing**: Fixed satellite gaps and decoupled screen corners so expanding one side leaves the opposite corner completely undisturbed.
 
+### Bug Fixes
+* **Wallpaper Memory Leak & Cache Eviction**: Eliminated an image retention leak in GPUI by automatically evicting previous wallpaper buffers from `App.loading_assets` upon transition completion, preventing uncompressed 50–100MB buffers from accumulating in RAM.
+* **Wallpaper Blur & Palette Color Optimization**: Fixed an RGBA-to-JPEG encoding failure in `WallpaperService::create_or_get_blur` that created 0-byte cache files, and optimized `dominant_color` extraction to sample downscaled blur thumbnails instead of re-decoding multi-megapixel images.
+* **Wallpaper Preview Aspect Ratio**: Preserved proper image aspect ratio and rounded container styling in the Appearance settings preview card to eliminate square stretching.
+* **Settings Portal & Re-entrant Safety**: Resolved re-entrant borrow issues when launching the desktop portal file picker and kept settings closed upon selection to keep transitions smooth and unobstructed.
+
 
 <div align="center">
 

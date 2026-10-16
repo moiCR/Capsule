@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use animator::WallpaperAnimator;
 use gpui::{
-    App, AppContext, Context, IntoElement, LinuxWindowBackground, Render, Task, Window,
+    App, AppContext, Context, ImageSource, IntoElement, LinuxWindowBackground, Render, Task, Window,
     WindowBounds, WindowKind, WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
 };
@@ -67,6 +67,7 @@ impl Wallpaper {
     ) {
         self.animator
             .set_wallpaper(path, transition, duration, Instant::now());
+        self.evict_completed_previous(cx);
         if self.animator.animating && self.animation_task.is_none() {
             let compositor = cx.global::<AppState>().compositor.clone();
             self.animation_task = Some(cx.spawn(async move |this, cx| {
@@ -82,6 +83,7 @@ impl Wallpaper {
                         let running = wallpaper.animator.advance(Instant::now());
                         if !running {
                             wallpaper.animation_task = None;
+                            wallpaper.evict_completed_previous(cx);
                         }
                         cx.notify();
                         running
@@ -94,6 +96,31 @@ impl Wallpaper {
             }));
         }
         cx.notify();
+    }
+
+    fn evict_completed_previous(&mut self, cx: &mut Context<Self>) {
+        if let Some(prev) = self.animator.take_completed_previous() {
+            if self.animator.current.as_ref() != Some(&prev) {
+                cx.spawn(async move |_this, cx| {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(150))
+                        .await;
+                    let _ = cx.update(|cx| {
+                        if cx.has_global::<AppState>() {
+                            if let Some(curr) =
+                                cx.global::<AppState>().wallpaper.get_current_wallpaper()
+                            {
+                                if curr == prev {
+                                    return;
+                                }
+                            }
+                        }
+                        ImageSource::from(prev).remove_asset(cx);
+                    });
+                })
+                .detach();
+            }
+        }
     }
 }
 

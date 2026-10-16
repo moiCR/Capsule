@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 pub struct WallpaperAnimator {
     pub current: Option<PathBuf>,
     pub previous: Option<PathBuf>,
+    pub completed_previous: Option<PathBuf>,
     pub transition: WallpaperTransition,
     pub duration: Duration,
     pub start_time: Instant,
@@ -17,6 +18,7 @@ impl WallpaperAnimator {
         Self {
             current: initial,
             previous: None,
+            completed_previous: None,
             transition: WallpaperTransition::Fade,
             duration: Duration::from_millis(600),
             start_time: Instant::now(),
@@ -37,6 +39,7 @@ impl WallpaperAnimator {
         }
 
         if self.current.is_none() || transition == WallpaperTransition::None || duration.is_zero() {
+            self.completed_previous = self.previous.take().or_else(|| self.current.take());
             self.current = Some(path);
             self.previous = None;
             self.transition = transition;
@@ -45,6 +48,9 @@ impl WallpaperAnimator {
             return;
         }
 
+        if let Some(displaced) = self.previous.take() {
+            self.completed_previous = Some(displaced);
+        }
         self.previous = self.current.take();
         self.current = Some(path);
         self.transition = transition;
@@ -62,7 +68,7 @@ impl WallpaperAnimator {
         if self.duration.is_zero() || self.transition == WallpaperTransition::None {
             self.progress = 1.0;
             self.animating = false;
-            self.previous = None;
+            self.completed_previous = self.previous.take();
             return false;
         }
 
@@ -76,11 +82,15 @@ impl WallpaperAnimator {
         if linear >= 1.0 {
             self.progress = 1.0;
             self.animating = false;
-            self.previous = None;
+            self.completed_previous = self.previous.take();
             false
         } else {
             true
         }
+    }
+
+    pub fn take_completed_previous(&mut self) -> Option<PathBuf> {
+        self.completed_previous.take()
     }
 }
 
@@ -138,5 +148,44 @@ mod tests {
         assert!(!animator.animating);
         assert_eq!(animator.progress, 1.0);
         assert!(animator.previous.is_none());
+    }
+
+    #[test]
+    fn take_completed_previous_tracks_evictions() {
+        let now = Instant::now();
+        let mut animator = WallpaperAnimator::new(Some(PathBuf::from("/tmp/first.jpg")));
+        animator.set_wallpaper(
+            PathBuf::from("/tmp/second.jpg"),
+            WallpaperTransition::Fade,
+            Duration::from_millis(500),
+            now,
+        );
+        assert_eq!(animator.take_completed_previous(), None);
+
+        // Advance to finish
+        assert!(!animator.advance(now + Duration::from_millis(500)));
+        assert_eq!(
+            animator.take_completed_previous(),
+            Some(PathBuf::from("/tmp/first.jpg"))
+        );
+        assert_eq!(animator.take_completed_previous(), None);
+
+        // Interrupted transition
+        animator.set_wallpaper(
+            PathBuf::from("/tmp/third.jpg"),
+            WallpaperTransition::Fade,
+            Duration::from_millis(500),
+            now,
+        );
+        animator.set_wallpaper(
+            PathBuf::from("/tmp/fourth.jpg"),
+            WallpaperTransition::Fade,
+            Duration::from_millis(500),
+            now,
+        );
+        assert_eq!(
+            animator.take_completed_previous(),
+            Some(PathBuf::from("/tmp/second.jpg"))
+        );
     }
 }

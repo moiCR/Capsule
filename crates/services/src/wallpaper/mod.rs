@@ -72,7 +72,7 @@ impl WallpaperService {
         let _ = std::fs::create_dir_all(&cache_dir);
         let cached_path = cache_dir.join(format!("{:x}.jpg", hash));
 
-        if cached_path.exists() {
+        if cached_path.is_file() && cached_path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
             return Some(cached_path);
         }
 
@@ -90,7 +90,8 @@ impl WallpaperService {
             .resize_exact(target_w, target_h, image::imageops::FilterType::Triangle)
             .to_rgba8();
         let blurred = image::imageops::blur(&downscaled, 4.5);
-        blurred.save(&cached_path).ok()?;
+        let rgb_image = image::DynamicImage::ImageRgba8(blurred).to_rgb8();
+        rgb_image.save(&cached_path).ok()?;
 
         Some(cached_path)
     }
@@ -142,7 +143,9 @@ impl WallpaperService {
     }
 
     pub fn dominant_color(path: &Path) -> Result<[u8; 3], String> {
-        let image = image::open(path)
+        let source_path = Self::create_or_get_blur(path).unwrap_or_else(|| path.to_path_buf());
+        let image = image::open(&source_path)
+            .or_else(|_| image::open(path))
             .map_err(|error| error.to_string())?
             .thumbnail(96, 96)
             .to_rgba8();

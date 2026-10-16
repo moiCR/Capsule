@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "10f25333bbf68233ab16570929122fc543841458",
-    "indexed_at": "2026-10-16T08:41:36Z",
+    "commit": "1dc5eaa8d545ff8512e61d994e868833cf4215dd",
+    "indexed_at": "2026-10-16T09:25:41Z",
     "project": "home-moi-Proyectos-Capsule",
-    "nodes": 4385,
-    "edges": 18504,
+    "nodes": 4390,
+    "edges": 18541,
     "original_size": 20774912,
-    "compressed_size": 3381454,
+    "compressed_size": 3388408,
     "compression_level": 3
 }
