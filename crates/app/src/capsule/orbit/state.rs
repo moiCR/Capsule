@@ -64,6 +64,7 @@ impl OrbExpanded {
         self.animator.set_reduced_motion(reduced_motion);
     }
 
+    #[allow(dead_code)]
     pub(super) fn extra_width(&self) -> Pixels {
         self.animator.size().width - px(ORB_SIZE)
     }
@@ -157,18 +158,11 @@ impl State {
             || self.expanded.open;
         let shelf_target = self.orbits.shelf && state.shelf_count > 0;
         let record_target = self.orbits.record && state.record_status != RecordStatus::Stopped;
-        let both_changing =
-            shelf_target != self.shelf.active() && record_target != self.recording.active();
-        let record_delay = if self.stagger && !self.reduced_motion && both_changing {
-            Duration::from_millis(30)
-        } else {
-            Duration::ZERO
-        };
         self.snapshot = state;
         self.shelf
             .transition_with_delay(shelf_target, duration, Duration::ZERO, now);
         self.recording
-            .transition_with_delay(record_target, duration, record_delay, now);
+            .transition_with_delay(record_target, duration, Duration::ZERO, now);
         changed
     }
 
@@ -209,17 +203,10 @@ impl State {
         }
         let shelf_target = orbits.shelf && self.snapshot.shelf_count > 0;
         let record_target = orbits.record && self.snapshot.record_status != RecordStatus::Stopped;
-        let both_changing =
-            shelf_target != self.shelf.active() && record_target != self.recording.active();
-        let record_delay = if self.stagger && !self.reduced_motion && both_changing {
-            Duration::from_millis(30)
-        } else {
-            Duration::ZERO
-        };
         self.shelf
             .transition_with_delay(shelf_target, duration, Duration::ZERO, now);
         self.recording
-            .transition_with_delay(record_target, duration, record_delay, now);
+            .transition_with_delay(record_target, duration, Duration::ZERO, now);
     }
 
     pub fn toggle_usage(&mut self, duration: Duration, now: Instant) {
@@ -249,13 +236,8 @@ impl State {
         let duration = self.effective_duration(duration);
         self.expanded
             .set_open_with_delay(open && self.orbits.usage, duration, Duration::ZERO, now);
-        let power_delay = if self.stagger && !self.reduced_motion && self.orbits.usage {
-            Duration::from_millis(35)
-        } else {
-            Duration::ZERO
-        };
         self.power_expanded
-            .set_open_with_delay(open && self.orbits.power, duration, power_delay, now);
+            .set_open_with_delay(open && self.orbits.power, duration, Duration::ZERO, now);
     }
 
     pub fn close(&mut self, duration: Duration, now: Instant) {
@@ -283,7 +265,46 @@ impl State {
     }
 
     pub fn satellite_gap(gap: Pixels) -> Pixels {
-        gap.max(px(12.0)) * 2.0 + px(ORB_SIZE * 2.0 + 12.0 + BADGE_OVERHANG)
+        let gap = gap.max(px(12.0));
+        gap * 2.0 + px(ORB_SIZE)
+    }
+
+    pub fn layout_gaps(&self, gap: Pixels) -> (Pixels, Pixels) {
+        let base_gap = gap.max(px(12.0));
+
+        let shelf_active = self.orbits.shelf
+            && (self.snapshot.shelf_count > 0 || self.shelf.animating())
+            && self.shelf.progress() > 0.005;
+        let left_gap = if shelf_active {
+            let power_width = if self.orbits.power {
+                self.power_expanded.animator.size().width
+            } else {
+                px(0.0)
+            };
+            base_gap * 3.0 + power_width + px(ORB_SIZE)
+        } else if self.orbits.power {
+            base_gap * 2.0 + self.power_expanded.animator.size().width
+        } else {
+            base_gap
+        };
+
+        let record_active = self.orbits.record
+            && (self.snapshot.record_status != RecordStatus::Stopped || self.recording.animating())
+            && self.recording.progress() > 0.005;
+        let right_gap = if record_active {
+            let usage_width = if self.orbits.usage {
+                self.expanded.animator.size().width
+            } else {
+                px(0.0)
+            };
+            base_gap * 3.0 + usage_width + px(ORB_SIZE)
+        } else if self.orbits.usage {
+            base_gap * 2.0 + self.expanded.animator.size().width
+        } else {
+            base_gap
+        };
+
+        (left_gap, right_gap)
     }
 
     pub fn layout(
@@ -454,13 +475,13 @@ mod tests {
             .layout(viewport, capsule, px(8.0), CapsuleLocation::TOP)
             .collect();
         let panel_size = gpui::size(px(320.0), px(300.0));
-        let gap = State::satellite_gap(px(8.0));
-        let left = SatelliteLayout::new(viewport, capsule, panel_size, gap, Side::Left, 1.0);
-        let right = SatelliteLayout::new(viewport, capsule, panel_size, gap, Side::Right, 1.0);
+        let (left_gap, right_gap) = state.layout_gaps(px(8.0));
+        let left = SatelliteLayout::new(viewport, capsule, panel_size, left_gap, Side::Left, 1.0);
+        let right = SatelliteLayout::new(viewport, capsule, panel_size, right_gap, Side::Right, 1.0);
         assert_eq!(left.side, Side::Left);
         assert_eq!(right.side, Side::Right);
-        assert!(left.bounds.right() + px(12.0) <= visuals[0].bounds.origin.x);
-        assert!(right.bounds.origin.x >= visuals[1].bounds.right() + px(BADGE_OVERHANG + 12.0));
+        assert!(left.bounds.right() <= visuals[0].bounds.origin.x);
+        assert!(right.bounds.origin.x >= visuals[1].bounds.right());
     }
 
     #[test]

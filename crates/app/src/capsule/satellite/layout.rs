@@ -32,19 +32,39 @@ impl SatelliteLayout {
         preferred: Side,
         progress: f32,
     ) -> Self {
-        let gap = gap.max(px(0.0));
+        Self::with_gaps(viewport, capsule, desired, gap, gap, preferred, progress)
+    }
+
+    pub fn with_gaps(
+        viewport: Size<Pixels>,
+        capsule: Bounds<Pixels>,
+        desired: Size<Pixels>,
+        left_gap: Pixels,
+        right_gap: Pixels,
+        preferred: Side,
+        progress: f32,
+    ) -> Self {
+        let left_gap = left_gap.max(px(0.0));
+        let right_gap = right_gap.max(px(0.0));
         let width = desired.width.min(viewport.width).max(px(1.0));
-        let left_space = capsule.origin.x - gap;
+        let left_space = capsule.origin.x - left_gap;
         let right_edge = capsule.origin.x + capsule.size.width;
-        let right_space = viewport.width - right_edge - gap;
+        let right_space = viewport.width - right_edge - right_gap;
         let side = if preferred == Side::Right && right_space >= width {
             Side::Right
+        } else if preferred == Side::Left && left_space >= width {
+            Side::Left
         } else if left_space >= width {
             Side::Left
         } else if right_space >= width {
             Side::Right
         } else {
             Side::Below
+        };
+        let gap = match side {
+            Side::Left => left_gap,
+            Side::Right => right_gap,
+            Side::Below => left_gap.min(right_gap),
         };
         let target_y = match side {
             Side::Below => capsule.origin.y + capsule.size.height + gap,
@@ -58,8 +78,8 @@ impl SatelliteLayout {
         let progress = progress.clamp(0.0, 1.0);
         let offset = px(16.0) * (1.0 - progress);
         let (x, y) = match side {
-            Side::Left => (capsule.origin.x - gap - width + offset, y),
-            Side::Right => (right_edge + gap - offset, y),
+            Side::Left => (capsule.origin.x - left_gap - width + offset, y),
+            Side::Right => (right_edge + right_gap - offset, y),
             Side::Below => (
                 (capsule.origin.x + (capsule.size.width - width) / 2.0)
                     .clamp(px(0.0), (viewport.width - width).max(px(0.0))),

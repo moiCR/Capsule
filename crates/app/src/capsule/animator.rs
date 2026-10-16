@@ -35,6 +35,7 @@ fn spring_eval(t: f32, zeta: f32) -> f32 {
     (1.0 - envelope * osc) * scale
 }
 
+#[allow(dead_code)]
 pub fn apple_island_morph(t: f32, expanding: bool) -> (f32, f32) {
     apple_island_morph_with_bounciness(t, expanding, 0.75)
 }

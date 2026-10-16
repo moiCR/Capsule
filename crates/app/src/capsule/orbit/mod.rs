@@ -193,13 +193,14 @@ impl Orbit {
         self.state.expanded.open || self.state.power_expanded.open
     }
 
+    pub fn layout_gaps(&self, gap: Pixels) -> (Pixels, Pixels) {
+        self.state.layout_gaps(gap)
+    }
+
+    #[allow(dead_code)]
     pub fn layout_gap(&self, gap: Pixels) -> Pixels {
-        State::satellite_gap(gap)
-            + self
-                .state
-                .expanded
-                .extra_width()
-                .max(self.state.power_expanded.extra_width())
+        let (left, right) = self.state.layout_gaps(gap);
+        left.max(right)
     }
 
     pub fn satellite_gap(gap: Pixels) -> Pixels {

@@ -121,7 +121,7 @@ impl Satellite {
         let other_animating = self
             .panels
             .iter()
-            .any(|panel| panel.id != id && panel.animator.animating());
+            .any(|panel| panel.id != id && panel.side == side && panel.animator.animating());
         let delay = if self.stagger && !self.reduced_motion && other_animating {
             Duration::from_millis(25)
         } else {
@@ -184,11 +184,23 @@ impl Satellite {
         running
     }
 
+    #[allow(dead_code)]
     pub fn layout(
         &self,
         viewport: Size<Pixels>,
         capsule: Bounds<Pixels>,
         gap: Pixels,
+        measured: &[(SatelliteId, Bounds<Pixels>)],
+    ) -> Vec<SatelliteVisual> {
+        self.layout_with_gaps(viewport, capsule, gap, gap, measured)
+    }
+
+    pub fn layout_with_gaps(
+        &self,
+        viewport: Size<Pixels>,
+        capsule: Bounds<Pixels>,
+        left_gap: Pixels,
+        right_gap: Pixels,
         measured: &[(SatelliteId, Bounds<Pixels>)],
     ) -> Vec<SatelliteVisual> {
         let mut visuals: Vec<_> = self
@@ -197,11 +209,12 @@ impl Satellite {
             .filter(|panel| panel.animator.progress() > 0.0)
             .map(|panel| SatelliteVisual {
                 id: panel.id.clone(),
-                layout: SatelliteLayout::new(
+                layout: SatelliteLayout::with_gaps(
                     viewport,
                     capsule,
                     panel.id.size(),
-                    gap,
+                    left_gap,
+                    right_gap,
                     panel.side,
                     panel.animator.progress(),
                 ),
@@ -242,13 +255,33 @@ impl Capsule {
     }
 
     pub(super) fn set_satellite_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        let ids: Vec<_> = self
+        let panels: Vec<_> = self
             .satellite
             .panels
             .iter()
-            .map(|panel| panel.id.clone())
+            .map(|panel| (panel.id.clone(), panel.side))
             .collect();
-        for (idx, id) in ids.into_iter().enumerate() {
+        let mut left_idx = 0;
+        let mut right_idx = 0;
+        let mut other_idx = 0;
+        for (id, side) in panels {
+            let idx = match side {
+                Side::Left => {
+                    let i = left_idx;
+                    left_idx += 1;
+                    i
+                }
+                Side::Right => {
+                    let i = right_idx;
+                    right_idx += 1;
+                    i
+                }
+                _ => {
+                    let i = other_idx;
+                    other_idx += 1;
+                    i
+                }
+            };
             let delay = Duration::from_millis(idx as u64 * 30);
             self.transition_satellite_with_delay(id, open, delay, cx);
         }
@@ -276,12 +309,17 @@ impl Capsule {
                     px(self.window_state.margin),
                     &self.location,
                 );
-                let gap = super::orbit::Orbit::satellite_gap(px(cx
+                let (left_gap, right_gap) = self.orbit.read(cx).layout_gaps(px(cx
                     .global::<services::AppState>()
                     .config
                     .get()
                     .ui
                     .gap));
+                let gap = match destination {
+                    Side::Left => left_gap,
+                    Side::Right => right_gap,
+                    Side::Below => left_gap.min(right_gap),
+                };
                 destination =
                     SatelliteLayout::new(viewport, capsule, id.size(), gap, destination, 1.0).side;
             });

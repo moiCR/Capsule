@@ -2,20 +2,16 @@
 
 All notable changes to Capsule are documented in this file.
 
-## v2.2.0
+## v2.3.0
 
 ### Features
-* **New Interactive Elements**: Added standardized buttons, icon buttons, status badges, tag chips, and tooltips throughout the desktop shell.
-* **Smart Contrast Reading**: Buttons and highlighted chips now automatically adjust their text color to guarantee crystal-clear contrast and readability, no matter what accent color or theme you pick.
-* **Full Keyboard Text Selection**: Text input boxes now fully support standard keyboard shortcuts like `Ctrl+A` to select everything, arrow keys for smooth cursor navigation, and word-level editing.
+* **Custom Motion Profiles**: Choose how Capsule moves with multiple animation styles (Fluid, Cubic, Exponential, Back, and Spring), letting you pick between silky smooth transitions, snappy responses, or playful rebounds.
+* **Elastic Motion Dynamics**: Added organic elasticity (*Squash & Stretch*) during expansions and contractions, giving Capsule and corner orbs a lifelike, dynamic feel as they resize.
+* **Cascading Transitions**: Multiple panels and widgets now transition with a graceful staggered sequence instead of moving all at once, creating a more natural flow.
+* **Reduced Motion Mode**: Added a dedicated accessibility option that disables spatial movement and morphing in favor of clean, instant fades, ideal for motion sensitivity or minimalist setups.
+* **Fine-Tuned Motion Controls**: Personalize the exact feel of your desktop with adjustable sliders for spring bounciness and internal content transition speed.
 
 ### Improvements
-* **Consistent Visual Experience**: Replaced old disparate buttons across notifications, emoji picker, media controls, and security prompts with unified components and smooth hover animations.
-* **Sharper Appearance Previews**: Harmonized the miniature layout preview cards in the Appearance settings for a cleaner, pixel-aligned look.
-* **Organized & Faster Background Services**: Cleaned up and modularized internal system services (audio, brightness, screen recording, and notifications) into dedicated helpers, improving overall system responsiveness.
-* **Freeze Protection for External Tools**: Added safety time limits when communicating with system utilities (such as brightness and sound mixers) so Capsule stays smooth even if an external app lags.
-* **Zero Idle Power Consumption**: Guaranteed that desktop animations completely stop running the moment they finish displaying, preventing unnecessary CPU and battery drain.
-
-### Bug Fixes
-* Fixed text input boxes not collapsing selection or moving cursors properly when typing over highlighted text.
-* Prevented hanging background recording sockets from lingering after stopping a screen capture.
+* **Interactive Motion Preview**: Test and preview animation curves, bounciness, elasticity, and transitions in real time directly inside the Appearance settings before applying them.
+* **Unified Desktop Motion**: Synchronized movement physics and timing across Capsule, corner orbs, preview cards, and satellite panels for a harmonious visual flow.
+* **Search & Localization**: All motion preferences and accessibility toggles are fully searchable in Settings and translated into both English and Spanish.

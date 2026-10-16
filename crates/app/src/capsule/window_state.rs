@@ -267,11 +267,13 @@ impl Capsule {
                 .map(|visual| visual.bounds),
         );
 
+        let (left_gap, right_gap) = self.orbit.read(cx).layout_gaps(px(config.ui.gap));
         let mut visual = if current == CapsuleModuleId::Dashboard {
-            self.satellite.layout(
+            self.satellite.layout_with_gaps(
                 window.viewport_size(),
                 region,
-                self.orbit.read(cx).layout_gap(px(config.ui.gap)),
+                left_gap,
+                right_gap,
                 &self.window_state.satellite_bounds,
             )
         } else {
