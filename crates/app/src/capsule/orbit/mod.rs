@@ -160,6 +160,16 @@ impl Orbit {
         self.usage_enabled.send_replace(self.state.expanded.open);
     }
 
+    pub fn set_motion_options(
+        &mut self,
+        stagger: bool,
+        squash_stretch: bool,
+        reduced_motion: bool,
+    ) {
+        self.state
+            .set_motion_options(stagger, squash_stretch, reduced_motion);
+    }
+
     pub fn configure(
         &mut self,
         orbits: services::config::ui_config::OrbitConfig,
@@ -356,6 +366,16 @@ impl Preview {
             Instant::now(),
         );
         Self { state }
+    }
+
+    pub fn set_motion_options(
+        &mut self,
+        stagger: bool,
+        squash_stretch: bool,
+        reduced_motion: bool,
+    ) {
+        self.state
+            .set_motion_options(stagger, squash_stretch, reduced_motion);
     }
 
     pub fn transition(

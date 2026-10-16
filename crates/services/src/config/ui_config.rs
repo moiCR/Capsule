@@ -22,6 +22,8 @@ pub enum CapsuleAnimation {
     #[default]
     Fluid,
     Cubic,
+    Expo,
+    Back,
     Spring,
 }
 
@@ -85,6 +87,15 @@ pub struct UIConfig {
     #[serde(default = "default_spring_bounciness")]
     pub spring_bounciness: f32,
 
+    #[serde(default = "default_enabled")]
+    pub squash_stretch: bool,
+
+    #[serde(default = "default_enabled")]
+    pub stagger_animation: bool,
+
+    #[serde(default)]
+    pub reduced_motion: bool,
+
     #[serde(default = "default_capsule_round", alias = "capsule_radius")]
     pub capsule_round: f32,
 
@@ -136,6 +147,9 @@ impl Default for UIConfig {
             capsule_animation: CapsuleAnimation::Fluid,
             content_transition: ContentTransition::FadeScale,
             spring_bounciness: default_spring_bounciness(),
+            squash_stretch: true,
+            stagger_animation: true,
+            reduced_motion: false,
             capsule_round: default_capsule_round(),
             satellite_round: default_satellite_round(),
             cards_round: default_cards_round(),
@@ -225,12 +239,18 @@ mod tests {
         assert_eq!(config.capsule_animation, CapsuleAnimation::Fluid);
         assert_eq!(config.content_transition, ContentTransition::FadeScale);
         assert_eq!(config.spring_bounciness, 0.75);
+        assert!(config.squash_stretch);
+        assert!(config.stagger_animation);
+        assert!(!config.reduced_motion);
         let fresh: UIConfig = toml::from_str("").expect("new config");
         assert!(fresh.use_new_capsule);
         assert_eq!(fresh.capsule_location, CapsuleLocation::Top);
         assert_eq!(fresh.capsule_animation, CapsuleAnimation::Fluid);
         assert_eq!(fresh.content_transition, ContentTransition::FadeScale);
         assert_eq!(fresh.spring_bounciness, 0.75);
+        assert!(fresh.squash_stretch);
+        assert!(fresh.stagger_animation);
+        assert!(!fresh.reduced_motion);
     }
 
     #[test]
@@ -240,26 +260,36 @@ mod tests {
             dark_mode: false,
             clock_24_hour: false,
             capsule_location: CapsuleLocation::Bottom,
-            capsule_animation: CapsuleAnimation::Cubic,
+            capsule_animation: CapsuleAnimation::Expo,
             content_transition: ContentTransition::Fade,
             spring_bounciness: 0.9,
+            squash_stretch: false,
+            stagger_animation: false,
+            reduced_motion: true,
             ..UIConfig::default()
         };
         let encoded = toml::to_string(&config).expect("serialize config");
         let decoded: UIConfig = toml::from_str(&encoded).expect("deserialize config");
         assert_eq!(decoded, config);
         assert_eq!(decoded.clock_format(), "%I:%M %p");
-        assert_eq!(decoded.capsule_animation, CapsuleAnimation::Cubic);
+        assert_eq!(decoded.capsule_animation, CapsuleAnimation::Expo);
         assert_eq!(decoded.content_transition, ContentTransition::Fade);
         assert_eq!(decoded.spring_bounciness, 0.9);
+        assert!(!decoded.squash_stretch);
+        assert!(!decoded.stagger_animation);
+        assert!(decoded.reduced_motion);
     }
 
     #[test]
-    fn animation_curve_accepts_fluid_cubic_spring() {
+    fn animation_curve_accepts_all_curves() {
         let fluid: UIConfig = toml::from_str("capsule_animation = 'fluid'").expect("fluid");
         assert_eq!(fluid.capsule_animation, CapsuleAnimation::Fluid);
         let cubic: UIConfig = toml::from_str("capsule_animation = 'cubic'").expect("cubic");
         assert_eq!(cubic.capsule_animation, CapsuleAnimation::Cubic);
+        let expo: UIConfig = toml::from_str("capsule_animation = 'expo'").expect("expo");
+        assert_eq!(expo.capsule_animation, CapsuleAnimation::Expo);
+        let back: UIConfig = toml::from_str("capsule_animation = 'back'").expect("back");
+        assert_eq!(back.capsule_animation, CapsuleAnimation::Back);
         let spring: UIConfig = toml::from_str("capsule_animation = 'spring'").expect("spring");
         assert_eq!(spring.capsule_animation, CapsuleAnimation::Spring);
     }

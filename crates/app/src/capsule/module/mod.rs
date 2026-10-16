@@ -272,27 +272,8 @@ impl Capsule {
                 }
                 if this
                     .update(cx, |capsule, cx| {
-                        let config = cx.global::<services::AppState>().config.get();
-                        let duration =
-                            Duration::from_millis(config.ui.animation_duration_ms as u64);
-                        capsule.animator.set_duration(duration);
-                        capsule.animator.set_animation(config.ui.capsule_animation);
-                        capsule
-                            .animator
-                            .set_content_transition(config.ui.content_transition);
-                        capsule
-                            .animator
-                            .set_spring_bounciness(config.ui.spring_bounciness);
-                        capsule
-                            .satellite
-                            .set_animation(config.ui.capsule_animation);
-                        capsule.orbit.update(cx, |orbit, _| {
-                            orbit.configure(
-                                config.ui.orbits,
-                                config.ui.capsule_animation,
-                                duration,
-                            )
-                        });
+                        let ui = cx.global::<services::AppState>().config.get().ui.clone();
+                        capsule.sync_motion_config(&ui, cx);
                         capsule.orbit_changed(cx);
                         let current = capsule.module_manager.current_id();
                         capsule.handle_module_event(&CapsuleModuleEvent::SizeChanged(current), cx);
@@ -307,6 +288,11 @@ impl Capsule {
 
         let ui_config = cx.global::<services::AppState>().config.get().ui.clone();
         orbit.update(cx, |orbit, _| {
+            orbit.set_motion_options(
+                ui_config.stagger_animation,
+                ui_config.squash_stretch,
+                ui_config.reduced_motion,
+            );
             orbit.configure(
                 ui_config.orbits,
                 ui_config.capsule_animation,
@@ -315,6 +301,8 @@ impl Capsule {
         });
         let mut satellite = satellite;
         satellite.set_animation(ui_config.capsule_animation);
+        satellite.set_stagger(ui_config.stagger_animation);
+        satellite.set_reduced_motion(ui_config.reduced_motion);
 
         let mut capsule = Self {
             location: match ui_config.capsule_location {
@@ -329,7 +317,9 @@ impl Capsule {
             )
             .with_animation(ui_config.capsule_animation)
             .with_content_transition(ui_config.content_transition)
-            .with_spring_bounciness(ui_config.spring_bounciness),
+            .with_spring_bounciness(ui_config.spring_bounciness)
+            .with_squash_stretch(ui_config.squash_stretch)
+            .with_reduced_motion(ui_config.reduced_motion),
             outgoing_content: None,
             orbit,
             animation_frame_pending: false,
@@ -341,6 +331,23 @@ impl Capsule {
         };
         capsule.apply_window_geometry(window, cx);
         capsule
+    }
+
+    fn sync_motion_config(&mut self, ui: &services::UiConfig, cx: &mut Context<Self>) {
+        let duration = Duration::from_millis(ui.animation_duration_ms as u64);
+        self.animator.set_duration(duration);
+        self.animator.set_animation(ui.capsule_animation);
+        self.animator.set_content_transition(ui.content_transition);
+        self.animator.set_spring_bounciness(ui.spring_bounciness);
+        self.animator.set_squash_stretch(ui.squash_stretch);
+        self.animator.set_reduced_motion(ui.reduced_motion);
+        self.satellite.set_animation(ui.capsule_animation);
+        self.satellite.set_stagger(ui.stagger_animation);
+        self.satellite.set_reduced_motion(ui.reduced_motion);
+        self.orbit.update(cx, |orbit, _| {
+            orbit.set_motion_options(ui.stagger_animation, ui.squash_stretch, ui.reduced_motion);
+            orbit.configure(ui.orbits, ui.capsule_animation, duration);
+        });
     }
 
     pub(super) fn handle_module_event(
@@ -523,6 +530,8 @@ impl Capsule {
             .set_content_transition(ui_config.content_transition);
         self.animator
             .set_spring_bounciness(ui_config.spring_bounciness);
+        self.animator.set_squash_stretch(ui_config.squash_stretch);
+        self.animator.set_reduced_motion(ui_config.reduced_motion);
         let now = Instant::now();
         if previous_module != self.module_manager.current_id() {
             self.outgoing_content = outgoing.filter(|outgoing| {

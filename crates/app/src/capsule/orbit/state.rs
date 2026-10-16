@@ -26,14 +26,25 @@ impl OrbExpanded {
     }
 
     fn set_open(&mut self, open: bool, duration: Duration, now: Instant) {
+        self.set_open_with_delay(open, duration, Duration::ZERO, now);
+    }
+
+    fn set_open_with_delay(
+        &mut self,
+        open: bool,
+        duration: Duration,
+        delay: Duration,
+        now: Instant,
+    ) {
         self.open = open;
         self.animator.set_duration(duration);
-        self.animator.transition_to(
+        self.animator.transition_to_with_delay(
             if open {
                 gpui::size(px(USAGE_PANEL_WIDTH), px(self.height))
             } else {
                 gpui::size(px(ORB_SIZE), px(ORB_SIZE))
             },
+            delay,
             now,
         );
         if open {
@@ -43,6 +54,14 @@ impl OrbExpanded {
 
     fn set_animation(&mut self, animation: services::CapsuleAnimation) {
         self.animator.set_animation(animation);
+    }
+
+    fn set_squash_stretch(&mut self, squash_stretch: bool) {
+        self.animator.set_squash_stretch(squash_stretch);
+    }
+
+    fn set_reduced_motion(&mut self, reduced_motion: bool) {
+        self.animator.set_reduced_motion(reduced_motion);
     }
 
     pub(super) fn extra_width(&self) -> Pixels {
@@ -102,6 +121,8 @@ pub(super) struct State {
     pub expanded: OrbExpanded,
     pub power_expanded: OrbExpanded,
     orbits: services::config::ui_config::OrbitConfig,
+    stagger: bool,
+    reduced_motion: bool,
 }
 
 impl State {
@@ -113,6 +134,16 @@ impl State {
             expanded: OrbExpanded::new(USAGE_PANEL_HEIGHT),
             power_expanded: OrbExpanded::new(POWER_PANEL_HEIGHT),
             orbits: services::config::ui_config::OrbitConfig::default(),
+            stagger: true,
+            reduced_motion: false,
+        }
+    }
+
+    fn effective_duration(&self, duration: Duration) -> Duration {
+        if self.reduced_motion {
+            Duration::ZERO
+        } else {
+            duration
         }
     }
 
@@ -120,17 +151,24 @@ impl State {
         if self.snapshot == state {
             return false;
         }
+        let duration = self.effective_duration(duration);
         let changed = self.snapshot.shelf_count != state.shelf_count
             || self.snapshot.record_status != state.record_status
             || self.expanded.open;
+        let shelf_target = self.orbits.shelf && state.shelf_count > 0;
+        let record_target = self.orbits.record && state.record_status != RecordStatus::Stopped;
+        let both_changing =
+            shelf_target != self.shelf.active() && record_target != self.recording.active();
+        let record_delay = if self.stagger && !self.reduced_motion && both_changing {
+            Duration::from_millis(30)
+        } else {
+            Duration::ZERO
+        };
         self.snapshot = state;
         self.shelf
-            .transition(self.orbits.shelf && state.shelf_count > 0, duration, now);
-        self.recording.transition(
-            self.orbits.record && state.record_status != RecordStatus::Stopped,
-            duration,
-            now,
-        );
+            .transition_with_delay(shelf_target, duration, Duration::ZERO, now);
+        self.recording
+            .transition_with_delay(record_target, duration, record_delay, now);
         changed
     }
 
@@ -141,12 +179,27 @@ impl State {
         self.power_expanded.set_animation(animation);
     }
 
+    pub fn set_motion_options(
+        &mut self,
+        stagger: bool,
+        squash_stretch: bool,
+        reduced_motion: bool,
+    ) {
+        self.stagger = stagger;
+        self.reduced_motion = reduced_motion;
+        self.expanded.set_squash_stretch(squash_stretch);
+        self.power_expanded.set_squash_stretch(squash_stretch);
+        self.expanded.set_reduced_motion(reduced_motion);
+        self.power_expanded.set_reduced_motion(reduced_motion);
+    }
+
     pub fn configure(
         &mut self,
         orbits: services::config::ui_config::OrbitConfig,
         duration: Duration,
         now: Instant,
     ) {
+        let duration = self.effective_duration(duration);
         self.orbits = orbits;
         if !orbits.usage && self.expanded.open {
             self.expanded.set_open(false, duration, now);
@@ -154,19 +207,26 @@ impl State {
         if !orbits.power && self.power_expanded.open {
             self.power_expanded.set_open(false, duration, now);
         }
+        let shelf_target = orbits.shelf && self.snapshot.shelf_count > 0;
+        let record_target = orbits.record && self.snapshot.record_status != RecordStatus::Stopped;
+        let both_changing =
+            shelf_target != self.shelf.active() && record_target != self.recording.active();
+        let record_delay = if self.stagger && !self.reduced_motion && both_changing {
+            Duration::from_millis(30)
+        } else {
+            Duration::ZERO
+        };
         self.shelf
-            .transition(orbits.shelf && self.snapshot.shelf_count > 0, duration, now);
-        self.recording.transition(
-            orbits.record && self.snapshot.record_status != RecordStatus::Stopped,
-            duration,
-            now,
-        );
+            .transition_with_delay(shelf_target, duration, Duration::ZERO, now);
+        self.recording
+            .transition_with_delay(record_target, duration, record_delay, now);
     }
 
     pub fn toggle_usage(&mut self, duration: Duration, now: Instant) {
         if !self.orbits.usage {
             return;
         }
+        let duration = self.effective_duration(duration);
         if self.power_expanded.open {
             self.power_expanded.set_open(false, duration, now);
         }
@@ -177,6 +237,7 @@ impl State {
         if !self.orbits.power {
             return;
         }
+        let duration = self.effective_duration(duration);
         if self.expanded.open {
             self.expanded.set_open(false, duration, now);
         }
@@ -185,13 +246,20 @@ impl State {
     }
 
     pub fn preview_transition(&mut self, open: bool, duration: Duration, now: Instant) {
+        let duration = self.effective_duration(duration);
         self.expanded
-            .set_open(open && self.orbits.usage, duration, now);
+            .set_open_with_delay(open && self.orbits.usage, duration, Duration::ZERO, now);
+        let power_delay = if self.stagger && !self.reduced_motion && self.orbits.usage {
+            Duration::from_millis(35)
+        } else {
+            Duration::ZERO
+        };
         self.power_expanded
-            .set_open(open && self.orbits.power, duration, now);
+            .set_open_with_delay(open && self.orbits.power, duration, power_delay, now);
     }
 
     pub fn close(&mut self, duration: Duration, now: Instant) {
+        let duration = self.effective_duration(duration);
         if self.expanded.open {
             self.expanded.set_open(false, duration, now);
         }

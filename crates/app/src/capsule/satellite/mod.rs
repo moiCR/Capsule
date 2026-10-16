@@ -56,6 +56,8 @@ struct Panel {
 pub struct Satellite {
     panels: Vec<Panel>,
     animation: services::CapsuleAnimation,
+    stagger: bool,
+    reduced_motion: bool,
 }
 
 impl Satellite {
@@ -63,6 +65,8 @@ impl Satellite {
         Self {
             panels: Vec::new(),
             animation: services::CapsuleAnimation::default(),
+            stagger: true,
+            reduced_motion: false,
         }
     }
 
@@ -72,6 +76,15 @@ impl Satellite {
             panel.animator.set_animation(animation);
         }
     }
+
+    pub fn set_stagger(&mut self, stagger: bool) {
+        self.stagger = stagger;
+    }
+
+    pub fn set_reduced_motion(&mut self, reduced_motion: bool) {
+        self.reduced_motion = reduced_motion;
+    }
+
     pub fn open(&self) -> bool {
         self.panels.iter().any(|panel| panel.animator.open())
     }
@@ -103,7 +116,38 @@ impl Satellite {
             .unwrap_or(Side::Left)
     }
 
+    #[allow(dead_code)]
     fn transition(&mut self, id: SatelliteId, open: bool, duration: Duration, side: Side) {
+        let other_animating = self
+            .panels
+            .iter()
+            .any(|panel| panel.id != id && panel.animator.animating());
+        let delay = if self.stagger && !self.reduced_motion && other_animating {
+            Duration::from_millis(25)
+        } else {
+            Duration::ZERO
+        };
+        self.transition_with_delay(id, open, duration, delay, side);
+    }
+
+    fn transition_with_delay(
+        &mut self,
+        id: SatelliteId,
+        open: bool,
+        duration: Duration,
+        delay: Duration,
+        side: Side,
+    ) {
+        let duration = if self.reduced_motion {
+            Duration::ZERO
+        } else {
+            duration
+        };
+        let delay = if self.reduced_motion || !self.stagger {
+            Duration::ZERO
+        } else {
+            delay
+        };
         if open {
             self.panels
                 .retain(|panel| panel.id == id || panel.side != side);
@@ -124,7 +168,9 @@ impl Satellite {
         if let Some(panel) = self.panels.iter_mut().find(|panel| panel.id == id) {
             panel.side = side;
             panel.animator.set_animation(self.animation);
-            panel.animator.transition(open, duration, Instant::now());
+            panel
+                .animator
+                .transition_with_delay(open, duration, delay, Instant::now());
         }
     }
 
@@ -192,7 +238,7 @@ impl Capsule {
             .panels
             .iter()
             .any(|panel| panel.id == id && panel.animator.open());
-        self.transition_satellite(id, open, cx);
+        self.transition_satellite_with_delay(id, open, Duration::ZERO, cx);
     }
 
     pub(super) fn set_satellite_open(&mut self, open: bool, cx: &mut Context<Self>) {
@@ -202,16 +248,23 @@ impl Capsule {
             .iter()
             .map(|panel| panel.id.clone())
             .collect();
-        for id in ids {
-            self.transition_satellite(id, open, cx);
+        for (idx, id) in ids.into_iter().enumerate() {
+            let delay = Duration::from_millis(idx as u64 * 30);
+            self.transition_satellite_with_delay(id, open, delay, cx);
         }
     }
 
     pub(super) fn close_satellite(&mut self, id: SatelliteId, cx: &mut Context<Self>) {
-        self.transition_satellite(id, false, cx);
+        self.transition_satellite_with_delay(id, false, Duration::ZERO, cx);
     }
 
-    fn transition_satellite(&mut self, id: SatelliteId, open: bool, cx: &mut Context<Self>) {
+    fn transition_satellite_with_delay(
+        &mut self,
+        id: SatelliteId,
+        open: bool,
+        delay: Duration,
+        cx: &mut Context<Self>,
+    ) {
         let mut destination = self.satellite.next_side(&id);
         if open {
             let handle = self.window_state.handle;
@@ -234,7 +287,8 @@ impl Capsule {
             });
         }
         let state = cx.global::<services::AppState>();
-        let duration = if state.config.get().ui.animation_duration_ms == 0 {
+        let ui = &state.config.get().ui;
+        let duration = if ui.animation_duration_ms == 0 || ui.reduced_motion {
             Duration::ZERO
         } else {
             Duration::from_millis(if open { 180 } else { 130 })
@@ -248,7 +302,8 @@ impl Capsule {
                 _ => {}
             }
         }
-        self.satellite.transition(id, open, duration, destination);
+        self.satellite
+            .transition_with_delay(id, open, duration, delay, destination);
         self.sync_window(cx);
         if self.satellite_animation_task.is_none() && self.satellite.advance(Instant::now()) {
             self.satellite_animation_task = Some(cx.spawn(async move |this, cx| {

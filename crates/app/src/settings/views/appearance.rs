@@ -75,50 +75,60 @@ impl AppearanceView {
         }
     }
 
+    fn sync_preview_config(&mut self, open: bool, cx: &App) -> u64 {
+        let ui = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().config.get().ui.clone()
+        } else {
+            Default::default()
+        };
+        let duration = if ui.reduced_motion {
+            0
+        } else {
+            ui.animation_duration_ms as u64
+        };
+        self.motion_preview
+            .set_duration(Duration::from_millis(duration));
+        self.motion_preview.set_animation(ui.capsule_animation);
+        self.motion_preview
+            .set_content_transition(ui.content_transition);
+        self.motion_preview
+            .set_spring_bounciness(ui.spring_bounciness);
+        self.motion_preview.set_squash_stretch(ui.squash_stretch);
+        self.motion_preview.set_reduced_motion(ui.reduced_motion);
+        self.orbit_preview.set_motion_options(
+            ui.stagger_animation,
+            ui.squash_stretch,
+            ui.reduced_motion,
+        );
+        self.orbit_preview.transition(
+            ui.orbits,
+            ui.capsule_animation,
+            Duration::from_millis(duration),
+            open && duration != 0,
+        );
+        duration
+    }
+
     pub fn play_motion_preview(&mut self, window: &mut Window, cx: &mut Context<Settings>) {
         self.motion_preview_generation += 1;
-        let (duration, animation, content_transition, spring_bounciness) =
-            if cx.has_global::<AppState>() {
-                let ui = &cx.global::<AppState>().config.get().ui;
-                (
-                    ui.animation_duration_ms as u64,
-                    ui.capsule_animation,
-                    ui.content_transition,
-                    ui.spring_bounciness,
-                )
-            } else {
-                (
-                    250,
-                    CapsuleAnimation::default(),
-                    ContentTransition::default(),
-                    0.75,
-                )
-            };
-
-        self.motion_preview.set_duration(Duration::from_millis(duration));
-        self.motion_preview.set_animation(animation);
-        self.motion_preview
-            .set_content_transition(content_transition);
-        self.motion_preview
-            .set_spring_bounciness(spring_bounciness);
-        if cx.has_global::<AppState>() {
-            self.orbit_preview.transition(
-                cx.global::<AppState>().config.get().ui.orbits,
-                animation,
-                Duration::from_millis(duration),
-                duration != 0,
-            );
-        }
+        let duration = self.sync_preview_config(true, cx);
 
         if duration == 0 {
-            self.motion_preview.transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
+            self.motion_preview
+                .transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
             self.motion_preview.advance(Instant::now());
             cx.notify();
             return;
         }
 
-        self.motion_preview.transition_to(gpui::size(px(152.0), px(42.0)), Instant::now());
-        Self::queue_preview_frame(window, cx.entity().downgrade(), self.motion_preview_generation, false);
+        self.motion_preview
+            .transition_to(gpui::size(px(152.0), px(42.0)), Instant::now());
+        Self::queue_preview_frame(
+            window,
+            cx.entity().downgrade(),
+            self.motion_preview_generation,
+            false,
+        );
         cx.notify();
     }
 
@@ -141,45 +151,67 @@ impl AppearanceView {
                     let running = capsule_running || orbits_running;
 
                     if running {
-                        Self::queue_preview_frame(window, cx.entity().downgrade(), generation, returning);
+                        Self::queue_preview_frame(
+                            window,
+                            cx.entity().downgrade(),
+                            generation,
+                            returning,
+                        );
                     } else if !returning {
-                        let (duration, animation, content_transition, spring_bounciness) =
-                            if cx.has_global::<AppState>() {
-                                let ui = &cx.global::<AppState>().config.get().ui;
-                                (
-                                    ui.animation_duration_ms as u64,
-                                    ui.capsule_animation,
-                                    ui.content_transition,
-                                    ui.spring_bounciness,
-                                )
-                            } else {
-                                (
-                                    250,
-                                    CapsuleAnimation::default(),
-                                    ContentTransition::default(),
-                                    0.75,
-                                )
-                            };
-                        if cx.has_global::<AppState>() {
-                            view.orbit_preview.transition(
-                                cx.global::<AppState>().config.get().ui.orbits,
-                                animation,
-                                Duration::from_millis(duration),
-                                false,
-                            );
-                        }
-                        view.motion_preview.set_animation(animation);
+                        view.sync_preview_config(false, cx);
                         view.motion_preview
-                            .set_content_transition(content_transition);
-                        view.motion_preview
-                            .set_spring_bounciness(spring_bounciness);
-                        view.motion_preview.transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
-                        Self::queue_preview_frame(window, cx.entity().downgrade(), generation, true);
+                            .transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
+                        Self::queue_preview_frame(
+                            window,
+                            cx.entity().downgrade(),
+                            generation,
+                            true,
+                        );
                     }
                     cx.notify();
                 }
             });
         });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn slider_control_row(
+        &self,
+        id: &'static str,
+        label: &str,
+        value_text: &str,
+        slider_kind: AppearanceSlider,
+        value: f32,
+        range: (f32, f32, f32),
+        tracker: &DimensionTracker,
+        theme: &Theme,
+        cx: &mut Context<Settings>,
+    ) -> AnyElement {
+        let (min, max, step) = range;
+        let fraction = ((value - min) / (max - min)).clamp(0.0, 1.0);
+        let tracker_clone = tracker.clone();
+        slider_row(
+            ElementId::Name(id.into()),
+            label,
+            value_text,
+            fraction,
+            tracker,
+            theme,
+            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                    view.active_slider =
+                        Some((slider_kind, tracker_clone.clone(), min, max, step));
+                    view.update_slider_value(event.position.x.into(), cx);
+                }
+            }),
+            cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
+                if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                    if view.handle_mouse_up(event, cx) {
+                        cx.notify();
+                    }
+                }
+            }),
+        )
     }
 
     fn update_slider_value(&mut self, x: f32, cx: &mut Context<Settings>) {
@@ -536,6 +568,16 @@ impl SettingsView for AppearanceView {
                                     text("settings.animation_cubic", cx),
                                 ),
                                 (
+                                    CapsuleAnimation::Expo,
+                                    "expo",
+                                    text("settings.animation_expo", cx),
+                                ),
+                                (
+                                    CapsuleAnimation::Back,
+                                    "back",
+                                    text("settings.animation_back", cx),
+                                ),
+                                (
                                     CapsuleAnimation::Spring,
                                     "spring",
                                     text("settings.animation_spring", cx),
@@ -594,206 +636,151 @@ impl SettingsView for AppearanceView {
                         &theme,
                     ))
                     .when(config.ui.capsule_animation == CapsuleAnimation::Spring, |card| {
-                        card.child(row_divider(&theme)).child(slider_row(
-                            ElementId::Name("slider-spring-bounciness".into()),
+                        card.child(row_divider(&theme)).child(self.slider_control_row(
+                            "slider-spring-bounciness",
                             &text("settings.spring_bounciness_title", cx),
                             &format!("{:.0}%", config.ui.spring_bounciness * 100.0),
-                            config.ui.spring_bounciness / 1.0,
+                            AppearanceSlider::SpringBounciness,
+                            config.ui.spring_bounciness,
+                            (0.0, 1.0, 0.05),
                             &self.spring_bounciness_tracker,
                             &theme,
-                            cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                                if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                    view.active_slider = Some((
-                                        AppearanceSlider::SpringBounciness,
-                                        view.spring_bounciness_tracker.clone(),
-                                        0.0,
-                                        1.0,
-                                        0.05,
-                                    ));
-                                    view.update_slider_value(event.position.x.into(), cx);
-                                }
-                            }),
-                            cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                                if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                    if view.handle_mouse_up(event, cx) {
-                                        cx.notify();
-                                    }
-                                }
-                            }),
+                            cx,
                         ))
-                    }),
+                    })
+                    .child(row_divider(&theme))
+                    .child(toggle_row(
+                        ElementId::Name("setting-squash-stretch".into()),
+                        &text("settings.squash_stretch_title", cx),
+                        Some(&text("settings.squash_stretch_hint", cx)),
+                        config.ui.squash_stretch,
+                        &theme,
+                        cx.listener(|this, _, window, cx| {
+                            if cx.has_global::<AppState>() {
+                                let _ = cx.global::<AppState>().config.update(|cfg| {
+                                    cfg.ui.squash_stretch = !cfg.ui.squash_stretch;
+                                });
+                            }
+                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                                view.play_motion_preview(window, cx);
+                            }
+                            cx.notify();
+                        }),
+                    ))
+                    .child(row_divider(&theme))
+                    .child(toggle_row(
+                        ElementId::Name("setting-stagger-animation".into()),
+                        &text("settings.stagger_animation_title", cx),
+                        Some(&text("settings.stagger_animation_hint", cx)),
+                        config.ui.stagger_animation,
+                        &theme,
+                        cx.listener(|this, _, window, cx| {
+                            if cx.has_global::<AppState>() {
+                                let _ = cx.global::<AppState>().config.update(|cfg| {
+                                    cfg.ui.stagger_animation = !cfg.ui.stagger_animation;
+                                });
+                            }
+                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                                view.play_motion_preview(window, cx);
+                            }
+                            cx.notify();
+                        }),
+                    ))
+                    .child(row_divider(&theme))
+                    .child(toggle_row(
+                        ElementId::Name("setting-reduced-motion".into()),
+                        &text("settings.reduced_motion_title", cx),
+                        Some(&text("settings.reduced_motion_hint", cx)),
+                        config.ui.reduced_motion,
+                        &theme,
+                        cx.listener(|this, _, window, cx| {
+                            if cx.has_global::<AppState>() {
+                                let _ = cx.global::<AppState>().config.update(|cfg| {
+                                    cfg.ui.reduced_motion = !cfg.ui.reduced_motion;
+                                });
+                            }
+                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                                view.play_motion_preview(window, cx);
+                            }
+                            cx.notify();
+                        }),
+                    )),
             )
             // Dimensions & Radii Sliders Group
             .child(
                 card(&theme)
                     .child(heading(&text("settings.dimensions_heading", cx), &theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-idle-height".into()),
+                    .child(self.slider_control_row(
+                        "slider-idle-height",
                         &text("settings.height_short", cx),
                         &format!("{:.0} px", config.ui.idle_height),
-                        (config.ui.idle_height - 16.0) / (60.0 - 16.0),
+                        AppearanceSlider::IdleHeight,
+                        config.ui.idle_height,
+                        (16.0, 60.0, 1.0),
                         &self.idle_height_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::IdleHeight,
-                                    view.idle_height_tracker.clone(),
-                                    16.0,
-                                    60.0,
-                                    1.0,
-                                    ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-margin-top".into()),
+                    .child(self.slider_control_row(
+                        "slider-margin-top",
                         &text("settings.margin_short", cx),
                         &format!("{:.0} px", config.ui.margin_top),
-                        (config.ui.margin_top - 0.0) / (40.0 - 0.0),
+                        AppearanceSlider::MarginTop,
+                        config.ui.margin_top,
+                        (0.0, 40.0, 1.0),
                         &self.margin_top_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::MarginTop,
-                                    view.margin_top_tracker.clone(),
-                                    0.0,
-                                    40.0,
-                                    1.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-gap".into()),
+                    .child(self.slider_control_row(
+                        "slider-gap",
                         &text("settings.gap_short", cx),
                         &format!("{:.0} px", config.ui.gap),
-                        (config.ui.gap - 0.0) / (32.0 - 0.0),
+                        AppearanceSlider::Gap,
+                        config.ui.gap,
+                        (0.0, 32.0, 1.0),
                         &self.gap_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::Gap,
-                                    view.gap_tracker.clone(),
-                                    0.0,
-                                    32.0,
-                                    1.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
                     .child(heading(&text("settings.radii_heading", cx), &theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-capsule-round".into()),
+                    .child(self.slider_control_row(
+                        "slider-capsule-round",
                         &text("settings.capsule_radius_short", cx),
                         &format!("{:.0} px", config.ui.capsule_round),
-                        (config.ui.capsule_round - 0.0) / (24.0 - 0.0),
+                        AppearanceSlider::CapsuleRound,
+                        config.ui.capsule_round,
+                        (0.0, 24.0, 1.0),
                         &self.capsule_round_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::CapsuleRound,
-                                    view.capsule_round_tracker.clone(),
-                                    0.0,
-                                    24.0,
-                                    1.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-satellite-round".into()),
+                    .child(self.slider_control_row(
+                        "slider-satellite-round",
                         &text("settings.satellite_radius_short", cx),
                         &format!("{:.0} px", config.ui.satellite_round),
-                        (config.ui.satellite_round - 0.0) / (24.0 - 0.0),
+                        AppearanceSlider::SatelliteRound,
+                        config.ui.satellite_round,
+                        (0.0, 24.0, 1.0),
                         &self.satellite_round_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::SatelliteRound,
-                                    view.satellite_round_tracker.clone(),
-                                    0.0,
-                                    24.0,
-                                    1.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-cards-round".into()),
+                    .child(self.slider_control_row(
+                        "slider-cards-round",
                         &text("settings.cards_radius_short", cx),
                         &format!("{:.0} px", config.ui.cards_round),
-                        (config.ui.cards_round - 0.0) / (24.0 - 0.0),
+                        AppearanceSlider::CardsRound,
+                        config.ui.cards_round,
+                        (0.0, 24.0, 1.0),
                         &self.cards_round_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::CardsRound,
-                                    view.cards_round_tracker.clone(),
-                                    0.0,
-                                    24.0,
-                                    1.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     ))
                     .child(row_divider(&theme))
                     .child(heading(&text("settings.motion_heading", cx), &theme))
@@ -825,32 +812,16 @@ impl SettingsView for AppearanceView {
                         &theme,
                     ))
                     .child(row_divider(&theme))
-                    .child(slider_row(
-                        ElementId::Name("slider-anim-duration".into()),
+                    .child(self.slider_control_row(
+                        "slider-anim-duration",
                         &text("settings.animation_short", cx),
                         &format!("{:.0} ms", config.ui.animation_duration_ms),
-                        (config.ui.animation_duration_ms as f32 - 0.0) / (1000.0 - 0.0),
+                        AppearanceSlider::AnimDuration,
+                        config.ui.animation_duration_ms as f32,
+                        (0.0, 1000.0, 25.0),
                         &self.anim_duration_tracker,
                         &theme,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                view.active_slider = Some((
-                                    AppearanceSlider::AnimDuration,
-                                    view.anim_duration_tracker.clone(),
-                                    0.0,
-                                    1000.0,
-                                    25.0,
-                                ));
-                                view.update_slider_value(event.position.x.into(), cx);
-                            }
-                        }),
-                        cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                            if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                                if view.handle_mouse_up(event, cx) {
-                                    cx.notify();
-                                }
-                            }
-                        }),
+                        cx,
                     )),
             )
             // Live Motion & Orbit Preview

@@ -8,6 +8,7 @@ pub(super) struct Animator {
     target: f32,
     started: Option<Instant>,
     duration: Duration,
+    delay: Duration,
     animation: CapsuleAnimation,
 }
 
@@ -19,6 +20,7 @@ impl Animator {
             target: 0.0,
             started: None,
             duration: Duration::ZERO,
+            delay: Duration::ZERO,
             animation: CapsuleAnimation::default(),
         }
     }
@@ -45,7 +47,18 @@ impl Animator {
         self.started.is_some()
     }
 
+    #[allow(dead_code)]
     pub fn transition(&mut self, active: bool, duration: Duration, now: Instant) {
+        self.transition_with_delay(active, duration, Duration::ZERO, now);
+    }
+
+    pub fn transition_with_delay(
+        &mut self,
+        active: bool,
+        duration: Duration,
+        delay: Duration,
+        now: Instant,
+    ) {
         self.advance(now);
         let target = if active { 1.0 } else { 0.0 };
         if self.target == target {
@@ -53,7 +66,15 @@ impl Animator {
         }
         self.start = self.progress;
         self.target = target;
-        self.duration = duration.mul_f32((target - self.start).abs());
+        let effective_delay = if duration.is_zero() {
+            Duration::ZERO
+        } else {
+            delay.min(duration / 2)
+        };
+        self.delay = effective_delay;
+        self.duration = duration
+            .saturating_sub(effective_delay)
+            .mul_f32((target - self.start).abs());
         self.started = Some(now);
         self.advance(now);
     }
@@ -63,17 +84,18 @@ impl Animator {
             return false;
         };
         let elapsed = now.saturating_duration_since(started);
-        if elapsed >= self.duration {
+        if elapsed < self.delay {
+            return true;
+        }
+        let active_elapsed = elapsed - self.delay;
+        if active_elapsed >= self.duration {
             self.progress = self.target;
             self.started = None;
+            self.delay = Duration::ZERO;
             return false;
         }
-        let t = elapsed.as_secs_f32() / self.duration.as_secs_f32();
-        let eased = match self.animation {
-            CapsuleAnimation::Fluid => 1.0 - (1.0 - t).powi(5),
-            CapsuleAnimation::Cubic => 1.0 - (1.0 - t).powi(3),
-            CapsuleAnimation::Spring => crate::capsule::animator::apple_island_morph(t, true).0,
-        };
+        let t = active_elapsed.as_secs_f32() / self.duration.as_secs_f32();
+        let eased = crate::capsule::animator::scalar_progress(t, self.animation, 0.75);
         self.progress = self.start + (self.target - self.start) * eased;
         true
     }
@@ -97,6 +119,24 @@ mod tests {
         assert_eq!(animator.progress(), 0.0);
         assert!(!animator.advance(now + Duration::from_secs(1)));
         animator.transition(true, Duration::ZERO, now + Duration::from_secs(1));
+        assert_eq!(animator.progress(), 1.0);
+    }
+
+    #[test]
+    fn delayed_orbit_transition_waits_and_finishes_within_duration() {
+        let now = Instant::now();
+        let mut animator = Animator::new().with_animation(CapsuleAnimation::Back);
+        animator.transition_with_delay(
+            true,
+            Duration::from_millis(200),
+            Duration::from_millis(30),
+            now,
+        );
+        assert!(animator.advance(now + Duration::from_millis(15)));
+        assert_eq!(animator.progress(), 0.0);
+        assert!(animator.advance(now + Duration::from_millis(100)));
+        assert!(animator.progress() > 0.0);
+        assert!(!animator.advance(now + Duration::from_millis(200)));
         assert_eq!(animator.progress(), 1.0);
     }
 }
