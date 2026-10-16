@@ -188,13 +188,7 @@ pub fn stop_capsule_process() {
 }
 
 pub fn check_wallpaper_daemon() -> Option<&'static str> {
-    if command_exists("awww") {
-        Some("awww")
-    } else if command_exists("swww") {
-        Some("swww")
-    } else {
-        None
-    }
+    Some("built-in (Capsule)")
 }
 
 pub fn find_local_release_binary() -> Option<std::path::PathBuf> {

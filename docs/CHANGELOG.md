@@ -10,8 +10,13 @@ All notable changes to Capsule are documented in this file.
 * **Cascading Transitions**: Multiple panels and widgets now transition with a graceful staggered sequence instead of moving all at once, creating a more natural flow.
 * **Reduced Motion Mode**: Added a dedicated accessibility option that disables spatial movement and morphing in favor of clean, instant fades, ideal for motion sensitivity or minimalist setups.
 * **Fine-Tuned Motion Controls**: Personalize the exact feel of your desktop with adjustable sliders for spring bounciness and internal content transition speed.
+* **Native Wallpaper Engine**: Fully built-in desktop wallpaper panel rendered natively at full screen on the lowest layer, eliminating the need for external daemons like `swww` or `awww`.
+* **Smooth Wallpaper Transitions**: Seamless visual transitions when switching wallpapers, including Fade, Slide, Zoom, Wipe, and Instant modes.
+* **Modern Wallpaper Settings**: A redesigned General card in Appearance settings featuring a large rounded preview of the active wallpaper, a quick file picker via the native desktop portal, and a dedicated transition selector.
 
 ### Improvements
 * **Interactive Motion Preview**: Test and preview animation curves, bounciness, elasticity, and transitions in real time directly inside the Appearance settings before applying them.
 * **Unified Desktop Motion**: Synchronized movement physics and timing across Capsule, corner orbs, preview cards, and satellite panels for a harmonious visual flow.
-* **Search & Localization**: All motion preferences and accessibility toggles are fully searchable in Settings and translated into both English and Spanish.
+* **Simplified Theme Selector**: Streamlined the in-capsule appearance module to focus entirely on themes, removing redundant wallpaper browsing for a lighter, faster experience.
+* **Settings Focus & IPC Isolation**: Opening settings now automatically closes any active capsule modules to default and blocks external IPC commands, ensuring your keyboard focus stays right where you need it.
+* **Refined Staggered Spacing**: Fixed satellite gaps and decoupled screen corners so expanding one side leaves the opposite corner completely undisturbed.

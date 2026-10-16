@@ -10,6 +10,7 @@ pub use mpris_config::MprisConfig;
 pub use record_config::RecordConfig;
 pub use ui_config::{
     CapsuleAnimation, CapsuleLocation, CapsuleStyle, ContentTransition, UIConfig, UiConfig,
+    WallpaperTransition,
 };
 
 use arc_swap::ArcSwap;

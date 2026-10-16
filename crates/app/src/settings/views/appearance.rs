@@ -1,10 +1,14 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, IntoElement, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Styled, Window, div, prelude::*, px, svg,
+    AnyElement, App, ColorExt, Context, Div, ElementId, FontWeight, IntoElement, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Styled, Window, div, img, prelude::*, px, svg,
 };
-use services::{AppState, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ContentTransition};
+use services::{
+    AppState, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ContentTransition,
+    WallpaperTransition,
+};
+use ui::components::{Button, ButtonSize, ButtonVariant};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
@@ -324,10 +328,165 @@ impl SettingsView for AppearanceView {
                 &text("settings.appearance_subtitle", cx),
                 &theme,
             ))
-            // General Group (Dynamic colors & Dark Mode)
-            .child(
+            // General Group (Wallpaper Preview, Selector, Transitions, Dynamic colors & Dark Mode)
+            .child({
+                let current_wallpaper = if cx.has_global::<AppState>() {
+                    cx.global::<AppState>().wallpaper.get_current_wallpaper()
+                } else {
+                    config.ui.wallpaper_path.clone()
+                };
+
+                let default_aspect = 16.0 / 9.0;
+                let aspect = current_wallpaper
+                    .as_deref()
+                    .and_then(|p| image::image_dimensions(p).ok())
+                    .map(|(w, h)| if h > 0 { w as f32 / h as f32 } else { default_aspect })
+                    .unwrap_or(default_aspect);
+
+                let wallpaper_preview = if let Some(ref path) = current_wallpaper {
+                    div()
+                        .w_full()
+                        .flex()
+                        .justify_center()
+                        .px(px(18.0))
+                        .pt(px(10.0))
+                        .pb(px(12.0))
+                        .child(
+                            div()
+                                .w(px(540.0))
+                                .aspect_ratio(aspect)
+                                .rounded(px(16.0))
+                                .overflow_hidden()
+                                .border_1()
+                                .border_color(style::border(&theme))
+                                .shadow_md()
+                                .child(
+                                    img(path.clone())
+                                        .size_full()
+                                        .aspect_ratio(aspect)
+                                        .rounded(px(16.0))
+                                        .object_fit(gpui::ObjectFit::Cover),
+                                ),
+                        )
+                } else {
+                    div()
+                        .w_full()
+                        .flex()
+                        .justify_center()
+                        .px(px(18.0))
+                        .pt(px(10.0))
+                        .pb(px(12.0))
+                        .child(
+                            div()
+                                .w(px(540.0))
+                                .aspect_ratio(16.0 / 9.0)
+                                .rounded(px(16.0))
+                                .overflow_hidden()
+                                .bg(style::surface(&theme))
+                                .border_1()
+                                .border_color(style::border(&theme))
+                                .flex()
+                                .flex_col()
+                                .items_center()
+                                .justify_center()
+                                .gap(px(8.0))
+                                .child(
+                                    svg()
+                                        .path("image.svg")
+                                        .size(px(32.0))
+                                        .text_color(theme.foreground_muted().opacity(0.6)),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(13.0))
+                                        .text_color(theme.foreground_muted())
+                                        .child(text("settings.no_wallpaper", cx)),
+                                ),
+                        )
+                };
+
                 card(&theme)
                     .child(heading(&text("settings.general_heading", cx), &theme))
+                    .child(wallpaper_preview)
+                    .child(
+                        div()
+                            .w_full()
+                            .flex()
+                            .justify_end()
+                            .px(px(18.0))
+                            .pb(px(12.0))
+                            .child(
+                                Button::new("btn-select-wallpaper")
+                                    .label(text("settings.wallpaper_select", cx))
+                                    .variant(ButtonVariant::Primary)
+                                    .size(ButtonSize::Sm)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        if cx.has_global::<AppState>() {
+                                            let state = cx.global::<AppState>().clone();
+                                            this.request_close(cx);
+
+                                            services::spawn_tokio(async move {
+                                                if let Some(path) =
+                                                    crate::wallpaper::portal::pick_wallpaper().await
+                                                {
+                                                    let _ = state.config.update(|cfg| {
+                                                        cfg.ui.wallpaper_path = Some(path.clone());
+                                                    });
+                                                    state.wallpaper.set_wallpaper(path);
+                                                }
+                                            });
+                                        }
+                                    })),
+                            ),
+                    )
+                    .child(row_divider(&theme))
+                    .child(control_row(
+                        &text("settings.wallpaper_transition", cx),
+                        None,
+                        segmented_selector(
+                            "wallpaper-transition",
+                            [
+                                (
+                                    WallpaperTransition::Fade,
+                                    "fade",
+                                    text("settings.transition_fade", cx),
+                                ),
+                                (
+                                    WallpaperTransition::Slide,
+                                    "slide",
+                                    text("settings.transition_slide", cx),
+                                ),
+                                (
+                                    WallpaperTransition::Zoom,
+                                    "zoom",
+                                    text("settings.transition_zoom", cx),
+                                ),
+                                (
+                                    WallpaperTransition::Wipe,
+                                    "wipe",
+                                    text("settings.transition_wipe", cx),
+                                ),
+                                (
+                                    WallpaperTransition::None,
+                                    "none",
+                                    text("settings.transition_none", cx),
+                                ),
+                            ],
+                            config.ui.wallpaper_transition,
+                            &theme,
+                            cx,
+                            |_settings, transition, _window, cx| {
+                                if cx.has_global::<AppState>() {
+                                    let _ = cx.global::<AppState>().config.update(|cfg| {
+                                        cfg.ui.wallpaper_transition = transition;
+                                    });
+                                }
+                                cx.notify();
+                            },
+                        ),
+                        &theme,
+                    ))
+                    .child(row_divider(&theme))
                     .child(toggle_row(
                         ElementId::Name("setting-dynamic-colors".into()),
                         &text("settings.dynamic_colors", cx),
@@ -368,8 +527,8 @@ impl SettingsView for AppearanceView {
                                 .text_color(theme.accent())
                                 .child(err),
                         )
-                    }),
-            )
+                    })
+            })
             // Orbits Group
             .child(
                 card(&theme)

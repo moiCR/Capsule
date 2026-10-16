@@ -34,6 +34,7 @@ pub use compositor::{CompositorService, WorkspaceInfo};
 pub use config::{
     AppConfig, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ConfigService, ContentTransition,
     Defaults, LockScreenConfig, LockscreenConfig, MprisConfig, UIConfig, UiConfig,
+    WallpaperTransition,
 };
 pub use emoji::{EmojiItem, EmojiService};
 pub use idle::{IdleEvent, IdleService};

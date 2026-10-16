@@ -250,7 +250,7 @@ impl SettingsPanel {
             linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
                 namespace: "capsule-settings".to_string(),
-                layer: Layer::Overlay,
+                layer: Layer::Top,
                 anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
                 exclusive_zone: Some(px(-1.0)),
                 keyboard_interactivity: KeyboardInteractivity::OnDemand,
@@ -267,6 +267,19 @@ impl SettingsPanel {
         {
             return None;
         }
+
+        cx.defer(|cx| {
+            for window in cx.windows() {
+                if let Some(capsule_window) = window.downcast::<crate::capsule::Capsule>() {
+                    let _ = capsule_window.update(cx, |capsule, _, cx| {
+                        capsule.handle_module_event(
+                            &crate::capsule::module::CapsuleModuleEvent::Close,
+                            cx,
+                        );
+                    });
+                }
+            }
+        });
 
         let options = Self::window_options(cx);
 
@@ -327,5 +340,15 @@ mod tests {
             );
             assert_eq!(layer.exclusive_zone, Some(px(-1.0)));
         }
+    }
+
+    #[test]
+    fn settings_panel_open_state_tracks_correctly() {
+        SettingsPanel::mark_closed();
+        assert!(!SettingsPanel::is_open());
+        IS_SETTINGS_OPEN.store(true, Ordering::SeqCst);
+        assert!(SettingsPanel::is_open());
+        SettingsPanel::mark_closed();
+        assert!(!SettingsPanel::is_open());
     }
 }

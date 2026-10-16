@@ -1,9 +1,7 @@
-use std::path::PathBuf;
-
-use crate::capsule::module::appearance::{AppearanceKind, AppearanceModule};
+use crate::capsule::module::appearance::AppearanceModule;
 use crate::capsule::widgets::style;
 use gpui::{
-    AnyElement, ColorExt, Context, IntoElement, StyledImage, div, img, prelude::*, px, svg,
+    AnyElement, ColorExt, Context, IntoElement, div, prelude::*, px, svg,
 };
 use ui::components::{Button, ButtonVariant};
 use ui::theme::Theme;
@@ -191,31 +189,6 @@ fn render_theme_preview(item_theme: &Theme) -> AnyElement {
         .into_any_element()
 }
 
-fn render_wallpaper_preview(thumbnail: Option<&PathBuf>, theme: &Theme) -> AnyElement {
-    if let Some(path) = thumbnail {
-        img(path.clone())
-            .size_full()
-            .rounded(px(style::CARD_RADIUS))
-            .object_fit(gpui::ObjectFit::Cover)
-            .into_any_element()
-    } else {
-        div()
-            .size_full()
-            .rounded(px(style::CARD_RADIUS))
-            .bg(theme.surface())
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                svg()
-                    .path("image.svg")
-                    .size(px(28.0))
-                    .text_color(theme.foreground_muted()),
-            )
-            .into_any_element()
-    }
-}
-
 pub(crate) fn render(
     module: &AppearanceModule,
     theme: &Theme,
@@ -262,10 +235,8 @@ pub(crate) fn render(
     let count = module.count();
     let selected = module.carousel().selected;
     let position = module.carousel().position;
-    let title = match module.kind {
-        AppearanceKind::Themes => "Temas",
-        AppearanceKind::Wallpapers => "Fondos",
-    };
+    let title = module.text("dashboard_new.themes", cx);
+
     let mut carousel = div()
         .id("appearance-carousel")
         .relative()
@@ -273,14 +244,12 @@ pub(crate) fn render(
         .h(px(140.0))
         .flex_shrink_0()
         .overflow_hidden();
+
     if count == 0 {
         let key = if !module.ready {
             "dashboard_new.loading"
         } else {
-            match module.kind {
-                AppearanceKind::Themes => "dashboard_new.no_themes",
-                AppearanceKind::Wallpapers => "dashboard_new.no_wallpapers",
-            }
+            "dashboard_new.no_themes"
         };
         carousel = carousel.flex().items_center().justify_center().child(
             div()
@@ -295,36 +264,16 @@ pub(crate) fn render(
             continue;
         }
         let props = geometry(relative, module.carousel().piano_offset(index));
-        let (id, name, preview, applied): (String, String, AnyElement, bool) = match module.kind {
-            AppearanceKind::Themes => {
-                let item = &module.themes[index];
-                (
-                    format!("appearance-theme-{}", item.path.display()),
-                    item.name.clone(),
-                    render_theme_preview(&item.theme),
-                    item.theme == *theme,
-                )
-            }
-            AppearanceKind::Wallpapers => {
-                let item = &module.wallpapers[index];
-                (
-                    format!("appearance-wallpaper-{}", item.path.display()),
-                    item.name.clone(),
-                    render_wallpaper_preview(item.thumbnail.as_ref(), theme),
-                    module.current_wallpaper.as_ref() == Some(&item.path),
-                )
-            }
-        };
-        let name = if module.kind == AppearanceKind::Wallpapers {
-            let mut characters = name.chars();
-            let mut label: String = characters.by_ref().take(12).collect();
-            if characters.next().is_some() {
-                label.push_str("...");
-            }
-            label
-        } else {
-            name
-        };
+        let item = &module.themes[index];
+        let id = format!("appearance-theme-{}", item.path.display());
+        let name = item.name.clone();
+        let preview = render_theme_preview(&item.theme);
+        let applied = item
+            .theme
+            .clone()
+            .with_mode(cx.global::<services::AppState>().config.get().ui.dark_mode)
+            == *theme;
+
         carousel = carousel
             .child(
                 div()
@@ -417,18 +366,12 @@ pub(crate) fn render(
                 .child(error.clone()),
         )
     });
-    let applied = match module.kind {
-        AppearanceKind::Themes => module.themes.get(selected).is_some_and(|item| {
-            item.theme
-                .clone()
-                .with_mode(cx.global::<services::AppState>().config.get().ui.dark_mode)
-                == *theme
-        }),
-        AppearanceKind::Wallpapers => module
-            .wallpapers
-            .get(selected)
-            .is_some_and(|item| module.current_wallpaper.as_ref() == Some(&item.path)),
-    };
+    let applied = module.themes.get(selected).is_some_and(|item| {
+        item.theme
+            .clone()
+            .with_mode(cx.global::<services::AppState>().config.get().ui.dark_mode)
+            == *theme
+    });
     let enabled = count > 0 && !module.pending && !applied;
     div()
         .id("appearance-module")
@@ -453,10 +396,7 @@ pub(crate) fn render(
                         .gap(px(8.0))
                         .child(
                             svg()
-                                .path(match module.kind {
-                                    AppearanceKind::Themes => "palette_2.svg",
-                                    AppearanceKind::Wallpapers => "image.svg",
-                                })
+                                .path("palette_2.svg")
                                 .size(px(18.0))
                                 .text_color(theme.foreground()),
                         )

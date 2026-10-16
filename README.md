@@ -27,7 +27,7 @@ In a typical tiling Wayland setup, you end up gluing together 5 or 6 separate da
 Because it is written in Rust and powered by GPUI, it renders directly through the GPU at 60+ FPS with minimal RAM consumption, avoiding the runtime overhead of WebViews, Electron, or QML/JS engines.
 
 ## Showcase
-https://github.com/user-attachments/assets/1725467b-43c9-4e39-ae71-d4b480713515
+https://github.com/user-attachments/assets/baf17a29-27d1-4f04-a97b-43b860c84d84
 
 ## Features
 ### Dynamic Island & Shell
@@ -96,11 +96,6 @@ A template definition supports:
 name = "foot"
 description = "Foot terminal theme"
 enabled = true
-target = "~/.config/foot/foot.ini"
-replace_section = "[colors-{{mode}}]"
-
-[template]
-content = """
 [colors-{{mode}}]
 background={{background.strip}}
 foreground={{foreground.strip}}
@@ -162,11 +157,6 @@ Conditionals are also supported:
 curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | bash
 ```
 
-To install the latest beta pre-release instead:
-```bash
-curl -fsSL https://raw.githubusercontent.com/moiCR/Capsule/master/install.sh | bash -s -- --beta
-```
-
 Or build from source:
 ```bash
 git clone https://github.com/moiCR/Capsule.git
@@ -210,6 +200,7 @@ Or with Home Manager:
 ```nix
 home.packages = [ inputs.capsule.packages.${pkgs.system}.default ];
 ```
+
 
 ## Special Thanks
 - [zed](https://github.com/zed-industries/zed): for creating gpui and making it open source

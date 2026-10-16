@@ -206,10 +206,7 @@ impl Capsule {
             } else if current == CapsuleModuleId::Emoji {
                 let focus = self.module_manager.emoji.read(cx).focus_handle();
                 window.focus(&focus, cx);
-            } else if matches!(
-                current,
-                CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers
-            ) {
+            } else if current == CapsuleModuleId::Themes {
                 let focus = self.module_manager.appearance.read(cx).focus_handle();
                 window.focus(&focus, cx);
             } else {
@@ -315,10 +312,7 @@ impl Capsule {
             module.set_active(current == CapsuleModuleId::Clipboard);
         });
         self.module_manager.appearance.update(cx, |module, _| {
-            module.set_active(matches!(
-                current,
-                CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers
-            ));
+            module.set_active(current == CapsuleModuleId::Themes);
         });
         self.module_manager.dashboard.update(cx, |dashboard, cx| {
             dashboard.set_active(current == CapsuleModuleId::Dashboard, region.size, cx);

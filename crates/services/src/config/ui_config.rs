@@ -35,6 +35,17 @@ pub enum ContentTransition {
     Fade,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WallpaperTransition {
+    #[default]
+    Fade,
+    Slide,
+    Zoom,
+    Wipe,
+    None,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OrbitConfig {
@@ -83,6 +94,12 @@ pub struct UIConfig {
 
     #[serde(default)]
     pub content_transition: ContentTransition,
+
+    #[serde(default)]
+    pub wallpaper_path: Option<std::path::PathBuf>,
+
+    #[serde(default)]
+    pub wallpaper_transition: WallpaperTransition,
 
     #[serde(default = "default_spring_bounciness")]
     pub spring_bounciness: f32,
@@ -146,6 +163,8 @@ impl Default for UIConfig {
             capsule_location: CapsuleLocation::Top,
             capsule_animation: CapsuleAnimation::Fluid,
             content_transition: ContentTransition::FadeScale,
+            wallpaper_path: None,
+            wallpaper_transition: WallpaperTransition::Fade,
             spring_bounciness: default_spring_bounciness(),
             squash_stretch: true,
             stagger_animation: true,
@@ -314,5 +333,20 @@ mod tests {
         let config: UIConfig = toml::from_str("location = 'bottom'").expect("bottom config");
         assert_eq!(config.capsule_location, CapsuleLocation::Bottom);
         assert!(toml::from_str::<UIConfig>("capsule_location = 'left'").is_err());
+    }
+
+    #[test]
+    fn wallpaper_transition_accepts_all_variants() {
+        for (str_val, expected) in [
+            ("fade", WallpaperTransition::Fade),
+            ("slide", WallpaperTransition::Slide),
+            ("zoom", WallpaperTransition::Zoom),
+            ("wipe", WallpaperTransition::Wipe),
+            ("none", WallpaperTransition::None),
+        ] {
+            let config: UIConfig =
+                toml::from_str(&format!("wallpaper_transition = '{str_val}'")).expect(str_val);
+            assert_eq!(config.wallpaper_transition, expected);
+        }
     }
 }

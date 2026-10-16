@@ -33,6 +33,21 @@ impl Capsule {
     }
 
     pub fn handle_ipc_command(&mut self, command: IpcCommand, cx: &mut Context<Self>) {
+        if crate::panel::SettingsPanel::is_open() {
+            match command {
+                IpcCommand::ToggleSettings | IpcCommand::Hide => {
+                    crate::panel::SettingsPanel::close(cx);
+                }
+                IpcCommand::Lock => {
+                    crate::panel::LockScreenPanel::open_all(cx);
+                }
+                IpcCommand::Quit => cx.quit(),
+                IpcCommand::Ping => {}
+                _ => {}
+            }
+            return;
+        }
+
         match command {
             command @ (IpcCommand::Terminal
             | IpcCommand::Browser
@@ -122,19 +137,9 @@ impl Capsule {
                 };
                 self.handle_module_event(&event, cx);
             }
-            command @ (IpcCommand::ToggleSelectTheme
-            | IpcCommand::ToggleSelectWallpaper
-            | IpcCommand::ShowThemes
-            | IpcCommand::ShowWallpapers) => {
-                let id = if matches!(
-                    command,
-                    IpcCommand::ToggleSelectTheme | IpcCommand::ShowThemes
-                ) {
-                    CapsuleModuleId::Themes
-                } else {
-                    CapsuleModuleId::Wallpapers
-                };
-                let show = matches!(command, IpcCommand::ShowThemes | IpcCommand::ShowWallpapers);
+            command @ (IpcCommand::ToggleSelectTheme | IpcCommand::ShowThemes) => {
+                let id = CapsuleModuleId::Themes;
+                let show = command == IpcCommand::ShowThemes;
                 let event = if !show && self.module_manager.current_id() == id {
                     CapsuleModuleEvent::Close
                 } else {
@@ -142,18 +147,19 @@ impl Capsule {
                 };
                 self.handle_module_event(&event, cx);
             }
+            command @ (IpcCommand::ToggleSelectWallpaper | IpcCommand::ShowWallpapers) => {
+                self.handle_module_event(&CapsuleModuleEvent::Close, cx);
+                if command == IpcCommand::ShowWallpapers {
+                    crate::panel::SettingsPanel::open(cx);
+                } else {
+                    crate::panel::SettingsPanel::toggle(cx);
+                }
+            }
             IpcCommand::Hide | IpcCommand::Default => {
                 self.handle_module_event(&CapsuleModuleEvent::Close, cx);
             }
             command @ (IpcCommand::ShowSettings | IpcCommand::ToggleSettings) => {
-                if matches!(
-                    self.module_manager.current_id(),
-                    CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers
-                ) && (command == IpcCommand::ShowSettings
-                    || !crate::panel::SettingsPanel::is_open())
-                {
-                    self.handle_module_event(&CapsuleModuleEvent::Close, cx);
-                }
+                self.handle_module_event(&CapsuleModuleEvent::Close, cx);
                 if command == IpcCommand::ShowSettings {
                     crate::panel::SettingsPanel::open(cx);
                 } else {

@@ -186,7 +186,7 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Record => self.record.clone().into(),
             CapsuleModuleId::Polkit => self.polkit.clone().into(),
             CapsuleModuleId::Notification => self.notification.clone().into(),
-            CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => self.appearance.clone().into(),
+            CapsuleModuleId::Themes => self.appearance.clone().into(),
         }
     }
 
@@ -207,9 +207,7 @@ impl CapsuleModuleManager {
             CapsuleModuleId::Notification => {
                 self.notification.read_with(cx, |module, _| module.size())
             }
-            CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers => {
-                self.appearance.read_with(cx, |module, _| module.size())
-            }
+            CapsuleModuleId::Themes => self.appearance.read_with(cx, |module, _| module.size()),
         }
     }
 }
@@ -221,7 +219,6 @@ pub enum CapsuleModuleId {
     Launcher,
     Dashboard,
     Themes,
-    Wallpapers,
     Clipboard,
     Emoji,
     Shelf,
@@ -350,7 +347,7 @@ impl Capsule {
         });
     }
 
-    pub(super) fn handle_module_event(
+    pub(crate) fn handle_module_event(
         &mut self,
         event: &CapsuleModuleEvent,
         cx: &mut Context<Self>,
@@ -473,15 +470,10 @@ impl Capsule {
                         .dashboard
                         .update(cx, |module, cx| module.reset(cx));
                 }
-                if matches!(id, CapsuleModuleId::Themes | CapsuleModuleId::Wallpapers) {
-                    let kind = if *id == CapsuleModuleId::Themes {
-                        appearance::AppearanceKind::Themes
-                    } else {
-                        appearance::AppearanceKind::Wallpapers
-                    };
+                if *id == CapsuleModuleId::Themes {
                     self.module_manager
                         .appearance
-                        .update(cx, |module, cx| module.open(kind, cx));
+                        .update(cx, |module, cx| module.open(cx));
                 }
                 if *id == CapsuleModuleId::Clipboard && self.module_manager.current_id() != *id {
                     self.module_manager

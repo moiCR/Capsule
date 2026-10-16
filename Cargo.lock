@@ -794,9 +794,10 @@ dependencies = [
 
 [[package]]
 name = "capsule"
-version = "2.1.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
+ "ashpd",
  "assets",
  "chrono",
  "dirs 6.0.0",
@@ -807,6 +808,7 @@ dependencies = [
  "services",
  "tokio",
  "ui",
+ "url",
 ]
 
 [[package]]

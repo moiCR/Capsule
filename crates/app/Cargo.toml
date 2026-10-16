@@ -1,6 +1,6 @@
 [package]
 name = "capsule"
-version = "2.1.0"
+version = "2.3.0"
 edition = "2024"
 license.workspace = true
 
@@ -20,3 +20,5 @@ chrono.workspace = true
 libc = "0.2"
 dirs.workspace = true
 image = "0.25"
+ashpd = { version = "0.13", default-features = false, features = ["async-io"] }
+url = "2"

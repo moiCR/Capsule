@@ -2,6 +2,7 @@ pub mod lockscreen;
 pub mod capsule;
 pub mod panel;
 pub mod settings;
+pub mod wallpaper;
 
 use assets::Assets;
 use gpui_platform::application;
@@ -88,6 +89,7 @@ fn run_application() {
         cx.set_global(theme_manager);
         settings::appearance::initialize(cx);
 
+        wallpaper::WallpaperPanel::open(cx);
         panel::CapsulePanel::open(cx, ipc_subscriber);
     });
 }

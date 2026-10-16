@@ -4,43 +4,29 @@ mod catalog;
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
 use crate::capsule::widgets::appearance as widgets;
 use carousel::Carousel;
-use catalog::{Catalog, WallpaperEntry};
+use catalog::Catalog;
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, Pixels, Render, Size, Subscription, Task,
     Window, prelude::*,
 };
 use services::AppState;
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use ui::theme::{
     Theme,
     theme_manager::{ThemeItem, ThemeManager},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AppearanceKind {
-    Themes,
-    Wallpapers,
-}
-
 pub(crate) struct AppearanceModule {
-    pub kind: AppearanceKind,
     pub themes: Vec<ThemeItem>,
-    pub wallpapers: Vec<WallpaperEntry>,
     pub ready: bool,
     pub pending: bool,
     pub error: Option<String>,
-    pub current_wallpaper: Option<PathBuf>,
-    themes_carousel: Carousel,
-    wallpapers_carousel: Carousel,
+    carousel: Carousel,
     focus: FocusHandle,
     active: bool,
     animation: Option<Task<()>>,
     action: Option<Task<()>>,
     _catalog: Task<()>,
-    _refresh: Task<()>,
     _theme: Subscription,
     worker: tokio::task::JoinHandle<()>,
 }
@@ -65,7 +51,6 @@ impl AppearanceModule {
                     .update(cx, |module: &mut Self, cx| {
                         let first = !module.ready;
                         let changed = first
-                            || module.wallpapers != catalog.wallpapers
                             || module.themes.len() != catalog.themes.len()
                             || module
                                 .themes
@@ -77,15 +62,10 @@ impl AppearanceModule {
                         }
                         let selected_theme = module
                             .themes
-                            .get(module.themes_carousel.selected)
-                            .map(|item| item.path.clone());
-                        let selected_wallpaper = module
-                            .wallpapers
-                            .get(module.wallpapers_carousel.selected)
+                            .get(module.carousel.selected)
                             .map(|item| item.path.clone());
                         module.ready = true;
                         module.themes = catalog.themes;
-                        module.wallpapers = catalog.wallpapers;
                         let theme_index = if first {
                             module
                                 .themes
@@ -97,21 +77,9 @@ impl AppearanceModule {
                                 .iter()
                                 .position(|item| Some(&item.path) == selected_theme.as_ref())
                         };
-                        let wallpaper_index = module.wallpapers.iter().position(|item| {
-                            Some(&item.path)
-                                == if first {
-                                    module.current_wallpaper.as_ref()
-                                } else {
-                                    selected_wallpaper.as_ref()
-                                }
-                        });
-                        module.themes_carousel.reset(
-                            theme_index.unwrap_or(module.themes_carousel.selected),
+                        module.carousel.reset(
+                            theme_index.unwrap_or(module.carousel.selected),
                             module.themes.len(),
-                        );
-                        module.wallpapers_carousel.reset(
-                            wallpaper_index.unwrap_or(module.wallpapers_carousel.selected),
-                            module.wallpapers.len(),
                         );
                         cx.notify();
                     })
@@ -121,41 +89,17 @@ impl AppearanceModule {
                 }
             }
         });
-        let refresh = cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(Duration::from_secs(1)).await;
-                if this
-                    .update(cx, |module: &mut Self, cx| {
-                        let current = cx.global::<AppState>().wallpaper.get_current();
-                        if current != module.current_wallpaper {
-                            module.current_wallpaper = current;
-                            if module.active {
-                                cx.notify();
-                            }
-                        }
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
         Self {
-            kind: AppearanceKind::Themes,
             themes: Vec::new(),
-            wallpapers: Vec::new(),
             ready: false,
             pending: false,
             error: None,
-            current_wallpaper: cx.global::<AppState>().wallpaper.get_current(),
-            themes_carousel: Carousel::default(),
-            wallpapers_carousel: Carousel::default(),
+            carousel: Carousel::default(),
             focus: cx.focus_handle(),
             active: false,
             animation: None,
             action: None,
             _catalog: catalog,
-            _refresh: refresh,
             _theme: cx.observe_global::<Theme>(|module, cx| {
                 if module.active {
                     cx.notify();
@@ -175,41 +119,25 @@ impl AppearanceModule {
         }
     }
     pub fn carousel(&self) -> &Carousel {
-        match self.kind {
-            AppearanceKind::Themes => &self.themes_carousel,
-            AppearanceKind::Wallpapers => &self.wallpapers_carousel,
-        }
+        &self.carousel
     }
     fn carousel_mut(&mut self) -> &mut Carousel {
-        match self.kind {
-            AppearanceKind::Themes => &mut self.themes_carousel,
-            AppearanceKind::Wallpapers => &mut self.wallpapers_carousel,
-        }
+        &mut self.carousel
     }
     pub fn count(&self) -> usize {
-        match self.kind {
-            AppearanceKind::Themes => self.themes.len(),
-            AppearanceKind::Wallpapers => self.wallpapers.len(),
-        }
+        self.themes.len()
     }
-    pub fn open(&mut self, kind: AppearanceKind, cx: &mut Context<Self>) {
-        self.kind = kind;
+    pub fn open(&mut self, cx: &mut Context<Self>) {
         self.active = true;
         self.error = None;
         self.animation = None;
-        let selected = match kind {
-            AppearanceKind::Themes => self
-                .themes
-                .iter()
-                .position(|item| item.theme == *cx.global::<Theme>()),
-            AppearanceKind::Wallpapers => self
-                .wallpapers
-                .iter()
-                .position(|item| Some(&item.path) == self.current_wallpaper.as_ref()),
-        }
-        .unwrap_or(self.carousel().selected);
+        let selected = self
+            .themes
+            .iter()
+            .position(|item| item.theme == *cx.global::<Theme>())
+            .unwrap_or(self.carousel.selected);
         let count = self.count();
-        self.carousel_mut().reset(selected, count);
+        self.carousel.reset(selected, count);
         cx.notify();
     }
     pub fn navigate(&mut self, selected: usize, cx: &mut Context<Self>) {
@@ -271,43 +199,22 @@ impl AppearanceModule {
             return;
         }
         let selected = self.carousel().selected;
-        let theme = (self.kind == AppearanceKind::Themes)
-            .then(|| self.themes.get(selected).map(|item| item.theme.clone()))
-            .flatten();
-        let path = (self.kind == AppearanceKind::Wallpapers)
-            .then(|| self.wallpapers.get(selected).map(|item| item.path.clone()))
-            .flatten();
-        if theme.is_none() && path.is_none() {
+        let Some(theme) = self.themes.get(selected).map(|item| item.theme.clone()) else {
             return;
-        }
-        if theme.as_ref().is_some_and(|theme| {
-            theme
-                .clone()
-                .with_mode(cx.global::<AppState>().config.get().ui.dark_mode)
-                == *cx.global::<Theme>()
-        }) || path
-            .as_ref()
-            .is_some_and(|path| Some(path) == self.current_wallpaper.as_ref())
+        };
+        if theme
+            .clone()
+            .with_mode(cx.global::<AppState>().config.get().ui.dark_mode)
+            == *cx.global::<Theme>()
         {
             return;
         }
-        let state = cx.global::<AppState>().clone();
         let (sender, receiver) = tokio::sync::oneshot::channel();
         self.pending = true;
         self.error = None;
         services::spawn_tokio(async move {
             let result = tokio::task::spawn_blocking(move || {
-                if let Some(theme) = theme {
-                    ThemeManager::save_selected_theme(&theme).map(|_| Some(theme))
-                } else if let Some(path) = path {
-                    if state.wallpaper.set_wallpaper(path) {
-                        Ok(None)
-                    } else {
-                        Err("dashboard_new.wallpaper_error".to_string())
-                    }
-                } else {
-                    Ok(None)
-                }
+                ThemeManager::save_selected_theme(&theme).map(|_| theme)
             })
             .await
             .map_err(|error| error.to_string())
@@ -319,7 +226,7 @@ impl AppearanceModule {
             let _ = this.update(cx, |module, cx| {
                 module.pending = false;
                 match result {
-                    Ok(Ok(Some(theme))) => {
+                    Ok(Ok(theme)) => {
                         cx.global_mut::<ThemeManager>().selected_theme = theme.clone();
                         if module.themes_locked(cx) {
                             cx.notify();
@@ -337,7 +244,6 @@ impl AppearanceModule {
                         crate::settings::appearance::persist_theme(theme.clone(), cx);
                         crate::settings::appearance::transition_theme(theme, cx);
                     }
-                    Ok(Ok(None)) => {}
                     Ok(Err(error)) => {
                         module.error = Some(if error.starts_with("dashboard_new.") {
                             cx.global::<AppState>().language.get(&error)
@@ -353,15 +259,13 @@ impl AppearanceModule {
                         )
                     }
                 }
-                module.current_wallpaper = cx.global::<AppState>().wallpaper.get_current();
                 cx.notify();
             });
         }));
         cx.notify();
     }
     pub fn themes_locked(&self, cx: &gpui::App) -> bool {
-        self.kind == AppearanceKind::Themes
-            && cx.global::<AppState>().config.get().ui.dynamic_colors
+        cx.global::<AppState>().config.get().ui.dynamic_colors
     }
 
     pub fn text(&self, key: &str, cx: &gpui::App) -> String {
