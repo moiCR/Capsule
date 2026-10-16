@@ -8,6 +8,12 @@ use assets::Assets;
 use gpui_platform::application;
 
 fn main() -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        // Limit glibc per-thread memory arenas to 2 (M_ARENA_MAX = -8 in glibc)
+        // This eliminates multi-threaded allocator bloat when background threads decode images.
+        libc::mallopt(-8, 2);
+    }
     run_with_runtime(run_application)
 }
 

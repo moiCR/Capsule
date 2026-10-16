@@ -93,6 +93,57 @@ impl MprisService {
     pub async fn seek_to(bus_name: &str, position_seconds: f64) -> bool {
         let bus = bus_name.to_string();
         crate::spawn_tokio(async move {
+            let target_micros = (position_seconds.max(0.0) * 1_000_000.0) as i64;
+
+            if let Some(conn) = get_session_conn().await {
+                let target = if bus.trim().is_empty() {
+                    "org.mpris.MediaPlayer2.spotify"
+                } else {
+                    bus.as_str()
+                };
+
+                if let Ok(builder) = MediaPlayer2PlayerProxy::builder(&conn).destination(target) {
+                    if let Ok(Ok(proxy)) = tokio::time::timeout(Duration::from_millis(500), builder.build()).await {
+                        // 1. Try SetPosition with track_id from Metadata
+                        if let Ok(Ok(meta)) = tokio::time::timeout(Duration::from_millis(300), proxy.metadata()).await {
+                            let track_id_opt = meta.get("mpris:trackid").and_then(extract_track_id);
+
+                            if let Some(track_id_str) = track_id_opt {
+                                if let Ok(obj_path) = zbus::zvariant::ObjectPath::try_from(track_id_str.as_str()) {
+                                    if let Ok(Ok(())) = tokio::time::timeout(
+                                        Duration::from_millis(300),
+                                        proxy.set_position(obj_path, target_micros),
+                                    )
+                                    .await
+                                    {
+                                        crate::log_info!(
+                                            "MPRIS",
+                                            "Native D-Bus SetPosition succeeded on {}",
+                                            target
+                                        );
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Try Seek(offset) as fallback if SetPosition wasn't supported
+                        if let Ok(Ok(curr_pos)) = tokio::time::timeout(Duration::from_millis(300), proxy.position()).await {
+                            let offset = target_micros - curr_pos;
+                            if let Ok(Ok(())) = tokio::time::timeout(Duration::from_millis(300), proxy.seek(offset)).await {
+                                crate::log_info!(
+                                    "MPRIS",
+                                    "Native D-Bus Seek fallback succeeded on {}",
+                                    target
+                                );
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback to playerctl if installed
             let raw_player = bus
                 .strip_prefix("org.mpris.MediaPlayer2.")
                 .unwrap_or(&bus)
@@ -187,10 +238,10 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
             &(),
         );
 
-        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(150), direct_fut).await {
+        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(400), direct_fut).await {
             crate::log_info!(
                 "MPRIS",
-                "Direct D-Bus call '{}' on '{}' succeeded in <150ms",
+                "Direct D-Bus call '{}' on '{}' succeeded in <400ms",
                 method,
                 target
             );
@@ -205,7 +256,7 @@ async fn call_mpris_method(requested_bus: &str, method: &str) -> bool {
                 method,
                 &(),
             );
-            if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(150), spot_fut).await {
+            if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(400), spot_fut).await {
                 crate::log_info!(
                     "MPRIS",
                     "Fallback D-Bus call on 'org.mpris.MediaPlayer2.spotify' succeeded"
@@ -435,12 +486,25 @@ async fn resolve_art_url(url: &str) -> Option<String> {
     Some(cache_path)
 }
 
+fn extract_track_id(v: &Value<'static>) -> Option<String> {
+    match v {
+        Value::ObjectPath(p) => Some(p.as_str().to_string()),
+        Value::Str(s) => Some(s.as_str().to_string()),
+        _ => v
+            .downcast_ref::<zbus::zvariant::ObjectPath>()
+            .ok()
+            .map(|p| p.as_str().to_string())
+            .or_else(|| extract_string(v)),
+    }
+}
+
 fn extract_string(v: &Value<'static>) -> Option<String> {
     match v {
         Value::Str(s) => Some(s.as_str().to_string()),
         _ => v
             .downcast_ref::<String>()
             .ok()
+            .map(|s| s.to_string())
             .or_else(|| v.downcast_ref::<&str>().ok().map(|s| s.to_string())),
     }
 }

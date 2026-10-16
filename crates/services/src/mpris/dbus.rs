@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use zbus::{proxy, zvariant::Value};
+use zbus::{
+    proxy,
+    zvariant::{ObjectPath, Value},
+};
 
 #[proxy(
     interface = "org.mpris.MediaPlayer2.Player",
@@ -12,6 +15,8 @@ pub trait MediaPlayer2Player {
     fn play(&self) -> zbus::Result<()>;
     fn play_pause(&self) -> zbus::Result<()>;
     fn stop(&self) -> zbus::Result<()>;
+    fn seek(&self, offset: i64) -> zbus::Result<()>;
+    fn set_position(&self, track_id: ObjectPath<'_>, position: i64) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn playback_status(&self) -> zbus::Result<String>;

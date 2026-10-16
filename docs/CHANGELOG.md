@@ -22,10 +22,10 @@ All notable changes to Capsule are documented in this file.
 * **Refined Staggered Spacing**: Fixed satellite gaps and decoupled screen corners so expanding one side leaves the opposite corner completely undisturbed.
 
 ### Bug Fixes
-* **Wallpaper Memory Leak & Cache Eviction**: Eliminated an image retention leak in GPUI by automatically evicting previous wallpaper buffers from `App.loading_assets` upon transition completion, preventing uncompressed 50–100MB buffers from accumulating in RAM.
+* **Wallpaper Memory Leak & Atlas Eviction**: Eliminated memory accumulation when switching wallpapers while preserving 100% native image quality. Paired GPUI GPU texture eviction (`cx.drop_image` on `WgpuAtlas`) with asset loader cleanup (`cx.remove_asset`), and limited glibc per-thread memory arenas (`mallopt(M_ARENA_MAX, 2)`) alongside `malloc_trim(0)` to keep RAM consumption strictly bounded under 200MB even with massive 4K/6K images.
 * **Wallpaper Blur & Palette Color Optimization**: Fixed an RGBA-to-JPEG encoding failure in `WallpaperService::create_or_get_blur` that created 0-byte cache files, and optimized `dominant_color` extraction to sample downscaled blur thumbnails instead of re-decoding multi-megapixel images.
-* **Wallpaper Preview Aspect Ratio**: Preserved proper image aspect ratio and rounded container styling in the Appearance settings preview card to eliminate square stretching.
 * **Settings Portal & Re-entrant Safety**: Resolved re-entrant borrow issues when launching the desktop portal file picker and kept settings closed upon selection to keep transitions smooth and unobstructed.
+* **Media Player Seeking via Native MPRIS D-Bus**: Replaced external `playerctl` process calls with native D-Bus MPRIS `SetPosition` and `Seek` calls, eliminating errors when seeking or controlling players on systems without `playerctl`.
 
 
 <div align="center">

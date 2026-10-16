@@ -28,12 +28,23 @@ pub struct LauncherModule {
     scroll: ScrollHandle,
     launch_error: Option<String>,
     _theme_subscription: Subscription,
+    _watch_task: gpui::Task<()>,
 }
 
 impl LauncherModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let service = cx.global::<AppState>().launcher.clone();
         let apps = service.search("");
+        let mut watch_receiver = service.subscribe();
+        let watch_task = cx.spawn(async move |this, cx| {
+            while let Ok(()) = watch_receiver.recv().await {
+                let _ = this.update(cx, |this, cx| {
+                    this.apps = this.service.search(&this.query);
+                    cx.notify();
+                });
+            }
+        });
+
         Self {
             service,
             search_input: InputState::new("").with_focused(true).with_max_len(120),
@@ -46,6 +57,7 @@ impl LauncherModule {
             scroll: ScrollHandle::new(),
             launch_error: None,
             _theme_subscription: cx.observe_global::<Theme>(|_, cx| cx.notify()),
+            _watch_task: watch_task,
         }
     }
 
@@ -57,6 +69,19 @@ impl LauncherModule {
         self.search_input.clear();
         self.update_search(String::new(), cx);
         self.mouse_moved = false;
+
+        let service = self.service.clone();
+        cx.spawn(async move |this, cx| {
+            if service.refresh().await.is_ok() {
+                let _ = this.update(cx, |this, cx| {
+                    if this.query.is_empty() {
+                        this.apps = this.service.search("");
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn update_search(&mut self, query: String, cx: &mut Context<Self>) {

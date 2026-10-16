@@ -360,13 +360,14 @@ impl SettingsView for AppearanceView {
                                 .border_1()
                                 .border_color(style::border(&theme))
                                 .shadow_md()
-                                .child(
-                                    img(path.clone())
+                                .child({
+                                    let preview_path = services::wallpaper::WallpaperService::create_or_get_screen_wallpaper(path, 1080, 720);
+                                    img(preview_path)
                                         .size_full()
                                         .aspect_ratio(aspect)
                                         .rounded(px(16.0))
-                                        .object_fit(gpui::ObjectFit::Cover),
-                                ),
+                                        .object_fit(gpui::ObjectFit::Cover)
+                                }),
                         )
                 } else {
                     div()

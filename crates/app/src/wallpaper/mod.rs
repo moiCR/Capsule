@@ -2,12 +2,13 @@ pub mod animator;
 pub mod portal;
 pub mod view;
 
+use futures_util::FutureExt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use animator::WallpaperAnimator;
 use gpui::{
-    App, AppContext, Context, ImageSource, IntoElement, LinuxWindowBackground, Render, Task, Window,
+    App, AppContext, Context, IntoElement, LinuxWindowBackground, Render, Task, Window,
     WindowBounds, WindowKind, WindowOptions,
     layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions},
 };
@@ -34,6 +35,7 @@ impl Wallpaper {
                     .clone()
                     .filter(|p| p.exists())
             });
+
         let mut watch_receiver = cx.global::<AppState>().wallpaper.subscribe();
 
         let watch_task = cx.spawn(async move |this, cx| {
@@ -101,6 +103,11 @@ impl Wallpaper {
     fn evict_completed_previous(&mut self, cx: &mut Context<Self>) {
         if let Some(prev) = self.animator.take_completed_previous() {
             if self.animator.current.as_ref() != Some(&prev) {
+                services::log_info!(
+                    "WALLPAPER",
+                    "Queuing eviction of previous wallpaper: {:?}",
+                    prev
+                );
                 cx.spawn(async move |_this, cx| {
                     cx.background_executor()
                         .timer(Duration::from_millis(150))
@@ -111,15 +118,46 @@ impl Wallpaper {
                                 cx.global::<AppState>().wallpaper.get_current_wallpaper()
                             {
                                 if curr == prev {
+                                    services::log_info!(
+                                        "WALLPAPER",
+                                        "Skipping eviction: {:?} is still current",
+                                        prev
+                                    );
                                     return;
                                 }
                             }
                         }
-                        ImageSource::from(prev).remove_asset(cx);
+                        Self::evict_wallpaper_from_cache(&prev, cx);
                     });
                 })
                 .detach();
             }
+        }
+    }
+
+    pub fn evict_wallpaper_from_cache(path: &std::path::Path, cx: &mut App) {
+        let resource = gpui::Resource::from(path.to_path_buf());
+        let (task, is_first) = cx.fetch_asset::<gpui::ImgResourceLoader>(&resource);
+        if !is_first {
+            if let Some(Ok(render_image)) = task.now_or_never() {
+                services::log_info!(
+                    "WALLPAPER",
+                    "Successfully dropped GPU texture from sprite atlas for: {:?}",
+                    path
+                );
+                cx.drop_image(render_image, None);
+            }
+        }
+        services::log_info!(
+            "WALLPAPER",
+            "Removed asset from loading_assets cache for: {:?}",
+            path
+        );
+        cx.remove_asset::<gpui::ImgResourceLoader>(&resource);
+
+        #[cfg(target_os = "linux")]
+        unsafe {
+            libc::malloc_trim(0);
         }
     }
 }

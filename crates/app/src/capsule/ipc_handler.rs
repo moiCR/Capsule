@@ -155,6 +155,13 @@ impl Capsule {
                     crate::panel::SettingsPanel::toggle(cx);
                 }
             }
+            IpcCommand::SetWallpaper(path) => {
+                let state = cx.global::<services::AppState>().clone();
+                let _ = state.config.update(|cfg| {
+                    cfg.ui.wallpaper_path = Some(path.clone());
+                });
+                state.wallpaper.set_wallpaper(path);
+            }
             IpcCommand::Hide | IpcCommand::Default => {
                 self.handle_module_event(&CapsuleModuleEvent::Close, cx);
             }

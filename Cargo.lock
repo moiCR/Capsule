@@ -801,6 +801,7 @@ dependencies = [
  "assets",
  "chrono",
  "dirs 6.0.0",
+ "futures-util",
  "gpui-ce",
  "gpui_ce_platform",
  "image",

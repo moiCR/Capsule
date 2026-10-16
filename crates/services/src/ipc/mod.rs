@@ -41,13 +41,25 @@ pub enum IpcCommand {
     ShowRecord,
     ToggleShelf,
     ShowShelf,
+    SetWallpaper(PathBuf),
 }
 
 impl FromStr for IpcCommand {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let normalized = s.trim().to_lowercase().replace('_', "-");
+        let trimmed_raw = s.trim();
+        if let Some(path_str) = trimmed_raw.strip_prefix("wallpaper ")
+            .or_else(|| trimmed_raw.strip_prefix("set-wallpaper "))
+            .or_else(|| trimmed_raw.strip_prefix("set_wallpaper "))
+        {
+            let clean = path_str.trim().trim_matches('"').trim_matches('\'');
+            if !clean.is_empty() {
+                return Ok(IpcCommand::SetWallpaper(PathBuf::from(clean)));
+            }
+        }
+
+        let normalized = trimmed_raw.to_lowercase().replace('_', "-");
         match normalized.as_str() {
             "toggle-launcher" | "toggle launcher" | "launcher" => Ok(IpcCommand::ToggleLauncher),
             "toggle-dashboard" | "toggle dashboard" | "dashboard" => {
@@ -143,6 +155,7 @@ pub fn encode_command(command: &IpcCommand) -> String {
         IpcCommand::ShowRecord => "show-record".to_string(),
         IpcCommand::ToggleShelf => "toggle-shelf".to_string(),
         IpcCommand::ShowShelf => "show-shelf".to_string(),
+        IpcCommand::SetWallpaper(path) => format!("wallpaper {}", path.display()),
     }
 }
 

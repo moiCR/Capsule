@@ -1,12 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "5b2dafc05aa42dcd9209e9d722975c735fa68595",
-    "indexed_at": "2026-10-16T09:26:35Z",
+    "commit": "8b40ec1d67543735985dd822413571b88f9c3907",
+    "indexed_at": "2026-10-16T21:00:05Z",
     "project": "home-moi-Proyectos-Capsule",
-    "nodes": 4390,
-    "edges": 18549,
+    "nodes": 4401,
+    "edges": 18596,
     "original_size": 20774912,
-    "compressed_size": 3389681,
-    "compression_level": 3,
-    "reconcile_basis": "git-clean-head"
+    "compressed_size": 3400831,
+    "compression_level": 3
 }

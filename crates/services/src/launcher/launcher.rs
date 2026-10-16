@@ -27,9 +27,20 @@ impl Drop for InotifyFd {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct LauncherService {
     apps: Arc<ArcSwap<Vec<Application>>>,
+    changed: tokio::sync::broadcast::Sender<()>,
+}
+
+impl Default for LauncherService {
+    fn default() -> Self {
+        let (changed, _) = tokio::sync::broadcast::channel(16);
+        Self {
+            apps: Arc::new(ArcSwap::from_pointee(Vec::new())),
+            changed,
+        }
+    }
 }
 
 impl LauncherService {
@@ -60,9 +71,7 @@ impl LauncherService {
     }
 
     pub fn new() -> Self {
-        let service = Self {
-            apps: Arc::new(ArcSwap::from_pointee(Vec::new())),
-        };
+        let service = Self::default();
 
         let service_clone = service.clone();
         crate::spawn_tokio(async move {
@@ -112,7 +121,7 @@ impl LauncherService {
                             }
                             continue;
                         }
-                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         while unsafe {
                             libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
                         } > 0
@@ -139,6 +148,10 @@ impl LauncherService {
         });
 
         service
+    }
+
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<()> {
+        self.changed.subscribe()
     }
 
     pub fn get_apps(&self) -> Arc<Vec<Application>> {
@@ -238,6 +251,7 @@ impl LauncherService {
         );
 
         self.apps.store(Arc::new(app_list));
+        let _ = self.changed.send(());
 
         Ok(())
     }
@@ -436,6 +450,15 @@ mod tests {
         let refreshed = LauncherService::index_icon_roots(vec![icon_root]);
         assert_eq!(refreshed.get("org.example.NewApp"), Some(&installed));
         std::fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_launcher_subscribe_receives_refresh() -> Result<()> {
+        let service = LauncherService::default();
+        let mut sub = service.subscribe();
+        service.refresh().await?;
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(500), sub.recv()).await.is_ok());
         Ok(())
     }
 }

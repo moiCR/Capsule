@@ -96,6 +96,70 @@ impl WallpaperService {
         Some(cached_path)
     }
 
+    pub fn create_or_get_screen_wallpaper(src: &Path, max_w: u32, max_h: u32) -> PathBuf {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let Ok(metadata) = std::fs::metadata(src) else {
+            return src.to_path_buf();
+        };
+
+        if let Ok((w, h)) = image::image_dimensions(src) {
+            if w <= max_w && h <= max_h {
+                return src.to_path_buf();
+            }
+        }
+
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let mut hasher = DefaultHasher::new();
+        src.hash(&mut hasher);
+        modified.hash(&mut hasher);
+        max_w.hash(&mut hasher);
+        max_h.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let cache_dir = PathBuf::from("/tmp/capsule_screen");
+        let _ = std::fs::create_dir_all(&cache_dir);
+        let cached_path = cache_dir.join(format!("{:x}.jpg", hash));
+
+        if cached_path.is_file() && cached_path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+            return cached_path;
+        }
+
+        let Ok(img) = image::open(src) else {
+            return src.to_path_buf();
+        };
+
+        let orig_w = img.width();
+        let orig_h = img.height();
+        if orig_w == 0 || orig_h == 0 {
+            return src.to_path_buf();
+        }
+
+        let ratio = (max_w as f32 / orig_w as f32).min(max_h as f32 / orig_h as f32);
+        if ratio >= 1.0 {
+            return src.to_path_buf();
+        }
+
+        let target_w = ((orig_w as f32 * ratio).round() as u32).max(1);
+        let target_h = ((orig_h as f32 * ratio).round() as u32).max(1);
+
+        let downscaled = img.resize(target_w, target_h, image::imageops::FilterType::Triangle);
+        let rgb_image = downscaled.to_rgb8();
+
+        if rgb_image.save(&cached_path).is_ok() {
+            cached_path
+        } else {
+            src.to_path_buf()
+        }
+    }
+
     fn restore_saved_wallpaper(&self) {
         if self.config_file.exists() {
             if let Ok(content) = fs::read_to_string(&self.config_file) {
