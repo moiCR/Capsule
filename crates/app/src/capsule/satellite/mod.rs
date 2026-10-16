@@ -55,11 +55,22 @@ struct Panel {
 
 pub struct Satellite {
     panels: Vec<Panel>,
+    animation: services::CapsuleAnimation,
 }
 
 impl Satellite {
     pub fn new() -> Self {
-        Self { panels: Vec::new() }
+        Self {
+            panels: Vec::new(),
+            animation: services::CapsuleAnimation::default(),
+        }
+    }
+
+    pub fn set_animation(&mut self, animation: services::CapsuleAnimation) {
+        self.animation = animation;
+        for panel in &mut self.panels {
+            panel.animator.set_animation(animation);
+        }
     }
     pub fn open(&self) -> bool {
         self.panels.iter().any(|panel| panel.animator.open())
@@ -107,11 +118,12 @@ impl Satellite {
             self.panels.push(Panel {
                 id: id.clone(),
                 side,
-                animator: SatelliteAnimator::new(),
+                animator: SatelliteAnimator::new().with_animation(self.animation),
             });
         }
         if let Some(panel) = self.panels.iter_mut().find(|panel| panel.id == id) {
             panel.side = side;
+            panel.animator.set_animation(self.animation);
             panel.animator.transition(open, duration, Instant::now());
         }
     }

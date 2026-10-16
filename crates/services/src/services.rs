@@ -32,8 +32,8 @@ pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService, Snippet};
 pub use compositor::{CompositorService, WorkspaceInfo};
 pub use config::{
-    AppConfig, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ConfigService, Defaults,
-    LockScreenConfig, LockscreenConfig, MprisConfig, UIConfig, UiConfig,
+    AppConfig, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ConfigService, ContentTransition,
+    Defaults, LockScreenConfig, LockscreenConfig, MprisConfig, UIConfig, UiConfig,
 };
 pub use emoji::{EmojiItem, EmojiService};
 pub use idle::{IdleEvent, IdleService};

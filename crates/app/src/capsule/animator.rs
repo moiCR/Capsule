@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::{Pixels, Size, px};
-use services::CapsuleAnimation;
+use services::{CapsuleAnimation, ContentTransition};
 
 pub struct Animator {
     current: Size<Pixels>,
@@ -10,6 +10,8 @@ pub struct Animator {
     started_at: Option<Instant>,
     duration: Duration,
     animation: CapsuleAnimation,
+    content_transition: ContentTransition,
+    spring_bounciness: f32,
     content_started_at: Option<Instant>,
     content_progress: f32,
 }
@@ -31,21 +33,33 @@ fn spring_eval(t: f32, zeta: f32) -> f32 {
 }
 
 pub fn apple_island_morph(t: f32, expanding: bool) -> (f32, f32) {
+    apple_island_morph_with_bounciness(t, expanding, 0.75)
+}
+
+pub fn apple_island_morph_with_bounciness(t: f32, expanding: bool, bounciness: f32) -> (f32, f32) {
     if t <= 0.0 {
         return (0.0, 0.0);
     }
     if t >= 1.0 {
         return (1.0, 1.0);
     }
+    let b = bounciness.clamp(0.0, 1.0);
+    let zeta_w = 0.98 - b * 0.33;
+    let zeta_h = 0.98 - b * 0.28;
     let (uw, uh) = if expanding {
         (t.powf(0.92), t.powf(1.04))
     } else {
         (t.powf(1.04), t.powf(0.92))
     };
-    (spring_eval(uw, 0.73), spring_eval(uh, 0.77))
+    (spring_eval(uw, zeta_w), spring_eval(uh, zeta_h))
 }
 
-pub fn morph_progress(t: f32, expanding: bool, animation: CapsuleAnimation) -> (f32, f32) {
+pub fn morph_progress(
+    t: f32,
+    expanding: bool,
+    animation: CapsuleAnimation,
+    bounciness: f32,
+) -> (f32, f32) {
     if t <= 0.0 {
         return (0.0, 0.0);
     }
@@ -61,7 +75,7 @@ pub fn morph_progress(t: f32, expanding: bool, animation: CapsuleAnimation) -> (
             let eased = 1.0 - (1.0 - t).powi(3);
             (eased, eased)
         }
-        CapsuleAnimation::Spring => apple_island_morph(t, expanding),
+        CapsuleAnimation::Spring => apple_island_morph_with_bounciness(t, expanding, bounciness),
     }
 }
 
@@ -74,6 +88,8 @@ impl Animator {
             started_at: None,
             duration,
             animation: CapsuleAnimation::default(),
+            content_transition: ContentTransition::default(),
+            spring_bounciness: 0.75,
             content_started_at: None,
             content_progress: 1.0,
         }
@@ -81,6 +97,16 @@ impl Animator {
 
     pub fn with_animation(mut self, animation: CapsuleAnimation) -> Self {
         self.animation = animation;
+        self
+    }
+
+    pub fn with_content_transition(mut self, transition: ContentTransition) -> Self {
+        self.content_transition = transition;
+        self
+    }
+
+    pub fn with_spring_bounciness(mut self, bounciness: f32) -> Self {
+        self.spring_bounciness = bounciness;
         self
     }
 
@@ -94,6 +120,22 @@ impl Animator {
 
     pub fn animation(&self) -> CapsuleAnimation {
         self.animation
+    }
+
+    pub fn set_content_transition(&mut self, transition: ContentTransition) {
+        self.content_transition = transition;
+    }
+
+    pub fn content_transition(&self) -> ContentTransition {
+        self.content_transition
+    }
+
+    pub fn set_spring_bounciness(&mut self, bounciness: f32) {
+        self.spring_bounciness = bounciness;
+    }
+
+    pub fn spring_bounciness(&self) -> f32 {
+        self.spring_bounciness
     }
 
     pub fn animating(&self) -> bool {
@@ -119,7 +161,10 @@ impl Animator {
     }
 
     pub fn content_scale(&self) -> f32 {
-        0.98 + self.content_progress * 0.02
+        match self.content_transition {
+            ContentTransition::FadeScale => 0.98 + self.content_progress * 0.02,
+            ContentTransition::Fade => 1.0,
+        }
     }
 
     pub fn reveal_content(&mut self, now: Instant) {
@@ -162,7 +207,12 @@ impl Animator {
         let expanding =
             self.target.width > self.start.width || self.target.height > self.start.height;
 
-        let (width_eased, height_eased) = morph_progress(progress, expanding, self.animation);
+        let (width_eased, height_eased) = morph_progress(
+            progress,
+            expanding,
+            self.animation,
+            self.spring_bounciness,
+        );
 
         self.current = Size {
             width: (self.start.width + (self.target.width - self.start.width) * width_eased)
@@ -295,6 +345,26 @@ mod tests {
         assert!(!animator.advance(now + Duration::from_millis(360)));
         assert_eq!(animator.content_progress(), 1.0);
         assert!(!animator.advance(now + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn fade_only_transition_maintains_identity_scale() {
+        let now = Instant::now();
+        let mut animator = Animator::new(size(100.0), Duration::from_millis(200))
+            .with_content_transition(ContentTransition::Fade);
+        animator.reveal_content(now);
+        assert_eq!(animator.content_scale(), 1.0);
+        assert!(animator.advance(now + Duration::from_millis(80)));
+        assert_eq!(animator.content_scale(), 1.0);
+        assert!(!animator.advance(now + Duration::from_millis(160)));
+        assert_eq!(animator.content_scale(), 1.0);
+    }
+
+    #[test]
+    fn spring_bounciness_adjusts_damping() {
+        let (w_low, _) = apple_island_morph_with_bounciness(0.7, true, 0.0);
+        let (w_high, _) = apple_island_morph_with_bounciness(0.7, true, 1.0);
+        assert!(w_high > w_low);
     }
 
     #[test]

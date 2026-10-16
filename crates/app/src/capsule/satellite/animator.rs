@@ -1,11 +1,14 @@
 use std::time::{Duration, Instant};
 
+use services::CapsuleAnimation;
+
 pub(super) struct SatelliteAnimator {
     progress: f32,
     start: f32,
     target: f32,
     started_at: Option<Instant>,
     duration: Duration,
+    animation: CapsuleAnimation,
 }
 
 impl SatelliteAnimator {
@@ -16,7 +19,17 @@ impl SatelliteAnimator {
             target: 0.0,
             started_at: None,
             duration: Duration::ZERO,
+            animation: CapsuleAnimation::default(),
         }
+    }
+
+    pub fn with_animation(mut self, animation: CapsuleAnimation) -> Self {
+        self.animation = animation;
+        self
+    }
+
+    pub fn set_animation(&mut self, animation: CapsuleAnimation) {
+        self.animation = animation;
     }
 
     pub fn progress(&self) -> f32 {
@@ -51,7 +64,11 @@ impl SatelliteAnimator {
             return false;
         }
         let t = elapsed.as_secs_f32() / self.duration.as_secs_f32();
-        let eased = 1.0 - (1.0 - t).powi(3);
+        let eased = match self.animation {
+            CapsuleAnimation::Fluid => 1.0 - (1.0 - t).powi(5),
+            CapsuleAnimation::Cubic => 1.0 - (1.0 - t).powi(3),
+            CapsuleAnimation::Spring => crate::capsule::animator::apple_island_morph(t, true).0,
+        };
         self.progress = self.start + (self.target - self.start) * eased;
         true
     }

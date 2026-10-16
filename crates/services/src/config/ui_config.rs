@@ -25,6 +25,14 @@ pub enum CapsuleAnimation {
     Spring,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ContentTransition {
+    #[default]
+    FadeScale,
+    Fade,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OrbitConfig {
@@ -70,6 +78,12 @@ pub struct UIConfig {
 
     #[serde(default, alias = "animation_style", alias = "animation_curve")]
     pub capsule_animation: CapsuleAnimation,
+
+    #[serde(default)]
+    pub content_transition: ContentTransition,
+
+    #[serde(default = "default_spring_bounciness")]
+    pub spring_bounciness: f32,
 
     #[serde(default = "default_capsule_round", alias = "capsule_radius")]
     pub capsule_round: f32,
@@ -120,6 +134,8 @@ impl Default for UIConfig {
             capsule_style: CapsuleStyle::Normal,
             capsule_location: CapsuleLocation::Top,
             capsule_animation: CapsuleAnimation::Fluid,
+            content_transition: ContentTransition::FadeScale,
+            spring_bounciness: default_spring_bounciness(),
             capsule_round: default_capsule_round(),
             satellite_round: default_satellite_round(),
             cards_round: default_cards_round(),
@@ -179,6 +195,10 @@ fn default_badge_round() -> f32 {
     24.0
 }
 
+fn default_spring_bounciness() -> f32 {
+    0.75
+}
+
 fn default_animation_duration_ms() -> u32 {
     250
 }
@@ -203,10 +223,14 @@ mod tests {
         assert!(config.dark_mode);
         assert_eq!(config.clock_format(), "%H:%M");
         assert_eq!(config.capsule_animation, CapsuleAnimation::Fluid);
+        assert_eq!(config.content_transition, ContentTransition::FadeScale);
+        assert_eq!(config.spring_bounciness, 0.75);
         let fresh: UIConfig = toml::from_str("").expect("new config");
         assert!(fresh.use_new_capsule);
         assert_eq!(fresh.capsule_location, CapsuleLocation::Top);
         assert_eq!(fresh.capsule_animation, CapsuleAnimation::Fluid);
+        assert_eq!(fresh.content_transition, ContentTransition::FadeScale);
+        assert_eq!(fresh.spring_bounciness, 0.75);
     }
 
     #[test]
@@ -217,6 +241,8 @@ mod tests {
             clock_24_hour: false,
             capsule_location: CapsuleLocation::Bottom,
             capsule_animation: CapsuleAnimation::Cubic,
+            content_transition: ContentTransition::Fade,
+            spring_bounciness: 0.9,
             ..UIConfig::default()
         };
         let encoded = toml::to_string(&config).expect("serialize config");
@@ -224,6 +250,8 @@ mod tests {
         assert_eq!(decoded, config);
         assert_eq!(decoded.clock_format(), "%I:%M %p");
         assert_eq!(decoded.capsule_animation, CapsuleAnimation::Cubic);
+        assert_eq!(decoded.content_transition, ContentTransition::Fade);
+        assert_eq!(decoded.spring_bounciness, 0.9);
     }
 
     #[test]

@@ -1,16 +1,16 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, ColorExt, Context, Div, DurationWithEasing, ElementId, FontWeight,
-    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Styled, Window, div, ease_in_out,
-    millis, prelude::*, px, svg,
+    AnyElement, App, Context, Div, ElementId, FontWeight, IntoElement, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Styled, Window, div, prelude::*, px, svg,
 };
-use services::{AppState, CapsuleAnimation, CapsuleLocation, CapsuleStyle};
+use services::{AppState, CapsuleAnimation, CapsuleLocation, CapsuleStyle, ContentTransition};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
 use super::common::{
-    card, control_row, heading, hero_header, pill_button, row_divider, slider_row, toggle_row,
+    card, control_row, heading, hero_header, pill_button, row_divider, segmented_selector,
+    slider_row, toggle_row,
 };
 use super::SettingsView;
 use crate::capsule::animator::Animator;
@@ -35,6 +35,7 @@ pub enum AppearanceSlider {
     SatelliteRound,
     CardsRound,
     AnimDuration,
+    SpringBounciness,
 }
 
 pub struct AppearanceView {
@@ -52,6 +53,7 @@ pub struct AppearanceView {
     satellite_round_tracker: DimensionTracker,
     cards_round_tracker: DimensionTracker,
     anim_duration_tracker: DimensionTracker,
+    spring_bounciness_tracker: DimensionTracker,
 }
 
 impl AppearanceView {
@@ -69,23 +71,40 @@ impl AppearanceView {
             satellite_round_tracker: DimensionTracker::new(),
             cards_round_tracker: DimensionTracker::new(),
             anim_duration_tracker: DimensionTracker::new(),
+            spring_bounciness_tracker: DimensionTracker::new(),
         }
     }
 
     pub fn play_motion_preview(&mut self, window: &mut Window, cx: &mut Context<Settings>) {
         self.motion_preview_generation += 1;
-        let (duration, animation) = if cx.has_global::<AppState>() {
-            let ui = &cx.global::<AppState>().config.get().ui;
-            (ui.animation_duration_ms as u64, ui.capsule_animation)
-        } else {
-            (250, CapsuleAnimation::default())
-        };
+        let (duration, animation, content_transition, spring_bounciness) =
+            if cx.has_global::<AppState>() {
+                let ui = &cx.global::<AppState>().config.get().ui;
+                (
+                    ui.animation_duration_ms as u64,
+                    ui.capsule_animation,
+                    ui.content_transition,
+                    ui.spring_bounciness,
+                )
+            } else {
+                (
+                    250,
+                    CapsuleAnimation::default(),
+                    ContentTransition::default(),
+                    0.75,
+                )
+            };
 
         self.motion_preview.set_duration(Duration::from_millis(duration));
         self.motion_preview.set_animation(animation);
+        self.motion_preview
+            .set_content_transition(content_transition);
+        self.motion_preview
+            .set_spring_bounciness(spring_bounciness);
         if cx.has_global::<AppState>() {
             self.orbit_preview.transition(
                 cx.global::<AppState>().config.get().ui.orbits,
+                animation,
                 Duration::from_millis(duration),
                 duration != 0,
             );
@@ -124,20 +143,36 @@ impl AppearanceView {
                     if running {
                         Self::queue_preview_frame(window, cx.entity().downgrade(), generation, returning);
                     } else if !returning {
-                        let (duration, animation) = if cx.has_global::<AppState>() {
-                            let ui = &cx.global::<AppState>().config.get().ui;
-                            (ui.animation_duration_ms as u64, ui.capsule_animation)
-                        } else {
-                            (250, CapsuleAnimation::default())
-                        };
+                        let (duration, animation, content_transition, spring_bounciness) =
+                            if cx.has_global::<AppState>() {
+                                let ui = &cx.global::<AppState>().config.get().ui;
+                                (
+                                    ui.animation_duration_ms as u64,
+                                    ui.capsule_animation,
+                                    ui.content_transition,
+                                    ui.spring_bounciness,
+                                )
+                            } else {
+                                (
+                                    250,
+                                    CapsuleAnimation::default(),
+                                    ContentTransition::default(),
+                                    0.75,
+                                )
+                            };
                         if cx.has_global::<AppState>() {
                             view.orbit_preview.transition(
                                 cx.global::<AppState>().config.get().ui.orbits,
+                                animation,
                                 Duration::from_millis(duration),
                                 false,
                             );
                         }
                         view.motion_preview.set_animation(animation);
+                        view.motion_preview
+                            .set_content_transition(content_transition);
+                        view.motion_preview
+                            .set_spring_bounciness(spring_bounciness);
                         view.motion_preview.transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
                         Self::queue_preview_frame(window, cx.entity().downgrade(), generation, true);
                     }
@@ -167,6 +202,7 @@ impl AppearanceView {
                         AppearanceSlider::SatelliteRound => cfg.ui.satellite_round = val,
                         AppearanceSlider::CardsRound => cfg.ui.cards_round = val,
                         AppearanceSlider::AnimDuration => cfg.ui.animation_duration_ms = val as u32,
+                        AppearanceSlider::SpringBounciness => cfg.ui.spring_bounciness = val,
                     });
                 }
                 cx.notify();
@@ -486,9 +522,9 @@ impl SettingsView for AppearanceView {
                     .child(control_row(
                         &text("settings.animation_style", cx),
                         Some(&text("settings.animation_style_hint", cx)),
-                        {
-                            let current_anim = config.ui.capsule_animation;
-                            let animations = [
+                        segmented_selector(
+                            "capsule-anim",
+                            [
                                 (
                                     CapsuleAnimation::Fluid,
                                     "fluid",
@@ -504,88 +540,88 @@ impl SettingsView for AppearanceView {
                                     "spring",
                                     text("settings.animation_spring", cx),
                                 ),
-                            ];
-
-                            let mut anim_selector = div()
-                                .flex()
-                                .flex_row()
-                                .items_center()
-                                .flex_shrink_0()
-                                .p(px(3.0))
-                                .gap(px(4.0))
-                                .rounded_full()
-                                .bg(theme.surface().opacity(0.35))
-                                .border_1()
-                                .border_color(theme.surface().opacity(0.25));
-
-                            for (anim, id, label) in animations {
-                                let is_active = current_anim == anim;
-                                anim_selector = anim_selector.child(
-                                    div()
-                                        .id(ElementId::Name(format!("capsule-anim-{id}").into()))
-                                        .flex()
-                                        .flex_row()
-                                        .items_center()
-                                        .px(px(12.0))
-                                        .py(px(5.0))
-                                        .rounded_full()
-                                        .bg(if is_active {
-                                            theme.accent()
-                                        } else {
-                                            gpui::transparent_black()
-                                        })
-                                        .transitions(|t| {
-                                            t.bg(millis(160).with_easing(ease_in_out))
-                                        })
-                                        .hover(|s| {
-                                            if !is_active {
-                                                s.bg(theme.surface().opacity(0.4))
-                                            } else {
-                                                s
-                                            }
-                                        })
-                                        .cursor_pointer()
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            if cx.has_global::<AppState>() {
-                                                let _ = cx.global::<AppState>().config.update(
-                                                    |cfg| {
-                                                        cfg.ui.capsule_animation = anim;
-                                                    },
-                                                );
-                                            }
-                                            if let Some(view) =
-                                                this.view_as_mut::<AppearanceView>()
-                                            {
-                                                view.play_motion_preview(window, cx);
-                                            }
-                                            cx.notify();
-                                        }))
-                                        .child(
-                                            div()
-                                                .text_size(px(12.0))
-                                                .font_weight(if is_active {
-                                                    FontWeight::SEMIBOLD
-                                                } else {
-                                                    FontWeight::MEDIUM
-                                                })
-                                                .text_color(if is_active {
-                                                    theme.background()
-                                                } else {
-                                                    theme.foreground()
-                                                })
-                                                .transitions(|t| {
-                                                    t.text_color(
-                                                        millis(160).with_easing(ease_in_out),
-                                                    )
-                                                })
-                                                .child(label),
-                                        ),
-                                );
-                            }
-                            anim_selector
-                        },
+                            ],
+                            config.ui.capsule_animation,
+                            &theme,
+                            cx,
+                            |settings, anim, window, cx| {
+                                if cx.has_global::<AppState>() {
+                                    let _ = cx.global::<AppState>().config.update(|cfg| {
+                                        cfg.ui.capsule_animation = anim;
+                                    });
+                                }
+                                if let Some(view) = settings.view_as_mut::<AppearanceView>() {
+                                    view.play_motion_preview(window, cx);
+                                }
+                                cx.notify();
+                            },
+                        ),
                         &theme,
-                    )),
+                    ))
+                    .child(row_divider(&theme))
+                    .child(control_row(
+                        &text("settings.content_transition_title", cx),
+                        Some(&text("settings.content_transition_hint", cx)),
+                        segmented_selector(
+                            "content-trans",
+                            [
+                                (
+                                    ContentTransition::FadeScale,
+                                    "fadescale",
+                                    text("settings.content_transition_fade_scale", cx),
+                                ),
+                                (
+                                    ContentTransition::Fade,
+                                    "fade",
+                                    text("settings.content_transition_fade", cx),
+                                ),
+                            ],
+                            config.ui.content_transition,
+                            &theme,
+                            cx,
+                            |settings, trans, window, cx| {
+                                if cx.has_global::<AppState>() {
+                                    let _ = cx.global::<AppState>().config.update(|cfg| {
+                                        cfg.ui.content_transition = trans;
+                                    });
+                                }
+                                if let Some(view) = settings.view_as_mut::<AppearanceView>() {
+                                    view.play_motion_preview(window, cx);
+                                }
+                                cx.notify();
+                            },
+                        ),
+                        &theme,
+                    ))
+                    .when(config.ui.capsule_animation == CapsuleAnimation::Spring, |card| {
+                        card.child(row_divider(&theme)).child(slider_row(
+                            ElementId::Name("slider-spring-bounciness".into()),
+                            &text("settings.spring_bounciness_title", cx),
+                            &format!("{:.0}%", config.ui.spring_bounciness * 100.0),
+                            config.ui.spring_bounciness / 1.0,
+                            &self.spring_bounciness_tracker,
+                            &theme,
+                            cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                                if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                                    view.active_slider = Some((
+                                        AppearanceSlider::SpringBounciness,
+                                        view.spring_bounciness_tracker.clone(),
+                                        0.0,
+                                        1.0,
+                                        0.05,
+                                    ));
+                                    view.update_slider_value(event.position.x.into(), cx);
+                                }
+                            }),
+                            cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
+                                if let Some(view) = this.view_as_mut::<AppearanceView>() {
+                                    if view.handle_mouse_up(event, cx) {
+                                        cx.notify();
+                                    }
+                                }
+                            }),
+                        ))
+                    }),
             )
             // Dimensions & Radii Sliders Group
             .child(
@@ -761,6 +797,34 @@ impl SettingsView for AppearanceView {
                     ))
                     .child(row_divider(&theme))
                     .child(heading(&text("settings.motion_heading", cx), &theme))
+                    .child(control_row(
+                        &text("settings.speed_presets_title", cx),
+                        None,
+                        segmented_selector(
+                            "speed-preset",
+                            [
+                                (120u32, "snappy", text("settings.speed_snappy", cx)),
+                                (250u32, "balanced", text("settings.speed_balanced", cx)),
+                                (400u32, "smooth", text("settings.speed_smooth", cx)),
+                            ],
+                            config.ui.animation_duration_ms,
+                            &theme,
+                            cx,
+                            |settings, ms, window, cx| {
+                                if cx.has_global::<AppState>() {
+                                    let _ = cx.global::<AppState>().config.update(|cfg| {
+                                        cfg.ui.animation_duration_ms = ms;
+                                    });
+                                }
+                                if let Some(view) = settings.view_as_mut::<AppearanceView>() {
+                                    view.play_motion_preview(window, cx);
+                                }
+                                cx.notify();
+                            },
+                        ),
+                        &theme,
+                    ))
+                    .child(row_divider(&theme))
                     .child(slider_row(
                         ElementId::Name("slider-anim-duration".into()),
                         &text("settings.animation_short", cx),

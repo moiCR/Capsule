@@ -41,6 +41,10 @@ impl OrbExpanded {
         }
     }
 
+    fn set_animation(&mut self, animation: services::CapsuleAnimation) {
+        self.animator.set_animation(animation);
+    }
+
     pub(super) fn extra_width(&self) -> Pixels {
         self.animator.size().width - px(ORB_SIZE)
     }
@@ -128,6 +132,13 @@ impl State {
             now,
         );
         changed
+    }
+
+    pub fn set_animation(&mut self, animation: services::CapsuleAnimation) {
+        self.shelf.set_animation(animation);
+        self.recording.set_animation(animation);
+        self.expanded.set_animation(animation);
+        self.power_expanded.set_animation(animation);
     }
 
     pub fn configure(

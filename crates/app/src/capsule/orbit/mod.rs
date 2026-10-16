@@ -163,8 +163,10 @@ impl Orbit {
     pub fn configure(
         &mut self,
         orbits: services::config::ui_config::OrbitConfig,
+        animation: services::CapsuleAnimation,
         duration: Duration,
     ) {
+        self.state.set_animation(animation);
         self.state.configure(orbits, duration, Instant::now());
         self.usage_enabled.send_replace(self.state.expanded.open);
     }
@@ -359,10 +361,12 @@ impl Preview {
     pub fn transition(
         &mut self,
         orbits: services::config::ui_config::OrbitConfig,
+        animation: services::CapsuleAnimation,
         duration: Duration,
         open: bool,
     ) {
         let now = Instant::now();
+        self.state.set_animation(animation);
         self.state.configure(orbits, duration, now);
         self.state.preview_transition(open, duration, now);
     }

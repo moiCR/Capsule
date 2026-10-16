@@ -524,6 +524,16 @@ mod tests {
                 "settings.animation_fluid",
                 "settings.animation_cubic",
                 "settings.animation_spring",
+                "settings.content_transition_title",
+                "settings.content_transition_hint",
+                "settings.content_transition_fade_scale",
+                "settings.content_transition_fade",
+                "settings.spring_bounciness_title",
+                "settings.spring_bounciness_hint",
+                "settings.speed_presets_title",
+                "settings.speed_snappy",
+                "settings.speed_balanced",
+                "settings.speed_smooth",
             ] {
                 assert!(bundle.strings.contains_key(key), "missing {key}");
             }

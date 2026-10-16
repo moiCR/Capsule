@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, App, Bounds, Div, ElementId, FontWeight, IntoElement,
+    AnyElement, App, Bounds, ColorExt, Div, DurationWithEasing, ElementId, FontWeight, IntoElement,
     ParentElement, Pixels, Styled, Window, div, prelude::*, px, svg,
 };
 use ui::components::{Button, ButtonSize, ButtonVariant, Slider, Switch};
@@ -275,6 +275,83 @@ pub fn pill_button(
         .pill(true)
         .on_click(on_click)
         .into_any_element()
+}
+
+pub fn segmented_selector<T: PartialEq + Clone + 'static>(
+    id_prefix: &'static str,
+    options: impl IntoIterator<Item = (T, &'static str, String)>,
+    selected: T,
+    theme: &Theme,
+    cx: &mut Context<crate::settings::Settings>,
+    on_select: impl Fn(&mut crate::settings::Settings, T, &mut Window, &mut Context<crate::settings::Settings>)
+        + 'static
+        + Copy,
+) -> Div {
+    let mut container = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .flex_shrink_0()
+        .p(px(3.0))
+        .gap(px(4.0))
+        .rounded_full()
+        .bg(theme.surface().opacity(0.35))
+        .border_1()
+        .border_color(theme.surface().opacity(0.25));
+
+    for (val, id, label) in options {
+        let is_active = selected == val;
+        let val_clone = val.clone();
+        container = container.child(
+            div()
+                .id(ElementId::Name(format!("{id_prefix}-{id}").into()))
+                .flex()
+                .flex_row()
+                .items_center()
+                .px(px(12.0))
+                .py(px(5.0))
+                .rounded_full()
+                .bg(if is_active {
+                    theme.accent()
+                } else {
+                    gpui::transparent_black()
+                })
+                .transitions(|t| {
+                    t.bg(gpui::millis(160).with_easing(gpui::ease_in_out))
+                })
+                .hover(|s| {
+                    if !is_active {
+                        s.bg(theme.surface().opacity(0.4))
+                    } else {
+                        s
+                    }
+                })
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    on_select(this, val_clone.clone(), window, cx);
+                }))
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .font_weight(if is_active {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::MEDIUM
+                        })
+                        .text_color(if is_active {
+                            theme.background()
+                        } else {
+                            theme.foreground()
+                        })
+                        .transitions(|t| {
+                            t.text_color(gpui::millis(160).with_easing(gpui::ease_in_out))
+                        })
+                        .child(label),
+                ),
+        );
+    }
+
+    container
 }
 
 pub fn compute_dropdown_placement(

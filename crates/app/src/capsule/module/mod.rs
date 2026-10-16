@@ -278,8 +278,21 @@ impl Capsule {
                         capsule.animator.set_duration(duration);
                         capsule.animator.set_animation(config.ui.capsule_animation);
                         capsule
-                            .orbit
-                            .update(cx, |orbit, _| orbit.configure(config.ui.orbits, duration));
+                            .animator
+                            .set_content_transition(config.ui.content_transition);
+                        capsule
+                            .animator
+                            .set_spring_bounciness(config.ui.spring_bounciness);
+                        capsule
+                            .satellite
+                            .set_animation(config.ui.capsule_animation);
+                        capsule.orbit.update(cx, |orbit, _| {
+                            orbit.configure(
+                                config.ui.orbits,
+                                config.ui.capsule_animation,
+                                duration,
+                            )
+                        });
                         capsule.orbit_changed(cx);
                         let current = capsule.module_manager.current_id();
                         capsule.handle_module_event(&CapsuleModuleEvent::SizeChanged(current), cx);
@@ -293,6 +306,16 @@ impl Capsule {
         });
 
         let ui_config = cx.global::<services::AppState>().config.get().ui.clone();
+        orbit.update(cx, |orbit, _| {
+            orbit.configure(
+                ui_config.orbits,
+                ui_config.capsule_animation,
+                Duration::from_millis(ui_config.animation_duration_ms as u64),
+            );
+        });
+        let mut satellite = satellite;
+        satellite.set_animation(ui_config.capsule_animation);
+
         let mut capsule = Self {
             location: match ui_config.capsule_location {
                 services::CapsuleLocation::Top => CapsuleLocation::TOP,
@@ -304,7 +327,9 @@ impl Capsule {
                 size,
                 Duration::from_millis(ui_config.animation_duration_ms as u64),
             )
-            .with_animation(ui_config.capsule_animation),
+            .with_animation(ui_config.capsule_animation)
+            .with_content_transition(ui_config.content_transition)
+            .with_spring_bounciness(ui_config.spring_bounciness),
             outgoing_content: None,
             orbit,
             animation_frame_pending: false,
@@ -494,6 +519,10 @@ impl Capsule {
             ui_config.animation_duration_ms as u64,
         ));
         self.animator.set_animation(ui_config.capsule_animation);
+        self.animator
+            .set_content_transition(ui_config.content_transition);
+        self.animator
+            .set_spring_bounciness(ui_config.spring_bounciness);
         let now = Instant::now();
         if previous_module != self.module_manager.current_id() {
             self.outgoing_content = outgoing.filter(|outgoing| {
