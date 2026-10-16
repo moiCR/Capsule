@@ -16,6 +16,15 @@ pub enum CapsuleLocation {
     Bottom,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CapsuleAnimation {
+    #[default]
+    Fluid,
+    Cubic,
+    Spring,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OrbitConfig {
@@ -58,6 +67,9 @@ pub struct UIConfig {
 
     #[serde(default, alias = "location")]
     pub capsule_location: CapsuleLocation,
+
+    #[serde(default, alias = "animation_style", alias = "animation_curve")]
+    pub capsule_animation: CapsuleAnimation,
 
     #[serde(default = "default_capsule_round", alias = "capsule_radius")]
     pub capsule_round: f32,
@@ -107,6 +119,7 @@ impl Default for UIConfig {
             clock_24_hour: true,
             capsule_style: CapsuleStyle::Normal,
             capsule_location: CapsuleLocation::Top,
+            capsule_animation: CapsuleAnimation::Fluid,
             capsule_round: default_capsule_round(),
             satellite_round: default_satellite_round(),
             cards_round: default_cards_round(),
@@ -189,9 +202,11 @@ mod tests {
         assert!(!config.dynamic_colors);
         assert!(config.dark_mode);
         assert_eq!(config.clock_format(), "%H:%M");
+        assert_eq!(config.capsule_animation, CapsuleAnimation::Fluid);
         let fresh: UIConfig = toml::from_str("").expect("new config");
         assert!(fresh.use_new_capsule);
         assert_eq!(fresh.capsule_location, CapsuleLocation::Top);
+        assert_eq!(fresh.capsule_animation, CapsuleAnimation::Fluid);
     }
 
     #[test]
@@ -201,12 +216,24 @@ mod tests {
             dark_mode: false,
             clock_24_hour: false,
             capsule_location: CapsuleLocation::Bottom,
+            capsule_animation: CapsuleAnimation::Cubic,
             ..UIConfig::default()
         };
         let encoded = toml::to_string(&config).expect("serialize config");
         let decoded: UIConfig = toml::from_str(&encoded).expect("deserialize config");
         assert_eq!(decoded, config);
         assert_eq!(decoded.clock_format(), "%I:%M %p");
+        assert_eq!(decoded.capsule_animation, CapsuleAnimation::Cubic);
+    }
+
+    #[test]
+    fn animation_curve_accepts_fluid_cubic_spring() {
+        let fluid: UIConfig = toml::from_str("capsule_animation = 'fluid'").expect("fluid");
+        assert_eq!(fluid.capsule_animation, CapsuleAnimation::Fluid);
+        let cubic: UIConfig = toml::from_str("capsule_animation = 'cubic'").expect("cubic");
+        assert_eq!(cubic.capsule_animation, CapsuleAnimation::Cubic);
+        let spring: UIConfig = toml::from_str("capsule_animation = 'spring'").expect("spring");
+        assert_eq!(spring.capsule_animation, CapsuleAnimation::Spring);
     }
 
     #[test]

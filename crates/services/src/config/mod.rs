@@ -8,7 +8,7 @@ pub use defaults::Defaults;
 pub use lock_screen_config::{LockScreenConfig, LockscreenConfig};
 pub use mpris_config::MprisConfig;
 pub use record_config::RecordConfig;
-pub use ui_config::{CapsuleLocation, CapsuleStyle, UIConfig, UiConfig};
+pub use ui_config::{CapsuleAnimation, CapsuleLocation, CapsuleStyle, UIConfig, UiConfig};
 
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};

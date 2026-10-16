@@ -519,6 +519,11 @@ mod tests {
                 "orbit.reboot",
                 "orbit.logout",
                 "orbit.lock",
+                "settings.animation_style",
+                "settings.animation_style_hint",
+                "settings.animation_fluid",
+                "settings.animation_cubic",
+                "settings.animation_spring",
             ] {
                 assert!(bundle.strings.contains_key(key), "missing {key}");
             }

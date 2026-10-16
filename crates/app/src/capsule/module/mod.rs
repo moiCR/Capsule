@@ -275,6 +275,8 @@ impl Capsule {
                         let config = cx.global::<services::AppState>().config.get();
                         let duration =
                             Duration::from_millis(config.ui.animation_duration_ms as u64);
+                        capsule.animator.set_duration(duration);
+                        capsule.animator.set_animation(config.ui.capsule_animation);
                         capsule
                             .orbit
                             .update(cx, |orbit, _| orbit.configure(config.ui.orbits, duration));
@@ -290,14 +292,9 @@ impl Capsule {
             }
         });
 
+        let ui_config = cx.global::<services::AppState>().config.get().ui.clone();
         let mut capsule = Self {
-            location: match cx
-                .global::<services::AppState>()
-                .config
-                .get()
-                .ui
-                .capsule_location
-            {
+            location: match ui_config.capsule_location {
                 services::CapsuleLocation::Top => CapsuleLocation::TOP,
                 services::CapsuleLocation::Bottom => CapsuleLocation::BOTTOM,
             },
@@ -305,14 +302,9 @@ impl Capsule {
             module_manager,
             animator: Animator::new(
                 size,
-                Duration::from_millis(
-                    cx.global::<services::AppState>()
-                        .config
-                        .get()
-                        .ui
-                        .animation_duration_ms as u64,
-                ),
-            ),
+                Duration::from_millis(ui_config.animation_duration_ms as u64),
+            )
+            .with_animation(ui_config.capsule_animation),
             outgoing_content: None,
             orbit,
             animation_frame_pending: false,
@@ -497,10 +489,11 @@ impl Capsule {
         }
 
         let target = self.module_manager.current_size(cx);
-        let state = cx.global::<services::AppState>();
+        let ui_config = cx.global::<services::AppState>().config.get().ui.clone();
         self.animator.set_duration(Duration::from_millis(
-            state.config.get().ui.animation_duration_ms as u64,
+            ui_config.animation_duration_ms as u64,
         ));
+        self.animator.set_animation(ui_config.capsule_animation);
         let now = Instant::now();
         if previous_module != self.module_manager.current_id() {
             self.outgoing_content = outgoing.filter(|outgoing| {

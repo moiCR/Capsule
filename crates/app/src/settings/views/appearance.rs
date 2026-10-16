@@ -1,14 +1,17 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, IntoElement, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Styled, Window, div, prelude::*, px, svg,
+    AnyElement, App, ColorExt, Context, Div, DurationWithEasing, ElementId, FontWeight,
+    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Styled, Window, div, ease_in_out,
+    millis, prelude::*, px, svg,
 };
-use services::{AppState, CapsuleLocation, CapsuleStyle};
+use services::{AppState, CapsuleAnimation, CapsuleLocation, CapsuleStyle};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
-use super::common::{card, heading, hero_header, pill_button, row_divider, slider_row, toggle_row};
+use super::common::{
+    card, control_row, heading, hero_header, pill_button, row_divider, slider_row, toggle_row,
+};
 use super::SettingsView;
 use crate::capsule::animator::Animator;
 use crate::capsule::orbit::Preview;
@@ -71,13 +74,15 @@ impl AppearanceView {
 
     pub fn play_motion_preview(&mut self, window: &mut Window, cx: &mut Context<Settings>) {
         self.motion_preview_generation += 1;
-        let duration = if cx.has_global::<AppState>() {
-            cx.global::<AppState>().config.get().ui.animation_duration_ms as u64
+        let (duration, animation) = if cx.has_global::<AppState>() {
+            let ui = &cx.global::<AppState>().config.get().ui;
+            (ui.animation_duration_ms as u64, ui.capsule_animation)
         } else {
-            250
+            (250, CapsuleAnimation::default())
         };
 
         self.motion_preview.set_duration(Duration::from_millis(duration));
+        self.motion_preview.set_animation(animation);
         if cx.has_global::<AppState>() {
             self.orbit_preview.transition(
                 cx.global::<AppState>().config.get().ui.orbits,
@@ -119,10 +124,11 @@ impl AppearanceView {
                     if running {
                         Self::queue_preview_frame(window, cx.entity().downgrade(), generation, returning);
                     } else if !returning {
-                        let duration = if cx.has_global::<AppState>() {
-                            cx.global::<AppState>().config.get().ui.animation_duration_ms as u64
+                        let (duration, animation) = if cx.has_global::<AppState>() {
+                            let ui = &cx.global::<AppState>().config.get().ui;
+                            (ui.animation_duration_ms as u64, ui.capsule_animation)
                         } else {
-                            250
+                            (250, CapsuleAnimation::default())
                         };
                         if cx.has_global::<AppState>() {
                             view.orbit_preview.transition(
@@ -131,6 +137,7 @@ impl AppearanceView {
                                 false,
                             );
                         }
+                        view.motion_preview.set_animation(animation);
                         view.motion_preview.transition_to(gpui::size(px(72.0), px(22.0)), Instant::now());
                         Self::queue_preview_frame(window, cx.entity().downgrade(), generation, true);
                     }
@@ -474,6 +481,110 @@ impl SettingsView for AppearanceView {
                             }
                             cx.notify();
                         }),
+                    ))
+                    .child(row_divider(&theme))
+                    .child(control_row(
+                        &text("settings.animation_style", cx),
+                        Some(&text("settings.animation_style_hint", cx)),
+                        {
+                            let current_anim = config.ui.capsule_animation;
+                            let animations = [
+                                (
+                                    CapsuleAnimation::Fluid,
+                                    "fluid",
+                                    text("settings.animation_fluid", cx),
+                                ),
+                                (
+                                    CapsuleAnimation::Cubic,
+                                    "cubic",
+                                    text("settings.animation_cubic", cx),
+                                ),
+                                (
+                                    CapsuleAnimation::Spring,
+                                    "spring",
+                                    text("settings.animation_spring", cx),
+                                ),
+                            ];
+
+                            let mut anim_selector = div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .flex_shrink_0()
+                                .p(px(3.0))
+                                .gap(px(4.0))
+                                .rounded_full()
+                                .bg(theme.surface().opacity(0.35))
+                                .border_1()
+                                .border_color(theme.surface().opacity(0.25));
+
+                            for (anim, id, label) in animations {
+                                let is_active = current_anim == anim;
+                                anim_selector = anim_selector.child(
+                                    div()
+                                        .id(ElementId::Name(format!("capsule-anim-{id}").into()))
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .px(px(12.0))
+                                        .py(px(5.0))
+                                        .rounded_full()
+                                        .bg(if is_active {
+                                            theme.accent()
+                                        } else {
+                                            gpui::transparent_black()
+                                        })
+                                        .transitions(|t| {
+                                            t.bg(millis(160).with_easing(ease_in_out))
+                                        })
+                                        .hover(|s| {
+                                            if !is_active {
+                                                s.bg(theme.surface().opacity(0.4))
+                                            } else {
+                                                s
+                                            }
+                                        })
+                                        .cursor_pointer()
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let _ = cx.global::<AppState>().config.update(
+                                                    |cfg| {
+                                                        cfg.ui.capsule_animation = anim;
+                                                    },
+                                                );
+                                            }
+                                            if let Some(view) =
+                                                this.view_as_mut::<AppearanceView>()
+                                            {
+                                                view.play_motion_preview(window, cx);
+                                            }
+                                            cx.notify();
+                                        }))
+                                        .child(
+                                            div()
+                                                .text_size(px(12.0))
+                                                .font_weight(if is_active {
+                                                    FontWeight::SEMIBOLD
+                                                } else {
+                                                    FontWeight::MEDIUM
+                                                })
+                                                .text_color(if is_active {
+                                                    theme.background()
+                                                } else {
+                                                    theme.foreground()
+                                                })
+                                                .transitions(|t| {
+                                                    t.text_color(
+                                                        millis(160).with_easing(ease_in_out),
+                                                    )
+                                                })
+                                                .child(label),
+                                        ),
+                                );
+                            }
+                            anim_selector
+                        },
+                        &theme,
                     )),
             )
             // Dimensions & Radii Sliders Group

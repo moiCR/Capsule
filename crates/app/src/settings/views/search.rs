@@ -106,7 +106,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.anim_duration_title",
         desc_key: "settings.motion_heading",
         tab: SettingsTab::Appearance,
-        keywords: &["animacion", "animaciones", "duracion", "velocidad", "speed", "animation", "motion", "ms"],
+        keywords: &["animacion", "animaciones", "duracion", "velocidad", "speed", "animation", "motion", "ms", "fluid", "fluido", "cubic", "cubico", "spring", "rebote"],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {

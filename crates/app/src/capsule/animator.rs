@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::{Pixels, Size, px};
+use services::CapsuleAnimation;
 
 pub struct Animator {
     current: Size<Pixels>,
@@ -8,6 +9,7 @@ pub struct Animator {
     target: Size<Pixels>,
     started_at: Option<Instant>,
     duration: Duration,
+    animation: CapsuleAnimation,
     content_started_at: Option<Instant>,
     content_progress: f32,
 }
@@ -43,6 +45,26 @@ pub fn apple_island_morph(t: f32, expanding: bool) -> (f32, f32) {
     (spring_eval(uw, 0.73), spring_eval(uh, 0.77))
 }
 
+pub fn morph_progress(t: f32, expanding: bool, animation: CapsuleAnimation) -> (f32, f32) {
+    if t <= 0.0 {
+        return (0.0, 0.0);
+    }
+    if t >= 1.0 {
+        return (1.0, 1.0);
+    }
+    match animation {
+        CapsuleAnimation::Fluid => {
+            let eased = 1.0 - (1.0 - t).powi(5);
+            (eased, eased)
+        }
+        CapsuleAnimation::Cubic => {
+            let eased = 1.0 - (1.0 - t).powi(3);
+            (eased, eased)
+        }
+        CapsuleAnimation::Spring => apple_island_morph(t, expanding),
+    }
+}
+
 impl Animator {
     pub fn new(size: Size<Pixels>, duration: Duration) -> Self {
         Self {
@@ -51,13 +73,27 @@ impl Animator {
             target: size,
             started_at: None,
             duration,
+            animation: CapsuleAnimation::default(),
             content_started_at: None,
             content_progress: 1.0,
         }
     }
 
+    pub fn with_animation(mut self, animation: CapsuleAnimation) -> Self {
+        self.animation = animation;
+        self
+    }
+
     pub fn set_duration(&mut self, duration: Duration) {
         self.duration = duration;
+    }
+
+    pub fn set_animation(&mut self, animation: CapsuleAnimation) {
+        self.animation = animation;
+    }
+
+    pub fn animation(&self) -> CapsuleAnimation {
+        self.animation
     }
 
     pub fn animating(&self) -> bool {
@@ -126,7 +162,7 @@ impl Animator {
         let expanding =
             self.target.width > self.start.width || self.target.height > self.start.height;
 
-        let (width_eased, height_eased) = apple_island_morph(progress, expanding);
+        let (width_eased, height_eased) = morph_progress(progress, expanding, self.animation);
 
         self.current = Size {
             width: (self.start.width + (self.target.width - self.start.width) * width_eased)
@@ -167,7 +203,8 @@ mod tests {
     fn expansion_and_contraction_match_the_original_spring() {
         let now = Instant::now();
         for (start, target, expanding) in [(100.0, 300.0, true), (300.0, 100.0, false)] {
-            let mut animator = Animator::new(size(start), Duration::from_millis(200));
+            let mut animator = Animator::new(size(start), Duration::from_millis(200))
+                .with_animation(CapsuleAnimation::Spring);
             animator.transition_to(size(target), now);
             for millis in [25, 75, 125, 175] {
                 assert!(animator.advance(now + Duration::from_millis(millis)));
@@ -180,6 +217,34 @@ mod tests {
             }
             assert!(!animator.advance(now + Duration::from_millis(200)));
             assert_eq!(animator.size(), size(target));
+        }
+    }
+
+    #[test]
+    fn fluid_and_cubic_animations_ease_smoothly_without_overshoot() {
+        let now = Instant::now();
+        let mut fluid = Animator::new(size(100.0), Duration::from_millis(200));
+        assert_eq!(fluid.animation(), CapsuleAnimation::Fluid);
+        fluid.transition_to(size(300.0), now);
+        for millis in [25, 75, 125, 175] {
+            assert!(fluid.advance(now + Duration::from_millis(millis)));
+            let t = millis as f32 / 200.0;
+            let expected = 100.0 + 200.0 * (1.0 - (1.0 - t).powi(5));
+            assert_eq!(fluid.size().width, px(expected));
+            assert_eq!(fluid.size().height, px(expected));
+            assert!(fluid.size().width <= px(300.0));
+        }
+
+        let mut cubic = Animator::new(size(100.0), Duration::from_millis(200))
+            .with_animation(CapsuleAnimation::Cubic);
+        cubic.transition_to(size(300.0), now);
+        for millis in [25, 75, 125, 175] {
+            assert!(cubic.advance(now + Duration::from_millis(millis)));
+            let t = millis as f32 / 200.0;
+            let expected = 100.0 + 200.0 * (1.0 - (1.0 - t).powi(3));
+            assert_eq!(cubic.size().width, px(expected));
+            assert_eq!(cubic.size().height, px(expected));
+            assert!(cubic.size().width <= px(300.0));
         }
     }
 
