@@ -1,4 +1,5 @@
 mod app;
+mod compositor;
 mod deps;
 mod github;
 mod install;
@@ -120,27 +121,14 @@ fn main() -> Result<()> {
         .detach();
 
         let options = InstallerPanel::window_options(cx);
-        let open_res = cx.open_window(options, |window, cx| {
+        let _ = cx.open_window(options, |window, cx| {
             installer_entity.update(cx, |this, cx| {
                 window.focus(&this.focus_handle, cx);
             });
             cx.new(|_| InstallerRoot {
-                app_entity: installer_entity.clone(),
+                app_entity: installer_entity,
             })
         });
-
-        if let Err(err) = open_res {
-            eprintln!("LayerShell open failed ({err}), falling back to standard windowed mode...");
-            let fallback_options = InstallerPanel::fallback_window_options();
-            let _ = cx.open_window(fallback_options, |window, cx| {
-                installer_entity.update(cx, |this, cx| {
-                    window.focus(&this.focus_handle, cx);
-                });
-                cx.new(|_| InstallerRoot {
-                    app_entity: installer_entity,
-                })
-            });
-        }
     });
 
     keep_alive_running.store(false, Ordering::Relaxed);

@@ -11,6 +11,7 @@ pub fn render_header(app: &InstallerApp, cx: &mut Context<InstallerApp>) -> AnyE
     let step_pills = [
         (Step::Welcome, "Overview"),
         (Step::Dependencies, "Dependencies"),
+        (Step::Compositor, "Compositor"),
         (Step::Installing, "Install"),
         (Step::Finished, "Done"),
     ]
@@ -21,7 +22,11 @@ pub fn render_header(app: &InstallerApp, cx: &mut Context<InstallerApp>) -> AnyE
         let is_completed = matches!(
             (current_step, step),
             (Step::Dependencies, Step::Welcome)
-                | (Step::Installing, Step::Welcome | Step::Dependencies)
+                | (Step::Compositor, Step::Welcome | Step::Dependencies)
+                | (
+                    Step::Installing,
+                    Step::Welcome | Step::Dependencies | Step::Compositor
+                )
                 | (Step::Finished, _)
         );
 
@@ -58,7 +63,8 @@ pub fn render_header(app: &InstallerApp, cx: &mut Context<InstallerApp>) -> AnyE
                             0 => "1",
                             1 => "2",
                             2 => "3",
-                            _ => "4",
+                            3 => "4",
+                            _ => "5",
                         }
                     }),
             )

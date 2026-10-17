@@ -107,23 +107,6 @@ pub fn command_exists(cmd: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn check_package_installed(pkg: &str, helper: &Option<AurHelper>) -> bool {
-    let cmd_name = match helper {
-        Some(AurHelper::Paru) => "paru",
-        Some(AurHelper::Yay) => "yay",
-        _ => "pacman",
-    };
-
-    Command::new(cmd_name)
-        .arg("-Qq")
-        .arg(pkg)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
 pub fn get_installed_capsule_version() -> Option<String> {
     let paths = ["capsule", "/usr/local/bin/capsule", "/usr/bin/capsule"];
     for p in paths {

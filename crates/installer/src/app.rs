@@ -1,7 +1,8 @@
-use crate::deps;
+use crate::compositor::{Compositor, CompositorManager};
+use crate::deps::DependsManager;
 use crate::github::{self, ReleaseInfo};
 use crate::install;
-use crate::system::{self, AurHelper};
+use crate::system;
 use gpui::{Context, FocusHandle, ScrollHandle};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
@@ -11,6 +12,7 @@ use ui::components::InputState;
 pub enum Step {
     Welcome,
     Dependencies,
+    Compositor,
     Installing,
     Finished,
 }
@@ -19,6 +21,7 @@ pub enum Step {
 pub enum PendingAction {
     InstallCapsule,
     InstallDeps,
+    InstallCompositor,
 }
 
 pub enum WorkerMsg {
@@ -26,6 +29,7 @@ pub enum WorkerMsg {
     Log(String),
     Done(Result<(), String>),
     DepsDone(Result<(), String>),
+    CompositorDone(Result<(), String>),
 }
 
 pub struct InstallerApp {
@@ -35,8 +39,11 @@ pub struct InstallerApp {
     pub installed_version: Option<String>,
     pub target_version: Option<String>,
     pub release_info: Option<ReleaseInfo>,
-    pub aur_helper: Option<AurHelper>,
+    pub depends_manager: DependsManager,
     pub dependencies: Vec<(String, bool)>,
+    pub compositor_manager: CompositorManager,
+    pub compositors: Vec<(Compositor, bool)>,
+    pub selected_compositor: Compositor,
     pub capsule_was_running: bool,
     pub progress: f32,
     pub status_message: String,
@@ -61,7 +68,8 @@ pub struct InstallerApp {
 impl InstallerApp {
     pub fn new(beta_mode: bool, cx: &mut Context<Self>) -> Self {
         let target = system::detect_target();
-        let aur_helper = system::detect_aur_helper();
+        let depends_manager = DependsManager::detect();
+        let compositor_manager = CompositorManager::detect();
         let installed_version = system::get_installed_capsule_version();
         let capsule_was_running = system::is_capsule_running();
         let focus_handle = cx.focus_handle();
@@ -76,8 +84,11 @@ impl InstallerApp {
             installed_version,
             target_version: None,
             release_info: None,
-            aur_helper,
+            depends_manager,
             dependencies: Vec::new(),
+            compositor_manager,
+            compositors: Vec::new(),
+            selected_compositor: Compositor::Hyprland,
             capsule_was_running,
             progress: 0.0,
             status_message: "Ready".to_string(),
@@ -99,12 +110,28 @@ impl InstallerApp {
         };
 
         app.scan_dependencies();
+        app.scan_compositors();
+        if let Some((comp, _)) = app.compositors.iter().find(|(_, inst)| *inst) {
+            app.selected_compositor = *comp;
+        }
         app.refresh_release_info();
         app
     }
 
     pub fn scan_dependencies(&mut self) {
-        self.dependencies = deps::scan_dependencies(&self.aur_helper);
+        self.dependencies = self.depends_manager.scan_dependencies();
+    }
+
+    pub fn scan_compositors(&mut self) {
+        self.compositors = self.compositor_manager.scan_compositors();
+    }
+
+    pub fn is_compositor_installed(&self, comp: Compositor) -> bool {
+        self.compositors
+            .iter()
+            .find(|(c, _)| *c == comp)
+            .map(|(_, inst)| *inst)
+            .unwrap_or_else(|| comp.is_installed())
     }
 
     pub fn missing_dependencies_count(&self) -> usize {
@@ -184,6 +211,9 @@ impl InstallerApp {
                 PendingAction::InstallDeps => {
                     self.start_deps_installation(cx);
                 }
+                PendingAction::InstallCompositor => {
+                    self.start_compositor_installation(cx);
+                }
             }
         }
     }
@@ -205,20 +235,44 @@ impl InstallerApp {
         ));
 
         let tx = self.worker_tx.clone();
-        let aur_helper = self.aur_helper.clone();
+        let depends = self.depends_manager.clone();
         let sudo_pass = self.sudo_password.clone();
 
         thread::spawn(move || {
             let tx_log = tx.clone();
-            let res = deps::install_missing_packages(
+            let res = depends.install_missing_packages(
                 &missing,
-                &aur_helper,
                 sudo_pass.as_deref(),
                 move |line| {
                     let _ = tx_log.send(WorkerMsg::Log(line));
                 },
             );
             let _ = tx.send(WorkerMsg::DepsDone(res));
+        });
+
+        cx.notify();
+    }
+
+    pub fn start_compositor_installation(&mut self, cx: &mut Context<Self>) {
+        let comp = self.selected_compositor;
+        self.step = Step::Installing;
+        self.progress = 0.15;
+        self.error_message = None;
+        self.status_message = format!("Installing {} compositor...", comp.name());
+        self.logs.clear();
+        self.logs
+            .push(format!("==> Starting {} installation...", comp.name()));
+
+        let tx = self.worker_tx.clone();
+        let comp_mgr = self.compositor_manager.clone();
+        let sudo_pass = self.sudo_password.clone();
+
+        thread::spawn(move || {
+            let tx_log = tx.clone();
+            let res = comp_mgr.install_compositor(comp, sudo_pass.as_deref(), move |line| {
+                let _ = tx_log.send(WorkerMsg::Log(line));
+            });
+            let _ = tx.send(WorkerMsg::CompositorDone(res));
         });
 
         cx.notify();
@@ -237,12 +291,26 @@ impl InstallerApp {
         let release_info = self.release_info.clone();
         let was_running = self.capsule_was_running;
         let sudo_pass = self.sudo_password.clone();
+        let selected_comp = self.selected_compositor;
+        let comp_needed = !self.is_compositor_installed(selected_comp);
+        let comp_mgr = self.compositor_manager.clone();
 
         thread::spawn(move || {
             let run = || -> Result<(), String> {
+                if comp_needed {
+                    let _ = tx.send(WorkerMsg::Progress(
+                        0.08,
+                        format!("Installing {} compositor...", selected_comp.name()),
+                    ));
+                    let tx_log = tx.clone();
+                    comp_mgr.install_compositor(selected_comp, sudo_pass.as_deref(), move |line| {
+                        let _ = tx_log.send(WorkerMsg::Log(line));
+                    })?;
+                }
+
                 if was_running {
                     let _ = tx.send(WorkerMsg::Progress(
-                        0.10,
+                        0.15,
                         "Stopping existing Capsule process...".to_string(),
                     ));
                     let _ = tx.send(WorkerMsg::Log(
@@ -337,6 +405,7 @@ impl InstallerApp {
                 WorkerMsg::Done(res) => match res {
                     Ok(()) => {
                         self.installed_version = system::get_installed_capsule_version();
+                        self.scan_compositors();
                         self.step = Step::Finished;
                     }
                     Err(e) => {
@@ -353,6 +422,18 @@ impl InstallerApp {
                         Err(e) => {
                             self.error_message = Some(e);
                             self.step = Step::Dependencies;
+                        }
+                    }
+                }
+                WorkerMsg::CompositorDone(res) => {
+                    self.scan_compositors();
+                    match res {
+                        Ok(()) => {
+                            self.step = Step::Compositor;
+                        }
+                        Err(e) => {
+                            self.error_message = Some(e);
+                            self.step = Step::Compositor;
                         }
                     }
                 }

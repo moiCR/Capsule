@@ -44,6 +44,12 @@ impl TemplatePluginManager {
             let path = dir.join(filename);
             if !path.exists() {
                 let _ = fs::write(&path, content);
+            } else if filename == "alacritty.toml"
+                && let Ok(existing) = fs::read_to_string(&path)
+                && (existing.contains(r#"inject = 'import = ["theme.toml"]\n'"#)
+                    || !existing.contains("[general]"))
+            {
+                let _ = fs::write(&path, content);
             }
         }
     }
@@ -290,7 +296,10 @@ target = "~/.config/alacritty/theme.toml"
 [hook]
 file = "~/.config/alacritty/alacritty.toml"
 contains = "theme.toml"
-inject = 'import = ["theme.toml"]\n'
+inject = """
+[general]
+import = ["theme.toml"]
+"""
 
 [template]
 content = """
@@ -478,5 +487,20 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap_or_default();
         assert!(content.contains("[colors-dark]"));
         assert!(content.contains("background="));
+    }
+
+    #[test]
+    fn test_alacritty_template_hook_format() {
+        let manager = TemplatePluginManager::new();
+        let plugins = manager.load_plugins();
+        let alacritty = plugins.into_iter().find(|p| p.name == "alacritty");
+        assert!(alacritty.is_some());
+        let alacritty = alacritty.unwrap_or_else(|| unreachable!());
+        let hook = alacritty.hook.as_ref();
+        assert!(hook.is_some());
+        let hook = hook.unwrap_or_else(|| unreachable!());
+        assert!(hook.inject.contains("[general]"));
+        assert!(hook.inject.contains("import = [\"theme.toml\"]"));
+        assert!(!hook.inject.contains("\\n"));
     }
 }

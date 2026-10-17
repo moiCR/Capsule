@@ -10,11 +10,7 @@ pub fn render_dependencies(
 ) -> AnyElement {
     let theme = cx.global::<Theme>().clone();
     let missing_count = app.missing_dependencies_count();
-    let aur_helper_name = app
-        .aur_helper
-        .as_ref()
-        .map(|h| h.name())
-        .unwrap_or("pacman");
+    let manager_name = app.depends_manager.manager_name();
 
     let dep_rows = app
         .dependencies
@@ -182,7 +178,7 @@ pub fn render_dependencies(
                                             .text_color(theme.foreground())
                                             .child(format!(
                                                 "{} packages can be installed automatically via {}",
-                                                missing_count, aur_helper_name
+                                                missing_count, manager_name
                                             )),
                                     ),
                             )
@@ -244,14 +240,15 @@ pub fn render_dependencies(
                 .child(
                     style::primary_button(
                         "deps-continue-btn",
-                        "Install Capsule".to_string(),
+                        "Choose Compositor".to_string(),
                         true,
                         &theme,
                     )
                     .on_click(cx.listener(|this, _, _, cx| {
-                        if this.request_auth_or_proceed(PendingAction::InstallCapsule) {
-                            this.start_installation(cx);
-                        }
+                        this.scan_compositors();
+                        this.step = Step::Compositor;
+                        this.error_message = None;
+                        cx.notify();
                     })),
                 ),
         )

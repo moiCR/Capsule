@@ -1,4 +1,5 @@
 pub mod auth_modal;
+pub mod compositor;
 pub mod dependencies;
 pub mod finished;
 pub mod header;
@@ -20,11 +21,11 @@ pub fn render_installer(
 ) -> AnyElement {
     let theme = cx.global::<Theme>().clone();
     let current_step = app.step;
-    let is_installing = current_step == Step::Installing;
 
     let content = match current_step {
         Step::Welcome => welcome::render_welcome(app, window, cx),
         Step::Dependencies => dependencies::render_dependencies(app, window, cx),
+        Step::Compositor => compositor::render_compositor(app, window, cx),
         Step::Installing => installing::render_installing(app, window, cx),
         Step::Finished => finished::render_finished(app, window, cx),
     };
@@ -33,16 +34,8 @@ pub fn render_installer(
 
     let main_card = div()
         .id("installer-modal-card")
-        .occlude()
-        .w(px(680.0))
-        .h(px(540.0))
-        .max_w_full()
-        .max_h_full()
-        .rounded(px(style::CAPSULE_ROUND))
+        .size_full()
         .bg(style::background(&theme))
-        .border_1()
-        .border_color(style::border(&theme))
-        .shadow_xl()
         .p(px(24.0))
         .flex()
         .flex_col()
@@ -85,26 +78,7 @@ pub fn render_installer(
         .relative()
         .size_full()
         .overflow_hidden()
-        .flex()
-        .items_center()
-        .justify_center()
-        // Backdrop overlay
-        .child(
-            div()
-                .id("installer-backdrop")
-                .absolute()
-                .inset_0()
-                .bg(gpui::rgba(0x00000088))
-                .when(!is_installing, |s| {
-                    s.on_click(cx.listener(|this, _, _, cx| {
-                        if this.show_password_modal {
-                            this.cancel_password_modal(cx);
-                        } else {
-                            this.cancel_and_exit(cx);
-                        }
-                    }))
-                }),
-        )
+        .bg(style::background(&theme))
         .child(main_card)
         .children(modal_overlay)
         .into_any_element()

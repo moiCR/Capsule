@@ -178,11 +178,9 @@ pub fn render_welcome(
                 .text_size(px(11.0))
                 .text_color(theme.foreground_muted())
                 .child(format!(
-                    "Package manager: {}",
-                    app.aur_helper
-                        .as_ref()
-                        .map(|h| h.name())
-                        .unwrap_or("none")
+                    "{} ({})",
+                    app.depends_manager.distro_name(),
+                    app.depends_manager.manager_name()
                 )),
         );
 
