@@ -17,7 +17,6 @@ pub const ARCH_DEPENDENCIES: &[&str] = &[
     "gsettings-desktop-schemas",
     "zenity",
     "dconf",
-    "nwg-look",
     "xdg-desktop-portal",
     "xdg-desktop-portal-gtk",
     "adw-gtk-theme",

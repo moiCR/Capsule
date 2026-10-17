@@ -1,9 +1,115 @@
 use crate::theme::templates::AppTheme;
 use crate::theme::{Theme, ThemeMode};
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 pub struct GtkApps;
+
+fn update_settings_ini(path: &Path, updates: &[(&str, String)]) {
+    let existing = if path.exists() {
+        fs::read_to_string(path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let lines: Vec<&str> = existing.lines().collect();
+    let settings_idx = lines.iter().position(|l| l.trim() == "[Settings]");
+
+    let mut new_lines: Vec<String> = Vec::new();
+
+    if let Some(sec_idx) = settings_idx {
+        let mut in_settings = false;
+        let mut inserted = false;
+
+        for (idx, line) in lines.iter().enumerate() {
+            if idx == sec_idx {
+                in_settings = true;
+                new_lines.push((*line).to_string());
+                for (k, v) in updates {
+                    new_lines.push(format!("{k}={v}"));
+                }
+                inserted = true;
+                continue;
+            }
+            if in_settings {
+                let trimmed = line.trim();
+                if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                    in_settings = false;
+                } else if let Some((key, _)) = trimmed.split_once('=') {
+                    let key_trimmed = key.trim();
+                    if updates.iter().any(|(uk, _)| *uk == key_trimmed) {
+                        continue;
+                    }
+                }
+            }
+            new_lines.push((*line).to_string());
+        }
+
+        if !inserted {
+            for (k, v) in updates {
+                new_lines.push(format!("{k}={v}"));
+            }
+        }
+    } else {
+        if !lines.is_empty() {
+            for line in lines {
+                new_lines.push(line.to_string());
+            }
+            if new_lines.last().is_some_and(|l| !l.trim().is_empty()) {
+                new_lines.push(String::new());
+            }
+        }
+        new_lines.push("[Settings]".to_string());
+        for (k, v) in updates {
+            new_lines.push(format!("{k}={v}"));
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, new_lines.join("\n") + "\n");
+}
+
+fn update_xsettingsd_conf(path: &Path, gtk_theme_name: &str, color_scheme: &str, prefer_dark: bool) {
+    let existing = if path.exists() {
+        fs::read_to_string(path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let prefer_dark_num = if prefer_dark { "1" } else { "0" };
+    let updates = [
+        ("Net/ThemeName", format!("\"{gtk_theme_name}\"")),
+        ("Gtk/ColorScheme", format!("\"{color_scheme}\"")),
+        ("Gtk/ApplicationPreferDarkTheme", prefer_dark_num.to_string()),
+    ];
+
+    let mut new_lines: Vec<String> = existing
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !updates.iter().any(|(k, _)| {
+                trimmed.starts_with(k)
+                    && trimmed[k.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_whitespace)
+            })
+        })
+        .map(str::to_string)
+        .collect();
+
+    for (k, v) in updates {
+        new_lines.push(format!("{k} {v}"));
+    }
+
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, new_lines.join("\n") + "\n");
+}
 
 impl AppTheme for GtkApps {
     fn apply_current_theme(&self, theme: &Theme) {
@@ -58,14 +164,6 @@ impl AppTheme for GtkApps {
             .status();
 
         if let Some(config_dir) = dirs::config_dir() {
-            // GTK 3 settings.ini
-            let ini_gtk3 = format!(
-                "[Settings]\ngtk-theme-name={gtk_theme_name}\ngtk-application-prefer-dark-theme={prefer_dark_val}\n"
-            );
-
-            // GTK 4 settings.ini (Omit deprecation keys to prevent Libadwaita warnings)
-            let ini_gtk4 = format!("[Settings]\ngtk-theme-name={gtk_theme_name}\n");
-
             let gtk_css = format!(
                 r#"@define-color theme_bg_color {bg};
 @define-color theme_fg_color {fg};
@@ -92,91 +190,96 @@ impl AppTheme for GtkApps {
 "#
             );
 
+            // GTK 3 settings.ini & gtk.css (preserves existing icon/font/cursor settings)
             let dir_gtk3 = config_dir.join("gtk-3.0");
             let _ = fs::create_dir_all(&dir_gtk3);
-            let _ = fs::write(dir_gtk3.join("settings.ini"), &ini_gtk3);
+            update_settings_ini(
+                &dir_gtk3.join("settings.ini"),
+                &[
+                    ("gtk-theme-name", gtk_theme_name.to_string()),
+                    (
+                        "gtk-application-prefer-dark-theme",
+                        prefer_dark_val.to_string(),
+                    ),
+                ],
+            );
             let _ = fs::write(dir_gtk3.join("gtk.css"), &gtk_css);
 
+            // GTK 4 settings.ini & gtk.css (preserves existing settings, omits deprecated keys)
             let dir_gtk4 = config_dir.join("gtk-4.0");
             let _ = fs::create_dir_all(&dir_gtk4);
-            let _ = fs::write(dir_gtk4.join("settings.ini"), &ini_gtk4);
+            update_settings_ini(
+                &dir_gtk4.join("settings.ini"),
+                &[("gtk-theme-name", gtk_theme_name.to_string())],
+            );
             let _ = fs::write(dir_gtk4.join("gtk.css"), &gtk_css);
 
-            if let Some(data_dir) = dirs::data_local_dir() {
-                let nwg_gsettings_file = data_dir.join("nwg-look").join("gsettings");
-                if nwg_gsettings_file.exists()
-                    && let Ok(content) = fs::read_to_string(&nwg_gsettings_file)
-                {
-                    let mut updated_lines = Vec::new();
-
-                    for line in content.lines() {
-                        if line.starts_with("gtk-theme=") {
-                            updated_lines.push(format!("gtk-theme={gtk_theme_name}"));
-                        } else if line.starts_with("color-scheme=") {
-                            let nwg_scheme = if is_dark { "dark" } else { "light" };
-
-                            updated_lines.push(format!("color-scheme={nwg_scheme}"));
-                        } else {
-                            updated_lines.push(line.to_string());
-                        }
-                    }
-
-                    let _ = fs::write(&nwg_gsettings_file, updated_lines.join("\n"));
-                }
-            }
+            // xsettingsd live sync support for GTK3 apps
+            let xsettingsd_conf = config_dir.join("xsettingsd").join("xsettingsd.conf");
+            update_xsettingsd_conf(&xsettingsd_conf, gtk_theme_name, color_scheme, is_dark);
         }
+
         self.reload_apps();
     }
 
     fn reload_apps(&self) {
-        let _ = Command::new("systemctl")
-            .args(["--user", "restart", "xdg-desktop-portal"])
+        // Reload xsettingsd if running so GTK3 apps update live without nwg-look
+        let _ = Command::new("pkill")
+            .args(["-HUP", "-x", "xsettingsd"])
             .status();
+    }
+}
 
-        let _ = Command::new("systemctl")
-            .args(["--user", "restart", "xdg-desktop-portal-gtk"])
-            .status();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        let _ = Command::new("systemctl")
-            .args(["--user", "restart", "xdg-desktop-portal-hyprland"])
-            .status();
+    #[test]
+    fn test_update_settings_ini_preserves_existing_keys() {
+        let temp_dir = std::env::temp_dir().join("capsule_gtk_ini_test");
+        let _ = fs::create_dir_all(&temp_dir);
+        let ini_path = temp_dir.join("settings.ini");
 
-        let _ = Command::new("gsettings")
-            .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-            .status();
+        let initial = "[Settings]\ngtk-icon-theme-name=Papirus-Dark\ngtk-font-name=Inter 10\ngtk-theme-name=OldTheme\n";
+        let _ = fs::write(&ini_path, initial);
 
-        let current_theme = Command::new("gsettings")
-            .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_else(|_| "'adw-gtk3-dark'".to_string());
+        update_settings_ini(
+            &ini_path,
+            &[
+                ("gtk-theme-name", "adw-gtk3-dark".to_string()),
+                ("gtk-application-prefer-dark-theme", "1".to_string()),
+            ],
+        );
 
-        let fallback_theme = if current_theme.contains("dark") {
-            "adw-gtk3"
-        } else {
-            "adw-gtk3-dark"
-        };
+        let updated = fs::read_to_string(&ini_path).unwrap_or_default();
+        assert!(updated.contains("[Settings]"));
+        assert!(updated.contains("gtk-icon-theme-name=Papirus-Dark"));
+        assert!(updated.contains("gtk-font-name=Inter 10"));
+        assert!(updated.contains("gtk-theme-name=adw-gtk3-dark"));
+        assert!(updated.contains("gtk-application-prefer-dark-theme=1"));
+        assert!(!updated.contains("OldTheme"));
 
-        let target_theme = current_theme.trim_matches('\'');
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 
-        let _ = Command::new("gsettings")
-            .args([
-                "set",
-                "org.gnome.desktop.interface",
-                "gtk-theme",
-                fallback_theme,
-            ])
-            .status();
+    #[test]
+    fn test_update_xsettingsd_conf_preserves_custom_entries() {
+        let temp_dir = std::env::temp_dir().join("capsule_xsettingsd_test");
+        let _ = fs::create_dir_all(&temp_dir);
+        let conf_path = temp_dir.join("xsettingsd.conf");
 
-        let _ = Command::new("gsettings")
-            .args([
-                "set",
-                "org.gnome.desktop.interface",
-                "gtk-theme",
-                target_theme,
-            ])
-            .status();
+        let initial = "Net/IconThemeName \"Papirus-Dark\"\nNet/ThemeName \"Old\"\n";
+        let _ = fs::write(&conf_path, initial);
 
-        let _ = Command::new("nwg-look").arg("-a").status();
+        update_xsettingsd_conf(&conf_path, "adw-gtk3-dark", "prefer-dark", true);
+
+        let updated = fs::read_to_string(&conf_path).unwrap_or_default();
+        assert!(updated.contains("Net/IconThemeName \"Papirus-Dark\""));
+        assert!(updated.contains("Net/ThemeName \"adw-gtk3-dark\""));
+        assert!(updated.contains("Gtk/ColorScheme \"prefer-dark\""));
+        assert!(updated.contains("Gtk/ApplicationPreferDarkTheme 1"));
+        assert!(!updated.contains("\"Old\""));
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
