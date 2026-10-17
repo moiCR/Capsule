@@ -11,7 +11,6 @@ Exec=/usr/local/bin/capsule
 Icon=capsule
 Terminal=false
 Type=Application
-Path=$HOME
 NoDisplay=true
 Categories=Utility;System;
 "#;
@@ -103,30 +102,69 @@ pub fn create_desktop_entry(password: Option<&str>) -> Result<()> {
 
 pub fn launch_capsule() -> Result<()> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let bin_path = if Path::new("/usr/local/bin/capsule").exists() {
+        "/usr/local/bin/capsule"
+    } else if Path::new("/usr/bin/capsule").exists() {
+        "/usr/bin/capsule"
+    } else {
+        "capsule"
+    };
 
-    if crate::system::command_exists("gtk-launch")
-        && Path::new("/usr/share/applications/capsule.desktop").exists()
-    {
-        let status = Command::new("gtk-launch")
-            .arg("capsule.desktop")
+    if crate::system::command_exists("setsid") {
+        let mut cmd = Command::new("setsid");
+        cmd.arg(bin_path)
             .current_dir(&home)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-
-        if status.is_ok() {
+            .stderr(Stdio::null());
+        if cmd.spawn().is_ok() {
             return Ok(());
         }
     }
 
-    Command::new("/usr/local/bin/capsule")
+    Command::new(bin_path)
         .current_dir(&home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("Failed to spawn /usr/local/bin/capsule")?;
+        .with_context(|| format!("Failed to spawn {}", bin_path))?;
 
     Ok(())
+}
+
+pub fn cleanup_self() {
+    if let Ok(exe_path) = std::env::current_exe() {
+        let is_temp = exe_path.starts_with(std::env::temp_dir())
+            || exe_path.to_string_lossy().contains("/tmp/");
+        let is_target = exe_path.to_string_lossy().contains("/target/");
+        if is_temp && !is_target {
+            let _ = std::fs::remove_file(exe_path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_cleanup_self_ignores_target() {
+        let target_path =
+            std::path::PathBuf::from("/home/user/Capsule/target/release/capsule-installer");
+        let is_temp = target_path.starts_with(std::env::temp_dir())
+            || target_path.to_string_lossy().contains("/tmp/");
+        let is_target = target_path.to_string_lossy().contains("/target/");
+        assert!(is_target);
+        assert!(!(is_temp && !is_target));
+    }
+
+    #[test]
+    fn test_cleanup_self_detects_tmp() {
+        let tmp_path = std::path::PathBuf::from("/tmp/capsule-installer");
+        let is_temp = tmp_path.starts_with(std::env::temp_dir())
+            || tmp_path.to_string_lossy().contains("/tmp/");
+        let is_target = tmp_path.to_string_lossy().contains("/target/");
+        assert!(is_temp);
+        assert!(!is_target);
+        assert!(is_temp && !is_target);
+    }
 }

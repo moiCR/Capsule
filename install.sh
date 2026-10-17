@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Capsule Installer Bootstrap
-# Downloads the TUI installer binary to /tmp and runs it
+# Downloads the GPUI installer binary to /tmp, runs it, and cleans up afterwards
 
 REPO="moiCR/Capsule"
 INSTALLER_BIN="/tmp/capsule-installer"
@@ -42,7 +42,7 @@ if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/Cargo.toml" ]]; then
     fi
 fi
 
-echo "==> Fetching Capsule TUI installer for $ARCH ($TARGET)..."
+echo "==> Fetching Capsule installer for $ARCH ($TARGET)..."
 
 mkdir -p "$TEMP_DIR"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -104,4 +104,5 @@ if [[ "$DOWNLOADED" == false ]]; then
 fi
 
 chmod +x "$INSTALLER_BIN"
-exec "$INSTALLER_BIN" "$@"
+"$INSTALLER_BIN" "$@" || true
+rm -f "$INSTALLER_BIN"

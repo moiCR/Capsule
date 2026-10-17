@@ -1,31 +1,11 @@
+use crate::deps;
 use crate::github::{self, ReleaseInfo};
 use crate::install;
 use crate::system::{self, AurHelper};
-use std::sync::mpsc::{Receiver, channel};
+use gpui::{Context, FocusHandle, ScrollHandle};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
-
-pub const ARCH_DEPENDENCIES: &[&str] = &[
-    "vulkan-icd-loader",
-    "libxkbcommon",
-    "wayland",
-    "wireplumber",
-    "brightnessctl",
-    "cliphist",
-    "wl-clipboard",
-    "qt5ct",
-    "qt6ct",
-    "gsettings-desktop-schemas",
-    "zenity",
-    "dconf",
-    "nwg-look",
-    "xdg-desktop-portal",
-    "xdg-desktop-portal-gtk",
-    "adw-gtk-theme",
-    "git",
-    "curl",
-    "tar",
-    "gpu-screen-recorder",
-];
+use ui::components::InputState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -42,12 +22,13 @@ pub enum PendingAction {
 }
 
 pub enum WorkerMsg {
-    Progress(f64, String),
+    Progress(f32, String),
     Log(String),
     Done(Result<(), String>),
+    DepsDone(Result<(), String>),
 }
 
-pub struct App {
+pub struct InstallerApp {
     pub step: Step,
     pub beta_mode: bool,
     pub target: &'static str,
@@ -56,32 +37,37 @@ pub struct App {
     pub release_info: Option<ReleaseInfo>,
     pub aur_helper: Option<AurHelper>,
     pub dependencies: Vec<(String, bool)>,
-    pub wallpaper_daemon: Option<String>,
     pub capsule_was_running: bool,
-    pub progress: f64,
+    pub progress: f32,
     pub status_message: String,
     pub logs: Vec<String>,
-    pub selected_index: usize,
     pub launch_on_finish: bool,
-    pub should_quit: bool,
     pub error_message: Option<String>,
-    pub worker_rx: Option<Receiver<WorkerMsg>>,
 
-    // Stored credentials & modal state
     pub sudo_password: Option<String>,
     pub show_password_modal: bool,
-    pub password_input: String,
+    pub password_input: InputState,
     pub password_error: Option<String>,
     pub pending_action: Option<PendingAction>,
+
+    pub focus_handle: FocusHandle,
+    pub logs_scroll_handle: ScrollHandle,
+    pub deps_scroll_handle: ScrollHandle,
+
+    pub worker_tx: Sender<WorkerMsg>,
+    pub worker_rx: Receiver<WorkerMsg>,
 }
 
-impl App {
-    pub fn new(beta_mode: bool) -> Self {
+impl InstallerApp {
+    pub fn new(beta_mode: bool, cx: &mut Context<Self>) -> Self {
         let target = system::detect_target();
         let aur_helper = system::detect_aur_helper();
         let installed_version = system::get_installed_capsule_version();
         let capsule_was_running = system::is_capsule_running();
-        let wallpaper_daemon = system::check_wallpaper_daemon().map(|s| s.to_string());
+        let focus_handle = cx.focus_handle();
+        let logs_scroll_handle = ScrollHandle::new();
+        let deps_scroll_handle = ScrollHandle::new();
+        let (worker_tx, worker_rx) = channel::<WorkerMsg>();
 
         let mut app = Self {
             step: Step::Welcome,
@@ -92,22 +78,24 @@ impl App {
             release_info: None,
             aur_helper,
             dependencies: Vec::new(),
-            wallpaper_daemon,
             capsule_was_running,
             progress: 0.0,
             status_message: "Ready".to_string(),
             logs: Vec::new(),
-            selected_index: 0,
             launch_on_finish: true,
-            should_quit: false,
             error_message: None,
-            worker_rx: None,
 
             sudo_password: None,
             show_password_modal: false,
-            password_input: String::new(),
+            password_input: InputState::new("").with_masked(true).with_focused(true),
             password_error: None,
             pending_action: None,
+
+            focus_handle,
+            logs_scroll_handle,
+            deps_scroll_handle,
+            worker_tx,
+            worker_rx,
         };
 
         app.scan_dependencies();
@@ -116,13 +104,7 @@ impl App {
     }
 
     pub fn scan_dependencies(&mut self) {
-        self.dependencies = ARCH_DEPENDENCIES
-            .iter()
-            .map(|&pkg| {
-                let installed = system::check_package_installed(pkg, &self.aur_helper);
-                (pkg.to_string(), installed)
-            })
-            .collect();
+        self.dependencies = deps::scan_dependencies(&self.aur_helper);
     }
 
     pub fn missing_dependencies_count(&self) -> usize {
@@ -151,9 +133,10 @@ impl App {
         }
     }
 
-    pub fn toggle_beta(&mut self) {
+    pub fn toggle_beta(&mut self, cx: &mut Context<Self>) {
         self.beta_mode = !self.beta_mode;
         self.refresh_release_info();
+        cx.notify();
     }
 
     pub fn request_auth_or_proceed(&mut self, action: PendingAction) -> bool {
@@ -169,8 +152,8 @@ impl App {
     }
 
     pub fn submit_password(&mut self) -> bool {
-        if system::verify_sudo_password(&self.password_input) {
-            let pass = self.password_input.clone();
+        let pass = self.password_input.text();
+        if system::verify_sudo_password(&pass) {
             system::refresh_sudo_with_password(&pass);
             self.sudo_password = Some(pass);
             self.show_password_modal = false;
@@ -184,7 +167,64 @@ impl App {
         }
     }
 
-    pub fn start_installation(&mut self) {
+    pub fn cancel_password_modal(&mut self, cx: &mut Context<Self>) {
+        self.show_password_modal = false;
+        self.pending_action = None;
+        self.password_input.clear();
+        self.password_error = None;
+        cx.notify();
+    }
+
+    pub fn execute_pending_action(&mut self, cx: &mut Context<Self>) {
+        if let Some(action) = self.pending_action.take() {
+            match action {
+                PendingAction::InstallCapsule => {
+                    self.start_installation(cx);
+                }
+                PendingAction::InstallDeps => {
+                    self.start_deps_installation(cx);
+                }
+            }
+        }
+    }
+
+    pub fn start_deps_installation(&mut self, cx: &mut Context<Self>) {
+        let missing = self.missing_dependencies();
+        if missing.is_empty() {
+            return;
+        }
+
+        self.step = Step::Installing;
+        self.progress = 0.1;
+        self.error_message = None;
+        self.status_message = format!("Installing {} missing dependencies...", missing.len());
+        self.logs.clear();
+        self.logs.push(format!(
+            "==> Installing missing packages: {}",
+            missing.join(" ")
+        ));
+
+        let tx = self.worker_tx.clone();
+        let aur_helper = self.aur_helper.clone();
+        let sudo_pass = self.sudo_password.clone();
+
+        thread::spawn(move || {
+            let tx_log = tx.clone();
+            let res = deps::install_missing_packages(
+                &missing,
+                &aur_helper,
+                sudo_pass.as_deref(),
+                move |line| {
+                    let _ = tx_log.send(WorkerMsg::Log(line));
+                },
+            );
+            let _ = tx.send(WorkerMsg::DepsDone(res));
+        });
+
+        cx.notify();
+    }
+
+    pub fn start_installation(&mut self, cx: &mut Context<Self>) {
         self.step = Step::Installing;
         self.progress = 0.05;
         self.status_message = "Preparing installation...".to_string();
@@ -192,9 +232,7 @@ impl App {
         self.logs
             .push("Starting installation process...".to_string());
 
-        let (tx, rx) = channel::<WorkerMsg>();
-        self.worker_rx = Some(rx);
-
+        let tx = self.worker_tx.clone();
         let target = self.target;
         let release_info = self.release_info.clone();
         let was_running = self.capsule_was_running;
@@ -239,7 +277,7 @@ impl App {
                     )));
                     let tx_prog = tx.clone();
                     match github::download_and_extract_binary(&download_url, move |pct, msg| {
-                        let _ = tx_prog.send(WorkerMsg::Progress(pct, msg.to_string()));
+                        let _ = tx_prog.send(WorkerMsg::Progress(pct as f32, msg.to_string()));
                     }) {
                         Ok(p) => p,
                         Err(e) => return Err(format!("Download failed: {}", e)),
@@ -280,31 +318,61 @@ impl App {
             let res = run();
             let _ = tx.send(WorkerMsg::Done(res));
         });
+
+        cx.notify();
     }
 
-    pub fn poll_worker(&mut self) {
-        if let Some(rx) = &self.worker_rx {
-            while let Ok(msg) = rx.try_recv() {
-                match msg {
-                    WorkerMsg::Progress(pct, status) => {
-                        self.progress = pct;
-                        self.status_message = status;
+    pub fn poll_worker(&mut self, cx: &mut Context<Self>) {
+        let mut updated = false;
+        while let Ok(msg) = self.worker_rx.try_recv() {
+            updated = true;
+            match msg {
+                WorkerMsg::Progress(pct, status) => {
+                    self.progress = pct;
+                    self.status_message = status;
+                }
+                WorkerMsg::Log(line) => {
+                    self.logs.push(line);
+                }
+                WorkerMsg::Done(res) => match res {
+                    Ok(()) => {
+                        self.installed_version = system::get_installed_capsule_version();
+                        self.step = Step::Finished;
                     }
-                    WorkerMsg::Log(line) => {
-                        self.logs.push(line);
+                    Err(e) => {
+                        self.error_message = Some(e);
+                        self.step = Step::Welcome;
                     }
-                    WorkerMsg::Done(res) => match res {
+                },
+                WorkerMsg::DepsDone(res) => {
+                    self.scan_dependencies();
+                    match res {
                         Ok(()) => {
-                            self.installed_version = system::get_installed_capsule_version();
-                            self.step = Step::Finished;
+                            self.step = Step::Dependencies;
                         }
                         Err(e) => {
                             self.error_message = Some(e);
-                            self.step = Step::Welcome;
+                            self.step = Step::Dependencies;
                         }
-                    },
+                    }
                 }
             }
         }
+        if updated {
+            cx.notify();
+        }
+    }
+
+    pub fn finish_and_exit(&mut self, cx: &mut Context<Self>) {
+        if self.launch_on_finish {
+            let _ = install::launch_capsule();
+        }
+        install::cleanup_self();
+        cx.quit();
+    }
+
+    pub fn cancel_and_exit(&mut self, cx: &mut Context<Self>) {
+        install::cleanup_self();
+        cx.quit();
     }
 }

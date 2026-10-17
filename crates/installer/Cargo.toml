@@ -4,11 +4,19 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+[[bin]]
+name = "capsule-installer"
+path = "src/main.rs"
+
 [dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+tokio.workspace = true
 anyhow.workspace = true
-crossterm = "0.28"
+assets = { path = "../assets" }
+ui = { path = "../ui" }
+dirs.workspace = true
 flate2 = "1.0"
-ratatui = "0.29"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json"] }
 serde.workspace = true
 serde_json = "1.0"

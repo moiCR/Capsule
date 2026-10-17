@@ -127,12 +127,12 @@ pub fn check_package_installed(pkg: &str, helper: &Option<AurHelper>) -> bool {
 pub fn get_installed_capsule_version() -> Option<String> {
     let paths = ["capsule", "/usr/local/bin/capsule", "/usr/bin/capsule"];
     for p in paths {
-        if let Ok(out) = Command::new(p).arg("--version").output() {
-            if out.status.success() {
-                let text = String::from_utf8_lossy(&out.stdout);
-                if let Some(ver) = text.split_whitespace().last() {
-                    return Some(ver.trim().to_string());
-                }
+        if let Ok(out) = Command::new(p).arg("--version").output()
+            && out.status.success()
+        {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if let Some(ver) = text.split_whitespace().last() {
+                return Some(ver.trim().to_string());
             }
         }
     }
@@ -187,6 +187,7 @@ pub fn stop_capsule_process() {
     }
 }
 
+#[allow(dead_code)]
 pub fn check_wallpaper_daemon() -> Option<&'static str> {
     Some("built-in (Capsule)")
 }
@@ -201,10 +202,11 @@ pub fn find_local_release_binary() -> Option<std::path::PathBuf> {
 
     for c in candidates {
         let path = Path::new(c);
-        if path.exists() && path.is_file() {
-            if let Ok(abs) = path.canonicalize() {
-                return Some(abs);
-            }
+        if path.exists()
+            && path.is_file()
+            && let Ok(abs) = path.canonicalize()
+        {
+            return Some(abs);
         }
     }
     None
