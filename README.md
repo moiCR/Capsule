@@ -5,6 +5,7 @@
 [![NixOS](https://img.shields.io/badge/NixOS-supported-5277c3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Debian](https://img.shields.io/badge/Debian-supported-5277c3?logo=debian&logoColor=white)](https://debian.org/)
 [![ubuntu](https://img.shields.io/badge/Ubuntu-supported-5277c3?logo=ubuntu&logoColor=white)](https://ubuntu.org/)
+[![Fedora](https://img.shields.io/badge/Fedora-supported-5277c3?logo=fedora&logoColor=white)](https://ubuntu.org/)
 
 
 [![Niri](https://img.shields.io/badge/Niri-supported-5e81ac?logo=wayland&logoColor=white)](https://github.com/YaLTeR/niri)
