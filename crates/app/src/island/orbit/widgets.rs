@@ -1,5 +1,5 @@
 use super::{ORB_SIZE, OrbitId, Presentation, USAGE_PANEL_WIDTH};
-use crate::capsule::{Capsule, widgets::style};
+use crate::island::{Capsule, widgets::style};
 use gpui::{Context, IntoElement, div, prelude::*, px, svg};
 use services::RecordStatus;
 use ui::theme::Theme;
@@ -458,9 +458,9 @@ pub(super) fn preview(
     };
     let viewport = gpui::size(px(3000.0), px(3000.0));
     let location = if bottom {
-        crate::capsule::CapsuleLocation::BOTTOM
+        crate::island::CapsuleLocation::BOTTOM
     } else {
-        crate::capsule::CapsuleLocation::TOP
+        crate::island::CapsuleLocation::TOP
     };
     div()
         .absolute()

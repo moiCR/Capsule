@@ -11,7 +11,7 @@ use ui::components::InputState;
 use ui::theme::Theme;
 
 use super::{CapsuleModule, CapsuleModuleEvent};
-use crate::capsule::widgets::launcher::{
+use crate::island::widgets::launcher::{
     COLUMNS, GRID_GAP, HEIGHT, TILE_HEIGHT, WIDTH, next_selection, render_app_tile,
     render_calculator_tile, render_search,
 };

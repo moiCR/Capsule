@@ -1,5 +1,5 @@
 use super::style;
-use crate::capsule::module::{
+use crate::island::module::{
     CapsuleModuleEvent,
     emoji::{
         EmojiModule,

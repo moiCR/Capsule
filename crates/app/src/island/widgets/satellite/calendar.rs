@@ -1,9 +1,9 @@
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{Context, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 
-use crate::capsule::module::dashboard::DashboardModule;
+use crate::island::module::dashboard::DashboardModule;
 
 pub const WIDTH: f32 = 300.0;
 pub const HEIGHT: f32 = 300.0;
@@ -29,13 +29,13 @@ fn control(
         .on_click(cx.listener(move |this, _, _, cx| {
             if let Some(direction) = direction {
                 this.dispatch(
-                    crate::capsule::widgets::dashboard::DashboardAction::Month(direction),
+                    crate::island::widgets::dashboard::DashboardAction::Month(direction),
                     cx,
                 );
             } else {
                 cx.emit(
-                    crate::capsule::module::CapsuleModuleEvent::CloseSatelliteId(
-                        crate::capsule::satellite::SatelliteId::Calendar,
+                    crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
+                        crate::island::satellite::SatelliteId::Calendar,
                     ),
                 );
             }
@@ -135,7 +135,7 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                         .cursor_pointer()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.dispatch(
-                                crate::capsule::widgets::dashboard::DashboardAction::Month(0),
+                                crate::island::widgets::dashboard::DashboardAction::Month(0),
                                 cx,
                             )
                         }))

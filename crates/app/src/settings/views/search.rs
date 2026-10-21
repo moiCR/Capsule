@@ -6,7 +6,7 @@ use services::{AppState, CapsuleStyle};
 use ui::theme::Theme;
 
 use super::common::{card, control_row, hero_header, row_divider, toggle_row};
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use crate::settings::sidebar::SettingsTab;
 use crate::settings::Settings;
 

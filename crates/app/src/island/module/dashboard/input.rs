@@ -1,5 +1,5 @@
 use super::{DashboardModule, slider_fraction};
-use crate::capsule::widgets::dashboard::DashboardAction;
+use crate::island::widgets::dashboard::DashboardAction;
 use gpui::{Context, KeyDownEvent, Window};
 use services::AppState;
 impl DashboardModule {
@@ -14,7 +14,7 @@ impl DashboardModule {
                 if self.satellites.iter().any(|satellite| satellite.open) {
                     if let Some(panel) = self.satellites.iter().rev().find(|panel| panel.open) {
                         cx.emit(
-                            crate::capsule::module::CapsuleModuleEvent::CloseSatelliteId(
+                            crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
                                 panel.id.clone(),
                             ),
                         );
@@ -25,21 +25,21 @@ impl DashboardModule {
             }
             "left"
                 if self.satellites.iter().any(|panel| {
-                    panel.open && panel.id == crate::capsule::satellite::SatelliteId::Calendar
+                    panel.open && panel.id == crate::island::satellite::SatelliteId::Calendar
                 }) =>
             {
                 self.dispatch(DashboardAction::Month(-1), cx)
             }
             "right"
                 if self.satellites.iter().any(|panel| {
-                    panel.open && panel.id == crate::capsule::satellite::SatelliteId::Calendar
+                    panel.open && panel.id == crate::island::satellite::SatelliteId::Calendar
                 }) =>
             {
                 self.dispatch(DashboardAction::Month(1), cx)
             }
             "home"
                 if self.satellites.iter().any(|panel| {
-                    panel.open && panel.id == crate::capsule::satellite::SatelliteId::Calendar
+                    panel.open && panel.id == crate::island::satellite::SatelliteId::Calendar
                 }) =>
             {
                 self.dispatch(DashboardAction::Month(0), cx)

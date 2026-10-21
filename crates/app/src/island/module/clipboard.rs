@@ -2,7 +2,7 @@ mod model;
 mod worker;
 
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::clipboard as widgets;
+use crate::island::widgets::clipboard as widgets;
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, Pixels, Render, ScrollHandle, Size,
     Subscription, Task, Window, prelude::*,

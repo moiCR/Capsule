@@ -95,7 +95,7 @@ impl SatelliteAnimator {
             return false;
         }
         let t = active_elapsed.as_secs_f32() / self.duration.as_secs_f32();
-        let eased = crate::capsule::animator::scalar_progress(t, self.animation, 0.75);
+        let eased = crate::island::animator::scalar_progress(t, self.animation, 0.75);
         self.progress = self.start + (self.target - self.start) * eased;
         true
     }

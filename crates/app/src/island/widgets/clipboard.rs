@@ -1,8 +1,8 @@
-use crate::capsule::module::{
+use crate::island::module::{
     CapsuleModuleEvent,
     clipboard::{ClipboardModule, ClipboardTab},
 };
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use gpui::{
     AnyElement, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out, img,
     prelude::*, px, svg,

@@ -5,7 +5,7 @@ use gpui::{
 };
 use ui::theme::Theme;
 
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use crate::settings::Settings;
 pub use items::{SettingsTab, SidebarItem, TabSidebarItem};
 

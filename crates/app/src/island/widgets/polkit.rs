@@ -1,5 +1,5 @@
 use super::style;
-use crate::capsule::module::polkit::PolkitModule;
+use crate::island::module::polkit::PolkitModule;
 use gpui::{AnyElement, Context, FocusHandle, IntoElement, div, prelude::*, px, svg};
 use services::AppState;
 use ui::components::{Button, ButtonVariant, Input};

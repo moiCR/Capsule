@@ -4,7 +4,7 @@ use gpui::{
 use ui::components::{IconButton, Input};
 use ui::theme::Theme;
 
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use crate::settings::Settings;
 
 pub fn render_header(

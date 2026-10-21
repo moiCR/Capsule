@@ -1,5 +1,5 @@
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::notification as widgets;
+use crate::island::widgets::notification as widgets;
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, Pixels, Render, Size, Subscription, Task,
     Window, prelude::*,

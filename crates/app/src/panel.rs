@@ -21,13 +21,14 @@ pub enum PanelMode {
 }
 
 pub struct CapsulePanel;
+pub type IslandPanel = CapsulePanel;
 
 impl CapsulePanel {
     pub fn window_options(
-        module_manager: &crate::capsule::module::CapsuleModuleManager,
+        module_manager: &crate::island::module::CapsuleModuleManager,
         cx: &gpui::App,
     ) -> WindowOptions {
-        let size = crate::capsule::Capsule::maximum_window_size(
+        let size = crate::island::Capsule::maximum_window_size(
             module_manager,
             cx.displays().first().map(|display| display.bounds().size),
             cx,
@@ -82,12 +83,12 @@ impl CapsulePanel {
     pub fn open(
         cx: &mut gpui::App,
         ipc_subscriber: IpcSubscriber,
-    ) -> Option<WindowHandle<crate::capsule::Capsule>> {
-        let module_manager = crate::capsule::module::CapsuleModuleManager::new(cx);
+    ) -> Option<WindowHandle<crate::island::Capsule>> {
+        let module_manager = crate::island::module::CapsuleModuleManager::new(cx);
         let options = Self::window_options(&module_manager, cx);
         let window = match cx.open_window(options, |window, cx| {
             cx.new(|cx| {
-                crate::capsule::Capsule::with_module_manager(module_manager, window, cx)
+                crate::island::Capsule::with_module_manager(module_manager, window, cx)
             })
         }) {
             Ok(window) => window,
@@ -97,7 +98,7 @@ impl CapsulePanel {
             }
         };
         if let Ok(entity) = window.entity(cx) {
-            ipc_subscriber.start(cx, entity, crate::capsule::Capsule::handle_ipc_command);
+            ipc_subscriber.start(cx, entity, crate::island::Capsule::handle_ipc_command);
         }
         Some(window)
     }
@@ -270,10 +271,10 @@ impl SettingsPanel {
 
         cx.defer(|cx| {
             for window in cx.windows() {
-                if let Some(capsule_window) = window.downcast::<crate::capsule::Capsule>() {
+                if let Some(capsule_window) = window.downcast::<crate::island::Capsule>() {
                     let _ = capsule_window.update(cx, |capsule, _, cx| {
                         capsule.handle_module_event(
-                            &crate::capsule::module::CapsuleModuleEvent::Close,
+                            &crate::island::module::CapsuleModuleEvent::Close,
                             cx,
                         );
                     });

@@ -1,4 +1,4 @@
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use std::time::Duration;
 
 use gpui::{
@@ -9,7 +9,7 @@ use services::Application;
 use ui::theme::Theme;
 
 use super::TILE_HEIGHT;
-use crate::capsule::module::launcher::LauncherModule;
+use crate::island::module::launcher::LauncherModule;
 
 struct TileContent {
     id: ElementId,

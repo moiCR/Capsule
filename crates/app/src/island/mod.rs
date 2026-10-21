@@ -3,7 +3,7 @@ use gpui::{
     prelude::*,
 };
 
-use crate::capsule::{animator::Animator, module::CapsuleModuleManager};
+use crate::island::{animator::Animator, module::CapsuleModuleManager};
 
 pub(crate) mod animator;
 mod ipc_handler;
@@ -40,6 +40,10 @@ pub struct Capsule {
     _ipc_task: Task<()>,
     _config_task: Task<()>,
 }
+
+pub type Island = Capsule;
+pub type IslandLocation = CapsuleLocation;
+pub type IslandModuleManager = CapsuleModuleManager;
 
 impl Capsule {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {

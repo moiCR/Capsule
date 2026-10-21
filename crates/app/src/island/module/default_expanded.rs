@@ -9,7 +9,7 @@ use services::{AppState, MediaTrack, NotificationStore};
 use ui::theme::Theme;
 
 use super::{CapsuleModule, CapsuleModuleEvent};
-use crate::capsule::widgets::{
+use crate::island::widgets::{
     default::{StatusSnapshot, WorkspaceKey, workspace_keys},
     default_expanded as widgets,
 };

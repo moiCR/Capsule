@@ -1,8 +1,8 @@
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use gpui::{IntoElement, div, prelude::*, px};
 use ui::theme::Theme;
 
-use crate::capsule::satellite::layout::{SatelliteLayout, Side};
+use crate::island::satellite::layout::{SatelliteLayout, Side};
 
 pub(crate) fn render(
     layout: SatelliteLayout,
@@ -57,7 +57,7 @@ mod tests {
     impl Render for Content {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             let content = if let Some(rows) = self.rows {
-                let mut list = crate::capsule::widgets::dashboard::details::list("test-list");
+                let mut list = crate::island::widgets::dashboard::details::list("test-list");
                 for _ in 0..rows {
                     list = list.child(div().h(px(36.0)).flex_shrink_0());
                 }

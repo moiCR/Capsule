@@ -1,5 +1,5 @@
-use crate::capsule::module::record::{PendingAction, Presentation, RecordModule};
-use crate::capsule::widgets::style;
+use crate::island::module::record::{PendingAction, Presentation, RecordModule};
+use crate::island::widgets::style;
 use gpui::{
     Animation, AnimationExt, Context, FontWeight, IntoElement, div, ease_in_out, prelude::*, px,
     svg,

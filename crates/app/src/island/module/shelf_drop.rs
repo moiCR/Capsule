@@ -1,5 +1,5 @@
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::{Capsule, widgets::shelf_drop as widgets};
+use crate::island::{Capsule, widgets::shelf_drop as widgets};
 use gpui::{Context, EventEmitter, IntoElement, Pixels, Render, Size, Task, Window, px};
 use std::time::Duration;
 use ui::theme::Theme;
@@ -87,7 +87,7 @@ impl Render for ShelfDropModule {
 }
 
 impl Capsule {
-    pub(in crate::capsule) fn set_shelf_drop_hovered(
+    pub(in crate::island) fn set_shelf_drop_hovered(
         &mut self,
         hovered: bool,
         cx: &mut Context<Self>,
@@ -105,7 +105,7 @@ impl Capsule {
         });
     }
 
-    pub(in crate::capsule) fn drop_on_shelf(
+    pub(in crate::island) fn drop_on_shelf(
         &mut self,
         paths: &gpui::ExternalPaths,
         _: &mut Window,
@@ -120,9 +120,9 @@ impl Capsule {
             .update(cx, |module, cx| module.finish(cx));
     }
 
-    pub(in crate::capsule) fn drop_shelf_file(
+    pub(in crate::island) fn drop_shelf_file(
         &mut self,
-        file: &crate::capsule::widgets::shelf::DraggedFile,
+        file: &crate::island::widgets::shelf::DraggedFile,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {

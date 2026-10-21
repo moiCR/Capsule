@@ -1,8 +1,8 @@
 use super::super::DashboardAction as Action;
 use super::empty;
 use super::list;
-use crate::capsule::module::dashboard::DashboardModule;
-use crate::capsule::widgets::style;
+use crate::island::module::dashboard::DashboardModule;
+use crate::island::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, div, ease_in_out, millis,
     prelude::*, px, svg,

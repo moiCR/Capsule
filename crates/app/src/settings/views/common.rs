@@ -6,7 +6,7 @@ use ui::components::{Button, ButtonSize, ButtonVariant, Slider, Switch};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 
 pub fn hero_header(
     icon: &'static str,

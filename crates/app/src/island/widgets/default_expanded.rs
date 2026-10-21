@@ -2,7 +2,7 @@ use super::{
     default::{render_status, render_workspaces},
     style,
 };
-use crate::capsule::module::{
+use crate::island::module::{
     CapsuleModuleEvent, CapsuleModuleId, default_expanded::DefaultExpandedModule,
 };
 use gpui::{Context, FontWeight, IntoElement, StyledImage, div, img, prelude::*, px, svg};

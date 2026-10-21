@@ -1,7 +1,7 @@
 use gpui::{Context, KeyDownEvent, Window};
 
 use super::LauncherModule;
-use crate::capsule::module::CapsuleModuleEvent;
+use crate::island::module::CapsuleModuleEvent;
 
 impl LauncherModule {
     pub(super) fn handle_key_down(

@@ -1,7 +1,7 @@
 use super::{DashboardAction as Action, HEADER};
-use crate::capsule::module::dashboard::DashboardModule;
-use crate::capsule::satellite::SatelliteId;
-use crate::capsule::widgets::style;
+use crate::island::module::dashboard::DashboardModule;
+use crate::island::satellite::SatelliteId;
+use crate::island::widgets::style;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
 

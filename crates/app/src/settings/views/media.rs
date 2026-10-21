@@ -1,6 +1,6 @@
 use super::common::{hero_header, toggle_row};
 use super::SettingsView;
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use crate::settings::Settings;
 use gpui::{
     AnyElement, App, ColorExt, Context, ElementId, FontWeight, IntoElement, MouseMoveEvent,

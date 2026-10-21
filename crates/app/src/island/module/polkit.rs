@@ -1,5 +1,5 @@
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::polkit as widgets;
+use crate::island::widgets::polkit as widgets;
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, Pixels, Render, Size, Subscription, Task,
     Window, prelude::*,

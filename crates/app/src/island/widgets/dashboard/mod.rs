@@ -4,7 +4,7 @@ pub(crate) mod home;
 pub(crate) mod media;
 mod notifications;
 
-use crate::capsule::module::dashboard::DashboardModule;
+use crate::island::module::dashboard::DashboardModule;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, Pixels, Size, div, ease_in_out,
     millis, prelude::*, px, size, svg,
@@ -59,9 +59,9 @@ pub(crate) fn separator(theme: &Theme) -> gpui::Div {
 
 #[derive(Clone)]
 pub(crate) enum DashboardAction {
-    Satellite(crate::capsule::satellite::SatelliteId),
+    Satellite(crate::island::satellite::SatelliteId),
     Close,
-    CloseSatellite(crate::capsule::satellite::SatelliteId),
+    CloseSatellite(crate::island::satellite::SatelliteId),
     Wifi,
     Bluetooth,
     Dnd,

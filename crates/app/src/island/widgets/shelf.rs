@@ -1,5 +1,5 @@
-use crate::capsule::module::shelf::ShelfModule;
-use crate::capsule::widgets::style;
+use crate::island::module::shelf::ShelfModule;
+use crate::island::widgets::style;
 use gpui::{
     ColorExt, Context, ExternalDragPayload, FileDragPaths, IntoElement, Pixels, Point, Render,
     Window, div, img, prelude::*, px, svg,
@@ -42,8 +42,8 @@ pub fn next_selection(current: usize, count: usize, key: &str) -> usize {
 }
 
 #[derive(Clone)]
-pub(in crate::capsule) struct DraggedFile {
-    pub(in crate::capsule) path: std::path::PathBuf,
+pub(in crate::island) struct DraggedFile {
+    pub(in crate::island) path: std::path::PathBuf,
     is_dir: bool,
 }
 impl Render for DraggedFile {

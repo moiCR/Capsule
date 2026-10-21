@@ -2,8 +2,8 @@ use super::{
     BOTTOM_PADDING, CONTENT, CONTROLS, DashboardAction as Action, FOOTER, GAP, LEFT, NOTIFICATIONS,
     PADDING, RIGHT, SLIDER, card,
 };
-use crate::capsule::satellite::SatelliteId as View;
-use crate::capsule::{module::dashboard::DashboardModule, widgets::style};
+use crate::island::satellite::SatelliteId as View;
+use crate::island::{module::dashboard::DashboardModule, widgets::style};
 use gpui::{AnyElement, Context, IntoElement, div, img, prelude::*, px, svg};
 use std::path::PathBuf;
 use ui::components::Slider;

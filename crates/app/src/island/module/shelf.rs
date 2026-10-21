@@ -1,7 +1,7 @@
 mod worker;
 
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::shelf as widgets;
+use crate::island::widgets::shelf as widgets;
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render, ScrollHandle,
     Size, Subscription, Task, Window, prelude::*, px,

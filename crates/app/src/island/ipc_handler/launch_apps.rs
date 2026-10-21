@@ -3,7 +3,7 @@ use std::process::Stdio;
 use gpui::Context;
 use services::{AppState, IpcCommand, config::Defaults};
 
-use crate::capsule::Capsule;
+use crate::island::Capsule;
 
 fn configured_command(command: &IpcCommand, defaults: &Defaults) -> Option<String> {
     let (application, terminal_apps): (&str, &[&str]) = match command {

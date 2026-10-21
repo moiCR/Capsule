@@ -1,6 +1,6 @@
 use super::{DashboardAction as Action, icon_action};
-use crate::capsule::module::dashboard::DashboardModule;
-use crate::capsule::widgets::style;
+use crate::island::module::dashboard::DashboardModule;
+use crate::island::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, PathBuilder, StyledImage, div, img, point,
     prelude::*, px, svg,

@@ -3,7 +3,7 @@ mod input;
 mod navigation;
 
 use super::{CapsuleModule, CapsuleModuleEvent};
-use crate::capsule::widgets::dashboard::{self as widgets};
+use crate::island::widgets::dashboard::{self as widgets};
 use chrono::Local;
 use gpui::{
     Context, EventEmitter, FocusHandle, Pixels, Render, Size, Subscription, Task, Window, div,
@@ -56,9 +56,9 @@ impl Snapshot {
 
 pub(crate) struct DashboardModule {
     pub navigation: Navigation,
-    pub satellites: Vec<crate::capsule::satellite::SatelliteVisual>,
+    pub satellites: Vec<crate::island::satellite::SatelliteVisual>,
     pub wave_phase: f32,
-    pub satellite_heights: Vec<(crate::capsule::satellite::SatelliteId, Pixels)>,
+    pub satellite_heights: Vec<(crate::island::satellite::SatelliteId, Pixels)>,
     pub snapshot_at: Instant,
     active: bool,
     container_size: Size<Pixels>,
@@ -194,7 +194,7 @@ impl DashboardModule {
 
     pub(crate) fn set_satellites(
         &mut self,
-        visuals: Vec<crate::capsule::satellite::SatelliteVisual>,
+        visuals: Vec<crate::island::satellite::SatelliteVisual>,
         cx: &mut Context<Self>,
     ) {
         if self.satellites == visuals {
@@ -208,7 +208,7 @@ impl DashboardModule {
 
     pub(crate) fn measure_satellite(
         &mut self,
-        id: &crate::capsule::satellite::SatelliteId,
+        id: &crate::island::satellite::SatelliteId,
         height: Pixels,
         cx: &mut Context<Self>,
     ) {
@@ -330,7 +330,7 @@ impl Render for DashboardModule {
             .h(self.size().height)
             .rounded(px(cx.global::<AppState>().config.get().ui.capsule_round))
             .overflow_hidden()
-            .bg(crate::capsule::widgets::style::background(&theme))
+            .bg(crate::island::widgets::style::background(&theme))
             .font_family(theme.font_family())
             .text_size(px(14.0))
             .text_color(theme.foreground())

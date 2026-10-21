@@ -1,5 +1,5 @@
 use super::{DashboardModule, Snapshot};
-use crate::capsule::{module::CapsuleModuleEvent, widgets::dashboard::DashboardAction};
+use crate::island::{module::CapsuleModuleEvent, widgets::dashboard::DashboardAction};
 use gpui::Context;
 use services::{AppState, NotificationStore};
 impl DashboardModule {

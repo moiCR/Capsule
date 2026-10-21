@@ -5,8 +5,8 @@ use services::AppState;
 use ui::components::{Input, InputState};
 use ui::theme::Theme;
 
-use crate::capsule::module::launcher::LauncherModule;
-use crate::capsule::widgets::style;
+use crate::island::module::launcher::LauncherModule;
+use crate::island::widgets::style;
 
 pub fn render_search(
     search_input: &InputState,

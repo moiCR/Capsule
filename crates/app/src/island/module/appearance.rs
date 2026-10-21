@@ -2,7 +2,7 @@ mod carousel;
 mod catalog;
 
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::appearance as widgets;
+use crate::island::widgets::appearance as widgets;
 use carousel::Carousel;
 use catalog::Catalog;
 use gpui::{

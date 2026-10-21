@@ -1,5 +1,5 @@
-use crate::capsule::module::appearance::AppearanceModule;
-use crate::capsule::widgets::style;
+use crate::island::module::appearance::AppearanceModule;
+use crate::island::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, div, prelude::*, px, svg,
 };

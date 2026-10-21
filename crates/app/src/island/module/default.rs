@@ -9,7 +9,7 @@ use services::AppState;
 use ui::theme::Theme;
 
 use super::{CapsuleModule, CapsuleModuleEvent, CapsuleModuleId};
-use crate::capsule::widgets::default::{
+use crate::island::widgets::default::{
     GAP, PADDING, StatusSnapshot, WorkspaceKey, module_size, render_clock, render_status,
     render_workspaces, workspace_keys,
 };

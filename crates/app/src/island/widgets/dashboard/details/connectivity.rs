@@ -1,8 +1,8 @@
 use super::super::DashboardAction as Action;
 use super::{button, empty};
 use super::{error, list};
-use crate::capsule::module::dashboard::DashboardModule;
-use crate::capsule::widgets::style;
+use crate::island::module::dashboard::DashboardModule;
+use crate::island::widgets::style;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use ui::components::Input;
 use ui::theme::Theme;

@@ -17,9 +17,9 @@ use super::common::{
     slider_row, toggle_row,
 };
 use super::SettingsView;
-use crate::capsule::animator::Animator;
-use crate::capsule::orbit::Preview;
-use crate::capsule::widgets::style;
+use crate::island::animator::Animator;
+use crate::island::orbit::Preview;
+use crate::island::widgets::style;
 use crate::settings::Settings;
 
 fn text(key: &str, cx: &App) -> String {

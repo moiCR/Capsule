@@ -1,5 +1,5 @@
 use super::{HEIGHT, Settings, WIDTH, header, views};
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
 use ui::theme::Theme;
 

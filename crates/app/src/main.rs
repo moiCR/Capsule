@@ -1,5 +1,7 @@
 pub mod lockscreen;
-pub mod capsule;
+pub mod island;
+pub use island as capsule;
+pub mod bar;
 pub mod panel;
 pub mod settings;
 pub mod wallpaper;

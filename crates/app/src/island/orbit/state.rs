@@ -2,14 +2,14 @@ use super::{
     BADGE_OVERHANG, ORB_SIZE, OrbitId, OrbitVisual, POWER_PANEL_HEIGHT, Snapshot,
     USAGE_PANEL_HEIGHT, USAGE_PANEL_WIDTH, animator::Animator,
 };
-use crate::capsule::CapsuleLocation;
+use crate::island::CapsuleLocation;
 use gpui::{Bounds, Pixels, Size, point, px};
 use services::RecordStatus;
 use std::time::{Duration, Instant};
 
 pub(super) struct OrbExpanded {
     pub open: bool,
-    animator: crate::capsule::animator::Animator,
+    animator: crate::island::animator::Animator,
     height: f32,
 }
 
@@ -18,7 +18,7 @@ impl OrbExpanded {
         Self {
             open: false,
             height,
-            animator: crate::capsule::animator::Animator::new(
+            animator: crate::island::animator::Animator::new(
                 gpui::size(px(ORB_SIZE), px(ORB_SIZE)),
                 Duration::ZERO,
             ),
@@ -392,7 +392,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::capsule::{
+    use crate::island::{
         CapsuleLocation,
         satellite::layout::{SatelliteLayout, Side},
         window_state::visible_bounds,

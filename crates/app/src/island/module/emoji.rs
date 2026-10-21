@@ -1,7 +1,7 @@
 pub(crate) mod model;
 
 use super::{CapsuleModule, CapsuleModuleEvent};
-use crate::capsule::widgets::emoji as widgets;
+use crate::island::widgets::emoji as widgets;
 use gpui::{
     Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render, Size,
     Subscription, Window, prelude::*, px,

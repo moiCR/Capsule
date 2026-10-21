@@ -3,19 +3,19 @@ mod connectivity;
 mod tray;
 use super::error;
 use super::{button, empty};
-use crate::capsule::module::dashboard::DashboardModule;
+use crate::island::module::dashboard::DashboardModule;
 use gpui::{AnyElement, Context, IntoElement, canvas, div, prelude::*, px, svg};
 use ui::theme::Theme;
 pub(crate) fn render_satellite(
     module: &DashboardModule,
-    visual: &crate::capsule::satellite::SatelliteVisual,
+    visual: &crate::island::satellite::SatelliteVisual,
     radius: f32,
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    use crate::capsule::satellite::SatelliteId;
+    use crate::island::satellite::SatelliteId;
     let body = match &visual.id {
-        SatelliteId::Calendar => crate::capsule::widgets::satellite::calendar::render(
+        SatelliteId::Calendar => crate::island::widgets::satellite::calendar::render(
             (visual.layout.content_size.height - px(2.0)).max(px(0.0)),
             cx,
         )
@@ -118,7 +118,7 @@ pub(crate) fn render_satellite(
     let height = measured_height
         .unwrap_or(visual.layout.bounds.size.height)
         .min(visual.layout.bounds.size.height);
-    crate::capsule::widgets::satellite::surface::render(
+    crate::island::widgets::satellite::surface::render(
         visual.layout,
         if measured_height.is_some() {
             visual.progress
@@ -149,7 +149,7 @@ pub(crate) fn render_satellite(
                         {
                             bounds.size.height = *height + px(2.0);
                             cx.emit(
-                                crate::capsule::module::CapsuleModuleEvent::SatelliteBounds(
+                                crate::island::module::CapsuleModuleEvent::SatelliteBounds(
                                     id, bounds,
                                 ),
                             );

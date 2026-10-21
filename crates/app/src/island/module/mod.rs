@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{AnyView, AppContext, Context, Entity, Pixels, Size, Subscription};
 
-use crate::capsule::{
+use crate::island::{
     Capsule, CapsuleLocation, animator::Animator, module::launcher::LauncherModule,
 };
 

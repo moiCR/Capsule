@@ -1,5 +1,5 @@
 use super::style;
-use crate::capsule::module::{CapsuleModuleEvent, notification::NotificationModule};
+use crate::island::module::{CapsuleModuleEvent, notification::NotificationModule};
 use gpui::{AnyElement, Context, FontWeight, IntoElement, div, img, prelude::*, px, svg};
 use services::{NotificationItem, NotificationStore};
 use std::path::PathBuf;
