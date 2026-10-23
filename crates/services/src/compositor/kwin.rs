@@ -24,6 +24,9 @@ trait VirtualDesktopManager {
     #[zbus(name = "setCurrent")]
     fn set_current(&self, desktop: &str) -> zbus::Result<()>;
 
+    #[zbus(name = "createDesktop")]
+    fn create_desktop(&self, position: u32, name: &str) -> zbus::Result<String>;
+
     #[zbus(signal, name = "currentChanged")]
     fn current_changed(&self, desktop: &str) -> zbus::Result<()>;
 
@@ -31,14 +34,24 @@ trait VirtualDesktopManager {
     fn desktops_changed(&self) -> zbus::Result<()>;
 }
 
-async fn desktop_ids(proxy: &VirtualDesktopManagerProxy<'_>) -> zbus::Result<Vec<String>> {
+async fn desktop_entries(
+    proxy: &VirtualDesktopManagerProxy<'_>,
+) -> zbus::Result<Vec<(String, String)>> {
     let value = proxy.desktop_data().await?;
     if value.value_signature() == <Vec<String> as zbus::zvariant::Type>::SIGNATURE {
-        return Ok(Vec::<String>::try_from(value)?);
+        let ids = Vec::<String>::try_from(value)?;
+        return Ok(ids
+            .into_iter()
+            .enumerate()
+            .map(|(i, id)| (id, (i + 1).to_string()))
+            .collect());
     }
     let mut desktops = Vec::<(u32, String, String)>::try_from(value)?;
     desktops.sort_by_key(|(position, _, _)| *position);
-    Ok(desktops.into_iter().map(|(_, id, _)| id).collect())
+    Ok(desktops
+        .into_iter()
+        .map(|(_, id, name)| (id, name))
+        .collect())
 }
 
 #[derive(Default)]
@@ -57,20 +70,42 @@ impl KWin {
         Self::default()
     }
 
+    pub async fn focused_application(&self) -> Option<String> {
+        let mut command = tokio::process::Command::new("kdotool");
+        command.args(["getactivewindow", "getwindowclassname"]);
+        command.kill_on_drop(true);
+
+        if let Ok(Ok(output)) =
+            tokio::time::timeout(Duration::from_millis(200), command.output()).await
+        {
+            if output.status.success() {
+                let class_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !class_name.is_empty() && !class_name.eq_ignore_ascii_case("failed") {
+                    return Some(class_name);
+                }
+            }
+        }
+
+        None
+    }
+
     async fn listen(
         &self,
         current_workspace: &ArcSwap<WorkspaceInfo>,
         tx: &broadcast::Sender<WorkspaceInfo>,
     ) -> zbus::Result<()> {
-        let connection = zbus::Connection::session().await?;
+        let connection = crate::dbus_util::get_shared_session_conn()
+            .await
+            .ok_or_else(|| zbus::Error::Failure("No session D-Bus connection available".into()))?;
         let proxy = VirtualDesktopManagerProxy::builder(&connection)
             .cache_properties(zbus::proxy::CacheProperties::No)
             .build()
             .await?;
         let mut changes = proxy.receive_current_changed().await?;
         let mut desktop_changes = proxy.receive_desktops_changed().await?;
-        let current = proxy.current_desktop().await?;
-        self.update(&proxy, &current, current_workspace, tx).await?;
+
+        let current = proxy.current_desktop().await.unwrap_or_default();
+        let _ = self.update(&proxy, &current, current_workspace, tx).await;
 
         loop {
             tokio::select! {
@@ -81,7 +116,7 @@ impl KWin {
                 }
                 change = desktop_changes.next() => {
                     if change.is_none() { break; }
-                    let current = proxy.current_desktop().await?;
+                    let current = proxy.current_desktop().await.unwrap_or_default();
                     self.update(&proxy, &current, current_workspace, tx).await?;
                 }
             }
@@ -98,17 +133,22 @@ impl KWin {
         current_workspace: &ArcSwap<WorkspaceInfo>,
         tx: &broadcast::Sender<WorkspaceInfo>,
     ) -> zbus::Result<()> {
-        let desktops = desktop_ids(proxy).await?;
+        let desktops = desktop_entries(proxy).await?;
         let workspaces: Vec<_> = desktops
             .iter()
             .enumerate()
-            .map(|(index, _)| {
+            .map(|(index, (_, name))| {
                 let num = i32::try_from(index + 1)
                     .map_err(|error| zbus::Error::Failure(error.to_string()))?;
+                let display_name = if name.trim().is_empty() {
+                    num.to_string()
+                } else {
+                    name.clone()
+                };
                 Ok(WorkspaceInfo {
                     id: i64::from(num),
                     num,
-                    name: num.to_string(),
+                    name: display_name,
                     is_special: false,
                     special_name: None,
                 })
@@ -116,9 +156,10 @@ impl KWin {
             .collect::<zbus::Result<_>>()?;
         let workspace = desktops
             .iter()
-            .position(|desktop| desktop == current)
+            .position(|(id, _)| id == current)
             .and_then(|index| workspaces.get(index))
-            .cloned();
+            .cloned()
+            .or_else(|| workspaces.first().cloned());
         self.state.store(Arc::new(WorkspaceState {
             current: workspace.clone(),
             workspaces,
@@ -147,11 +188,21 @@ fn parse_kscreen_refresh_rate(json_bytes: &[u8]) -> Option<f64> {
                 .find(|o| o.get("enabled").and_then(|e| e.as_bool()) == Some(true))
         })?;
 
-    let current_mode_id = active_output.get("currentModeId")?.as_str()?;
+    let current_mode_id = active_output.get("currentModeId")?;
     let modes = active_output.get("modes")?.as_array()?;
 
     for mode in modes {
-        let is_current = mode.get("id").and_then(|id| id.as_str()) == Some(current_mode_id);
+        let mode_id = mode.get("id")?;
+        let is_current = if let (Some(curr_str), Some(m_str)) =
+            (current_mode_id.as_str(), mode_id.as_str())
+        {
+            curr_str == m_str
+        } else if let (Some(curr_num), Some(m_num)) = (current_mode_id.as_i64(), mode_id.as_i64()) {
+            curr_num == m_num
+        } else {
+            current_mode_id.to_string() == mode_id.to_string()
+        };
+
         if is_current {
             if let Some(rate) = mode.get("refreshRate").and_then(|r| r.as_f64()) {
                 return Some(rate);
@@ -189,22 +240,32 @@ impl Compositor for KWin {
         };
         crate::spawn_tokio(async move {
             let result: zbus::Result<()> = async {
-                let connection = zbus::Connection::session().await?;
+                let connection = crate::dbus_util::get_shared_session_conn()
+                    .await
+                    .ok_or_else(|| {
+                        zbus::Error::Failure("No session D-Bus connection available".into())
+                    })?;
                 let proxy = VirtualDesktopManagerProxy::builder(&connection)
                     .cache_properties(zbus::proxy::CacheProperties::No)
                     .build()
                     .await?;
-                let desktops = desktop_ids(&proxy).await?;
-                let desktop = desktops.get(index).ok_or_else(|| {
-                    zbus::Error::Failure(format!("Unknown KWin workspace ID: {id}"))
-                })?;
-                match proxy.set_current_desktop(desktop).await {
-                    Err(
-                        zbus::fdo::Error::UnknownProperty(_)
-                        | zbus::fdo::Error::PropertyReadOnly(_)
-                        | zbus::fdo::Error::UnknownMethod(_),
-                    ) => proxy.set_current(desktop).await,
-                    result => result.map_err(Into::into),
+                let desktops = desktop_entries(&proxy).await?;
+                if let Some((desktop, _)) = desktops.get(index) {
+                    match proxy.set_current_desktop(desktop).await {
+                        Err(
+                            zbus::fdo::Error::UnknownProperty(_)
+                            | zbus::fdo::Error::PropertyReadOnly(_)
+                            | zbus::fdo::Error::UnknownMethod(_),
+                        ) => proxy.set_current(desktop).await,
+                        result => result.map_err(Into::into),
+                    }
+                } else {
+                    let target_pos = u32::try_from(index).unwrap_or(0);
+                    let name = format!("Desktop {}", index + 1);
+                    if let Ok(new_id) = proxy.create_desktop(target_pos, &name).await {
+                        let _ = proxy.set_current_desktop(&new_id).await;
+                    }
+                    Ok(())
                 }
             }
             .await;
@@ -212,6 +273,26 @@ impl Compositor for KWin {
                 crate::log_warn!("COMPOSITOR", "Failed to switch KWin workspace: {error}");
             }
         });
+    }
+
+    fn logout(&self) -> futures::future::BoxFuture<'_, anyhow::Result<()>> {
+        Box::pin(async {
+            if let Some(conn) = crate::dbus_util::get_shared_session_conn().await {
+                let call = conn
+                    .call_method(
+                        Some("org.kde.Shutdown"),
+                        "/Shutdown",
+                        Some("org.kde.Shutdown"),
+                        "logout",
+                        &(),
+                    )
+                    .await;
+                if call.is_ok() {
+                    return Ok(());
+                }
+            }
+            crate::SystemService::logout().await
+        })
     }
 }
 

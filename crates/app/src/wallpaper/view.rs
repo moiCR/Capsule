@@ -1,6 +1,6 @@
+use super::animator::WallpaperAnimator;
 use gpui::{IntoElement, Window, div, img, prelude::*, px};
 use services::WallpaperTransition;
-use super::animator::WallpaperAnimator;
 
 pub fn render_wallpaper(animator: &WallpaperAnimator, window: &mut Window) -> impl IntoElement {
     let viewport = window.viewport_size();

@@ -55,7 +55,7 @@ impl CompositorBackend {
     fn detect(desktop: &str, kwin: bool, hyprland: bool, niri: bool, mango: bool) -> Self {
         for component in desktop.split(':') {
             match component.trim().to_ascii_lowercase().as_str() {
-                "kde" | "kinetic" => return Self::KWin,
+                "kde" | "plasma" | "kinetic" => return Self::KWin,
                 "hyprland" => return Self::Hyprland,
                 "niri" => return Self::Niri,
                 "mango" | "mangowm" => return Self::Mango,
@@ -92,12 +92,17 @@ impl CompositorService {
         self.compositor.logout().await
     }
 
+    pub fn is_kwin(&self) -> bool {
+        self.backend == CompositorBackend::KWin
+    }
+
     pub fn new() -> Self {
         let refresh_rate = Arc::new(ArcSwap::from_pointee(60.0));
         let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
         let backend = CompositorBackend::detect(
             &desktop,
-            std::env::var_os("KWIN_WAYLAND").is_some(),
+            std::env::var_os("KWIN_WAYLAND").is_some()
+                || std::env::var_os("KDE_FULL_SESSION").is_some(),
             std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some(),
             std::env::var_os(niri_ipc::socket::SOCKET_PATH_ENV).is_some(),
             std::env::var_os(mango_ipc::SOCKET_PATH_ENV).is_some(),
@@ -146,6 +151,9 @@ impl CompositorService {
     pub async fn focused_application(&self) -> Option<String> {
         if let Some(mango) = &self.mango {
             return mango.focused_application().await;
+        }
+        if let Some(kwin) = &self.kwin {
+            return kwin.focused_application().await;
         }
         let mut command = match self.backend {
             CompositorBackend::Hyprland => {
@@ -274,9 +282,12 @@ impl CompositorService {
                 backend.refresh().await;
             }
             let mango = self.mango.clone();
+            let kwin = self.kwin.clone();
             let mut rate = crate::spawn_blocking(move || {
                 std::panic::catch_unwind(|| {
                     if let Some(backend) = mango {
+                        backend.get_refresh_rate()
+                    } else if let Some(backend) = kwin {
                         backend.get_refresh_rate()
                     } else if use_hyprland {
                         hyprland::Hyprland::new().get_refresh_rate()
@@ -343,6 +354,8 @@ mod tests {
             ("Hyprland", CompositorBackend::Hyprland),
             ("mango", CompositorBackend::Mango),
             ("KDE", CompositorBackend::KWin),
+            ("Plasma", CompositorBackend::KWin),
+            ("KDE:plasma", CompositorBackend::KWin),
         ] {
             assert_eq!(
                 CompositorBackend::detect(desktop, true, true, true, true),

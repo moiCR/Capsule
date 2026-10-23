@@ -236,8 +236,12 @@ impl State {
         let duration = self.effective_duration(duration);
         self.expanded
             .set_open_with_delay(open && self.orbits.usage, duration, Duration::ZERO, now);
-        self.power_expanded
-            .set_open_with_delay(open && self.orbits.power, duration, Duration::ZERO, now);
+        self.power_expanded.set_open_with_delay(
+            open && self.orbits.power,
+            duration,
+            Duration::ZERO,
+            now,
+        );
     }
 
     pub fn close(&mut self, duration: Duration, now: Instant) {
@@ -477,7 +481,8 @@ mod tests {
         let panel_size = gpui::size(px(320.0), px(300.0));
         let (left_gap, right_gap) = state.layout_gaps(px(8.0));
         let left = SatelliteLayout::new(viewport, capsule, panel_size, left_gap, Side::Left, 1.0);
-        let right = SatelliteLayout::new(viewport, capsule, panel_size, right_gap, Side::Right, 1.0);
+        let right =
+            SatelliteLayout::new(viewport, capsule, panel_size, right_gap, Side::Right, 1.0);
         assert_eq!(left.side, Side::Left);
         assert_eq!(right.side, Side::Right);
         assert!(left.bounds.right() <= visuals[0].bounds.origin.x);

@@ -86,8 +86,8 @@ impl EmojiModule {
         let control = modifiers.control || modifiers.platform;
         let shift = modifiers.shift;
 
-        if key == "escape" {
-            if !self.search_input.is_empty() {
+        if (key == "f4" && modifiers.alt) || key == "escape" {
+            if key == "escape" && !self.search_input.is_empty() {
                 self.search_input.clear();
                 self.search(String::new(), cx);
             } else {
@@ -103,7 +103,10 @@ impl EmojiModule {
             return;
         }
 
-        if (key == "up" || key == "down" || key == "pageup" || key == "pagedown") && !control && !shift {
+        if (key == "up" || key == "down" || key == "pageup" || key == "pagedown")
+            && !control
+            && !shift
+        {
             self.navigate(key, cx);
             cx.stop_propagation();
             return;

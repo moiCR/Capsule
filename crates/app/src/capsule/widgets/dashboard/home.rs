@@ -156,13 +156,15 @@ fn slider(
     .track_bounds(&tracker)
     .track_color(track_color)
     .active_color(active)
-    .on_mouse_down(cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-        if brightness {
-            this.start_brightness(event.position.x.into(), cx);
-        } else {
-            this.start_volume(event.position.x.into(), cx);
-        }
-    }))
+    .on_mouse_down(
+        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+            if brightness {
+                this.start_brightness(event.position.x.into(), cx);
+            } else {
+                this.start_volume(event.position.x.into(), cx);
+            }
+        }),
+    )
     .on_mouse_up(cx.listener(move |this, _, _, cx| {
         if brightness {
             this.finish_brightness(cx);

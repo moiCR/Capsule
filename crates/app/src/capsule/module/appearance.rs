@@ -282,6 +282,7 @@ impl AppearanceModule {
             "end" => self.navigate(self.count().saturating_sub(1), cx),
             "enter" => self.apply(cx),
             "escape" => self.back(cx),
+            "f4" if event.keystroke.modifiers.alt => self.back(cx),
             _ => {}
         }
     }

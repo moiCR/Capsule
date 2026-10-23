@@ -3,9 +3,7 @@ use std::time::Duration;
 use tokio::process::Command;
 
 pub async fn fetch_brightness() -> Result<u32> {
-    let child = Command::new("brightnessctl")
-        .arg("info")
-        .output();
+    let child = Command::new("brightnessctl").arg("info").output();
 
     if let Ok(Ok(output)) = tokio::time::timeout(Duration::from_secs(2), child).await {
         let text = String::from_utf8_lossy(&output.stdout);

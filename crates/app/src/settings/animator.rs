@@ -76,7 +76,9 @@ impl SettingsAnimator {
             }
         } else {
             let entry_duration = self.duration.mul_f32(0.88).max(Duration::from_millis(50));
-            let elapsed = now.saturating_duration_since(self.entry_start).as_secs_f32();
+            let elapsed = now
+                .saturating_duration_since(self.entry_start)
+                .as_secs_f32();
             let total = entry_duration.as_secs_f32();
             if elapsed >= total {
                 self.offset_y = 0.0;
@@ -90,7 +92,9 @@ impl SettingsAnimator {
         }
 
         if !self.section_duration.is_zero() && self.section_progress < 1.0 {
-            let elapsed = now.saturating_duration_since(self.section_start).as_secs_f32();
+            let elapsed = now
+                .saturating_duration_since(self.section_start)
+                .as_secs_f32();
             let total = self.section_duration.as_secs_f32();
             if elapsed >= total {
                 self.section_progress = 1.0;

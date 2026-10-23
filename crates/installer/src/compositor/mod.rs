@@ -20,17 +20,23 @@ pub enum Compositor {
     Hyprland,
     Niri,
     MangoWm,
+    KWin,
 }
 
 impl Compositor {
-    pub const ALL: &'static [Compositor] =
-        &[Compositor::Hyprland, Compositor::Niri, Compositor::MangoWm];
+    pub const ALL: &'static [Compositor] = &[
+        Compositor::Hyprland,
+        Compositor::Niri,
+        Compositor::MangoWm,
+        Compositor::KWin,
+    ];
 
     pub fn name(&self) -> &'static str {
         match self {
             Self::Hyprland => "Hyprland",
             Self::Niri => "Niri",
             Self::MangoWm => "MangoWM",
+            Self::KWin => "KWin (Plasma Wayland)",
         }
     }
 
@@ -45,6 +51,9 @@ impl Compositor {
             Self::MangoWm => {
                 "Lightweight wlroots & scenefx Wayland compositor with scroller & master-stack layouts"
             }
+            Self::KWin => {
+                "KDE's robust Wayland window manager & compositor, paired with Capsule shell"
+            }
         }
     }
 
@@ -53,6 +62,7 @@ impl Compositor {
             Self::Hyprland => &["Hyprland", "hyprland"],
             Self::Niri => &["niri"],
             Self::MangoWm => &["mango", "mangowm", "mangowc"],
+            Self::KWin => &["kwin_wayland"],
         }
     }
 
@@ -89,24 +99,24 @@ impl CompositorManager {
             .or_else(|_| fs::read_to_string("/usr/lib/os-release"))
             .unwrap_or_default();
 
-        let backend: Arc<dyn CompositorBackend> = match DependsManager::parse_os_release(&os_release)
-        {
-            Some(DistroKind::ArchBased(_)) => Arc::new(ArchCompositorBackend::new()),
-            Some(DistroKind::Debian(_)) => Arc::new(DebianCompositorBackend),
-            Some(DistroKind::Ubuntu(_)) => Arc::new(UbuntuCompositorBackend),
-            Some(DistroKind::Fedora(_)) => Arc::new(FedoraCompositorBackend),
-            None => {
-                if system::command_exists("pacman") {
-                    Arc::new(ArchCompositorBackend::new())
-                } else if system::command_exists("dnf") {
-                    Arc::new(FedoraCompositorBackend)
-                } else if system::command_exists("apt-get") {
-                    Arc::new(DebianCompositorBackend)
-                } else {
-                    Arc::new(ArchCompositorBackend::new())
+        let backend: Arc<dyn CompositorBackend> =
+            match DependsManager::parse_os_release(&os_release) {
+                Some(DistroKind::ArchBased(_)) => Arc::new(ArchCompositorBackend::new()),
+                Some(DistroKind::Debian(_)) => Arc::new(DebianCompositorBackend),
+                Some(DistroKind::Ubuntu(_)) => Arc::new(UbuntuCompositorBackend),
+                Some(DistroKind::Fedora(_)) => Arc::new(FedoraCompositorBackend),
+                None => {
+                    if system::command_exists("pacman") {
+                        Arc::new(ArchCompositorBackend::new())
+                    } else if system::command_exists("dnf") {
+                        Arc::new(FedoraCompositorBackend)
+                    } else if system::command_exists("apt-get") {
+                        Arc::new(DebianCompositorBackend)
+                    } else {
+                        Arc::new(ArchCompositorBackend::new())
+                    }
                 }
-            }
-        };
+            };
 
         Self::new(backend)
     }
@@ -179,10 +189,7 @@ impl CompositorManager {
             .map_err(|e| format!("Failed waiting on compositor installation: {}", e))?;
 
         if status.success() {
-            on_log(format!(
-                "==> {} installed successfully!",
-                compositor.name()
-            ));
+            on_log(format!("==> {} installed successfully!", compositor.name()));
             Ok(())
         } else {
             Err(format!(
@@ -200,10 +207,11 @@ mod tests {
 
     #[test]
     fn test_all_compositors_metadata() {
-        assert_eq!(Compositor::ALL.len(), 3);
+        assert_eq!(Compositor::ALL.len(), 4);
         assert_eq!(Compositor::Hyprland.name(), "Hyprland");
         assert_eq!(Compositor::Niri.name(), "Niri");
         assert_eq!(Compositor::MangoWm.name(), "MangoWM");
+        assert_eq!(Compositor::KWin.name(), "KWin (Plasma Wayland)");
     }
 
     #[test]
@@ -227,6 +235,7 @@ mod tests {
                 Compositor::Hyprland => assert!(f_joined.contains("solopasha/hyprland")),
                 Compositor::Niri => assert!(f_joined.contains("yalter/niri")),
                 Compositor::MangoWm => assert!(f_joined.contains("MangoWC")),
+                Compositor::KWin => assert!(f_joined.contains("kwin-wayland")),
             }
 
             let d_cmd = debian.build_compositor_install_command(comp);

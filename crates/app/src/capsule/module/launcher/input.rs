@@ -20,6 +20,12 @@ impl LauncherModule {
             return;
         }
 
+        // When Alt+F4 is pressed, close launcher immediately
+        if key == "f4" && event.keystroke.modifiers.alt {
+            cx.emit(CapsuleModuleEvent::Close);
+            return;
+        }
+
         // When escape is pressed, clear search first, or close launcher if already empty
         if key == "escape" {
             if !self.search_input.is_empty() {

@@ -1,8 +1,6 @@
 use crate::capsule::module::appearance::AppearanceModule;
 use crate::capsule::widgets::style;
-use gpui::{
-    AnyElement, ColorExt, Context, IntoElement, div, prelude::*, px, svg,
-};
+use gpui::{AnyElement, ColorExt, Context, IntoElement, div, prelude::*, px, svg};
 use ui::components::{Button, ButtonVariant};
 use ui::theme::Theme;
 

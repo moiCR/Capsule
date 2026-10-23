@@ -234,7 +234,12 @@ impl Animator {
         self.transition_to_with_delay(target, Duration::ZERO, now);
     }
 
-    pub fn transition_to_with_delay(&mut self, target: Size<Pixels>, delay: Duration, now: Instant) {
+    pub fn transition_to_with_delay(
+        &mut self,
+        target: Size<Pixels>,
+        delay: Duration,
+        now: Instant,
+    ) {
         if self.target == target {
             return;
         }
@@ -325,18 +330,14 @@ impl Animator {
         let expanding =
             self.target.width > self.start.width || self.target.height > self.start.height;
 
-        let (width_eased, height_eased) = morph_progress(
-            progress,
-            expanding,
-            self.animation,
-            self.spring_bounciness,
-        );
+        let (width_eased, height_eased) =
+            morph_progress(progress, expanding, self.animation, self.spring_bounciness);
 
-        let raw_width = (self.start.width + (self.target.width - self.start.width) * width_eased)
+        let raw_width =
+            (self.start.width + (self.target.width - self.start.width) * width_eased).max(px(1.0));
+        let raw_height = (self.start.height
+            + (self.target.height - self.start.height) * height_eased)
             .max(px(1.0));
-        let raw_height =
-            (self.start.height + (self.target.height - self.start.height) * height_eased)
-                .max(px(1.0));
 
         self.current = if self.squash_stretch {
             apply_squash_stretch(self.start, self.target, raw_width, raw_height, progress)
@@ -534,8 +535,8 @@ mod tests {
             width: px(300.0),
             height: px(40.0),
         };
-        let mut animator = Animator::new(start, Duration::from_millis(200))
-            .with_squash_stretch(true);
+        let mut animator =
+            Animator::new(start, Duration::from_millis(200)).with_squash_stretch(true);
         animator.transition_to(target, now);
         assert!(animator.advance(now + Duration::from_millis(50)));
         assert!(animator.size().height < px(40.0));
@@ -546,8 +547,8 @@ mod tests {
     #[test]
     fn reduced_motion_skips_spatial_morph_and_shortens_fade() {
         let now = Instant::now();
-        let mut animator = Animator::new(size(100.0), Duration::from_millis(300))
-            .with_reduced_motion(true);
+        let mut animator =
+            Animator::new(size(100.0), Duration::from_millis(300)).with_reduced_motion(true);
         animator.transition_to(size(300.0), now);
         assert_eq!(animator.size(), size(300.0));
         assert!(!animator.animating());

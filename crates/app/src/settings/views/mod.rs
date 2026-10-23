@@ -22,18 +22,10 @@ pub trait SettingsView: 'static {
     ) -> bool {
         false
     }
-    fn handle_mouse_move(
-        &mut self,
-        _event: &MouseMoveEvent,
-        _cx: &mut Context<Settings>,
-    ) -> bool {
+    fn handle_mouse_move(&mut self, _event: &MouseMoveEvent, _cx: &mut Context<Settings>) -> bool {
         false
     }
-    fn handle_mouse_up(
-        &mut self,
-        _event: &MouseUpEvent,
-        _cx: &mut Context<Settings>,
-    ) -> bool {
+    fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _cx: &mut Context<Settings>) -> bool {
         false
     }
 }

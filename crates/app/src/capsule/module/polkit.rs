@@ -196,7 +196,7 @@ impl PolkitModule {
         cx: &mut Context<Self>,
     ) {
         let key = event.keystroke.key.as_str();
-        if key == "escape" {
+        if key == "escape" || (key == "f4" && event.keystroke.modifiers.alt) {
             self.cancel(cx);
             cx.stop_propagation();
             return;

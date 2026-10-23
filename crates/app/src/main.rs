@@ -1,5 +1,5 @@
-pub mod lockscreen;
 pub mod capsule;
+pub mod lockscreen;
 pub mod panel;
 pub mod settings;
 pub mod wallpaper;
@@ -78,6 +78,7 @@ fn run_application() {
     let app = application().with_assets(Assets {});
 
     app.run(|cx| {
+        cx.set_quit_mode(gpui::QuitMode::Explicit);
         let font_data = assets::load_fonts();
         if let Err(err) = cx.text_system().add_fonts(font_data) {
             eprintln!("Failed to load fonts: {err}");
@@ -95,8 +96,11 @@ fn run_application() {
         cx.set_global(theme_manager);
         settings::appearance::initialize(cx);
 
+        let mut ipc_subscriber = ipc_subscriber;
+        ipc_subscriber.start_listener();
+
         wallpaper::WallpaperPanel::open(cx);
-        panel::CapsulePanel::open(cx, ipc_subscriber);
+        panel::CapsulePanel::open(cx);
     });
 }
 
@@ -109,18 +113,16 @@ USAGE:
 
 COMMANDS:
     (no args)           Start Capsule daemon process
-    toggle-launcher     Toggle application launcher (alias: launcher)
-    toggle-dashboard    Toggle main dashboard panel (alias: dashboard)
-    toggle-themes       Toggle theme selector (aliases: themes, select-theme)
-    toggle-wallpapers   Toggle wallpaper selector (aliases: wallpapers, select-wallpaper)
-    show-themes         Show theme selector
-    show-wallpapers     Show wallpaper selector
-    toggle-notification Toggle notification panel (alias: notifications)
-    toggle-clipboard    Toggle clipboard history manager (alias: clipboard, clip)
-    show-launcher       Show application launcher
-    show-dashboard      Show main dashboard panel
-    show-notification   Show notification panel
-    show-clipboard      Show clipboard history manager
+    launcher            Toggle application launcher (alias: launcher)
+    dashboard           Toggle main dashboard panel (alias: dashboard)
+    themes              Toggle theme selector (aliases: themes, select-theme)
+    themes              Show theme selector
+    notification        Toggle notification panel (alias: notifications)
+    clipboard           Toggle clipboard history manager (alias: clip)
+    launcher            Show application launcher
+    dashboard           Show main dashboard panel
+    notification        Show notification panel
+    clipboard           Show clipboard history manager
     lock                Lock screen (alias: lockscreen)
     terminal            Launch default terminal (alias: term)
     browser             Launch default browser (alias: web)

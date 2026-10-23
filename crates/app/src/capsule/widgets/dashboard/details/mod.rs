@@ -148,11 +148,9 @@ pub(crate) fn render_satellite(
                                 module.satellite_heights.iter().find(|(key, _)| *key == id)
                         {
                             bounds.size.height = *height + px(2.0);
-                            cx.emit(
-                                crate::capsule::module::CapsuleModuleEvent::SatelliteBounds(
-                                    id, bounds,
-                                ),
-                            );
+                            cx.emit(crate::capsule::module::CapsuleModuleEvent::SatelliteBounds(
+                                id, bounds,
+                            ));
                         }
                     });
                 });

@@ -240,13 +240,10 @@ impl InstallerApp {
 
         thread::spawn(move || {
             let tx_log = tx.clone();
-            let res = depends.install_missing_packages(
-                &missing,
-                sudo_pass.as_deref(),
-                move |line| {
+            let res =
+                depends.install_missing_packages(&missing, sudo_pass.as_deref(), move |line| {
                     let _ = tx_log.send(WorkerMsg::Log(line));
-                },
-            );
+                });
             let _ = tx.send(WorkerMsg::DepsDone(res));
         });
 
@@ -303,9 +300,13 @@ impl InstallerApp {
                         format!("Installing {} compositor...", selected_comp.name()),
                     ));
                     let tx_log = tx.clone();
-                    comp_mgr.install_compositor(selected_comp, sudo_pass.as_deref(), move |line| {
-                        let _ = tx_log.send(WorkerMsg::Log(line));
-                    })?;
+                    comp_mgr.install_compositor(
+                        selected_comp,
+                        sudo_pass.as_deref(),
+                        move |line| {
+                            let _ = tx_log.send(WorkerMsg::Log(line));
+                        },
+                    )?;
                 }
 
                 if was_running {
@@ -372,6 +373,20 @@ impl InstallerApp {
                 ));
                 if let Err(e) = install::create_desktop_entry(sudo_pass.as_deref()) {
                     return Err(format!("Failed to create desktop entry: {}", e));
+                }
+
+                let _ = tx.send(WorkerMsg::Progress(
+                    0.98,
+                    "Setting up KWin + Capsule session for login greeters...".to_string(),
+                ));
+                let _ = tx.send(WorkerMsg::Log(
+                    "Registering /usr/share/wayland-sessions/kwin-capsule.desktop...".to_string(),
+                ));
+                if let Err(e) = install::create_kwin_capsule_session(sudo_pass.as_deref()) {
+                    let _ = tx.send(WorkerMsg::Log(format!(
+                        "Note: Could not register wayland-session: {}",
+                        e
+                    )));
                 }
 
                 let _ = tx.send(WorkerMsg::Progress(

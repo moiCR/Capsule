@@ -100,6 +100,120 @@ pub fn create_desktop_entry(password: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+const KWIN_CAPSULE_SESSION_CONTENT: &str = r#"#!/usr/bin/env bash
+export XDG_CURRENT_DESKTOP="KDE:Capsule"
+export XDG_SESSION_DESKTOP="KDE"
+export KDE_FULL_SESSION=true
+if [[ -z "${KDE_SESSION_VERSION:-}" ]]; then
+    if command -v kwin_wayland &>/dev/null && kwin_wayland --version 2>&1 | grep -q " 6\."; then
+        export KDE_SESSION_VERSION=6
+    else
+        export KDE_SESSION_VERSION=5
+    fi
+fi
+
+if command -v dbus-update-activation-environment &>/dev/null; then
+    dbus-update-activation-environment --systemd --all
+fi
+
+exec kwin_wayland --exit-with-session /usr/local/bin/capsule
+"#;
+
+const WAYLAND_SESSION_DESKTOP_CONTENT: &str = r#"[Desktop Entry]
+Name=KWin + Capsule
+Comment=KWin Wayland Compositor with Capsule Shell
+Exec=/usr/local/bin/capsule-session-kwin
+Type=Application
+DesktopNames=KDE;Capsule;
+"#;
+
+pub fn create_kwin_capsule_session(password: Option<&str>) -> Result<()> {
+    let script_dest = Path::new("/usr/local/bin/capsule-session-kwin");
+    let session_dir = Path::new("/usr/share/wayland-sessions");
+    let session_file = session_dir.join("kwin-capsule.desktop");
+
+    let temp_script =
+        std::env::temp_dir().join(format!("capsule-kwin-session-{}.sh", std::process::id()));
+    fs::write(&temp_script, KWIN_CAPSULE_SESSION_CONTENT)?;
+
+    let _ = run_sudo_cmd(&["mkdir", "-p", "/usr/local/bin"], password);
+    run_sudo_cmd(
+        &[
+            "cp",
+            temp_script.to_string_lossy().as_ref(),
+            script_dest.to_string_lossy().as_ref(),
+        ],
+        password,
+    )?;
+    run_sudo_cmd(
+        &["chmod", "755", script_dest.to_string_lossy().as_ref()],
+        password,
+    )?;
+    let _ = fs::remove_file(temp_script);
+
+    if !session_dir.exists() {
+        let _ = run_sudo_cmd(&["mkdir", "-p", "/usr/share/wayland-sessions"], password);
+    }
+
+    let temp_desktop =
+        std::env::temp_dir().join(format!("kwin-capsule-{}.desktop", std::process::id()));
+    fs::write(&temp_desktop, WAYLAND_SESSION_DESKTOP_CONTENT)?;
+
+    run_sudo_cmd(
+        &[
+            "cp",
+            temp_desktop.to_string_lossy().as_ref(),
+            session_file.to_string_lossy().as_ref(),
+        ],
+        password,
+    )?;
+    run_sudo_cmd(
+        &["chmod", "644", session_file.to_string_lossy().as_ref()],
+        password,
+    )?;
+    let _ = fs::remove_file(temp_desktop);
+
+    let _ = configure_kwin_rules();
+
+    Ok(())
+}
+
+pub fn configure_kwin_rules() -> Result<()> {
+    if let Some(home) =
+        dirs::home_dir().or_else(|| std::env::var("HOME").ok().map(std::path::PathBuf::from))
+    {
+        let config_dir = home.join(".config");
+        let _ = fs::create_dir_all(&config_dir);
+        let rules_path = config_dir.join("kwinrulesrc");
+        let content = if rules_path.exists() {
+            fs::read_to_string(&rules_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        if !content.contains("wmclass=capsule-panel") {
+            let mut new_content = content;
+            if !new_content.contains("[General]") {
+                new_content.push_str("[General]\nOrder=capsule,capsule-lockscreen\n\n");
+            } else if let Some(idx) = new_content.find("Order=") {
+                let order_end = new_content[idx..]
+                    .find('\n')
+                    .map(|i| idx + i)
+                    .unwrap_or(new_content.len());
+                let cur_order = &new_content[idx + 6..order_end];
+                let updated = format!(
+                    "Order=capsule,capsule-lockscreen,{}",
+                    cur_order.trim_start_matches(',')
+                );
+                new_content.replace_range(idx..order_end, &updated);
+            }
+            new_content.push_str("\n[capsule]\nDescription=Capsule Panel\nwmclass=capsule-panel\nwmclassmatch=1\ncloseable=false\ncloseablerule=2\nskipswitcher=true\nskipswitcherrule=2\nskiptaskbar=true\nskiptaskbarrule=2\nskippager=true\nskippagerrule=2\n\n[capsule-lockscreen]\nDescription=Capsule Lockscreen\nwmclass=capsule-lockscreen\nwmclassmatch=1\ncloseable=false\ncloseablerule=2\nskipswitcher=true\nskipswitcherrule=2\nskiptaskbar=true\nskiptaskbarrule=2\nskippager=true\nskippagerrule=2\nabove=true\naboverule=2\n");
+            let _ = fs::write(&rules_path, new_content);
+        }
+    }
+    Ok(())
+}
+
 pub fn launch_capsule() -> Result<()> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     let bin_path = if Path::new("/usr/local/bin/capsule").exists() {

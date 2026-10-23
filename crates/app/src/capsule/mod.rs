@@ -168,6 +168,11 @@ impl Render for Capsule {
         let root = div()
             .track_focus(&self.orbit.read(cx).focus_handle)
             .on_key_down(cx.listener(|capsule, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "f4" && event.keystroke.modifiers.alt {
+                    capsule.handle_module_event(&module::CapsuleModuleEvent::Close, cx);
+                    cx.stop_propagation();
+                    return;
+                }
                 if event.keystroke.key == "escape" && capsule.orbit.read(cx).expanded() {
                     capsule.close_expanded_orb(cx);
                     cx.stop_propagation();

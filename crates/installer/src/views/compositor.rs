@@ -39,6 +39,7 @@ pub fn render_compositor(
                 Compositor::Hyprland => "sparkles.svg",
                 Compositor::Niri => "monitor.svg",
                 Compositor::MangoWm => "grid-dots.svg",
+                Compositor::KWin => "monitor.svg",
             };
 
             let status_color = if installed {
@@ -190,13 +191,7 @@ pub fn render_compositor(
                                 .child("Choose your preferred Wayland compositor for Capsule"),
                         ),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(8.0))
-                        .children(cards),
-                )
+                .child(div().flex().flex_col().gap(px(8.0)).children(cards))
                 .when_some(app.error_message.as_ref(), |this, err| {
                     this.child(
                         div()

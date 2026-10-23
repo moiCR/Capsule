@@ -7,8 +7,8 @@ use ui::theme::Theme;
 
 use super::common::{card, control_row, hero_header, row_divider, toggle_row};
 use crate::capsule::widgets::style;
-use crate::settings::sidebar::SettingsTab;
 use crate::settings::Settings;
+use crate::settings::sidebar::SettingsTab;
 
 fn text(key: &str, cx: &App) -> String {
     if cx.has_global::<AppState>() {
@@ -58,7 +58,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.dynamic_colors",
         desc_key: "settings.dynamic_colors_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["colores", "dinamicos", "fondo", "wallpaper", "dynamic", "colors", "material", "tema"],
+        keywords: &[
+            "colores",
+            "dinamicos",
+            "fondo",
+            "wallpaper",
+            "dynamic",
+            "colors",
+            "material",
+            "tema",
+        ],
         control: SearchControl::ToggleDynamicColors,
     },
     SearchDefinition {
@@ -66,7 +75,9 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.dark_mode",
         desc_key: "settings.color_mode_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["oscuro", "claro", "dark", "light", "modo", "mode", "color", "tema", "theme"],
+        keywords: &[
+            "oscuro", "claro", "dark", "light", "modo", "mode", "color", "tema", "theme",
+        ],
         control: SearchControl::ToggleDarkMode,
     },
     SearchDefinition {
@@ -74,7 +85,17 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.concave_style",
         desc_key: "settings.style_description",
         tab: SettingsTab::Appearance,
-        keywords: &["concavo", "modo concavo", "concave", "curvo", "estilo", "style", "flotante", "floating", "capsula"],
+        keywords: &[
+            "concavo",
+            "modo concavo",
+            "concave",
+            "curvo",
+            "estilo",
+            "style",
+            "flotante",
+            "floating",
+            "capsula",
+        ],
         control: SearchControl::ToggleConcaveStyle,
     },
     SearchDefinition {
@@ -82,7 +103,9 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.clock_24",
         desc_key: "settings.clock_format_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["reloj", "clock", "24", "12", "hora", "time", "formato", "format"],
+        keywords: &[
+            "reloj", "clock", "24", "12", "hora", "time", "formato", "format",
+        ],
         control: SearchControl::ToggleClock24,
     },
     SearchDefinition {
@@ -90,7 +113,17 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.location_title",
         desc_key: "settings.location_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["ubicacion", "posicion", "arriba", "abajo", "top", "bottom", "location", "position", "capsula"],
+        keywords: &[
+            "ubicacion",
+            "posicion",
+            "arriba",
+            "abajo",
+            "top",
+            "bottom",
+            "location",
+            "position",
+            "capsula",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -98,7 +131,21 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.radii_heading",
         desc_key: "settings.appearance_subtitle",
         tab: SettingsTab::Appearance,
-        keywords: &["radio", "radius", "round", "esquinas", "satelites", "tarjetas", "altura", "height", "idle", "margen", "margin", "gap", "separacion"],
+        keywords: &[
+            "radio",
+            "radius",
+            "round",
+            "esquinas",
+            "satelites",
+            "tarjetas",
+            "altura",
+            "height",
+            "idle",
+            "margen",
+            "margin",
+            "gap",
+            "separacion",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -106,7 +153,28 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.anim_duration_title",
         desc_key: "settings.motion_heading",
         tab: SettingsTab::Appearance,
-        keywords: &["animacion", "animaciones", "duracion", "velocidad", "speed", "animation", "motion", "ms", "fluid", "fluido", "cubic", "cubico", "expo", "back", "elastico", "spring", "rebote", "rapido", "snappy", "suave"],
+        keywords: &[
+            "animacion",
+            "animaciones",
+            "duracion",
+            "velocidad",
+            "speed",
+            "animation",
+            "motion",
+            "ms",
+            "fluid",
+            "fluido",
+            "cubic",
+            "cubico",
+            "expo",
+            "back",
+            "elastico",
+            "spring",
+            "rebote",
+            "rapido",
+            "snappy",
+            "suave",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -114,7 +182,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.content_transition_title",
         desc_key: "settings.content_transition_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["transicion", "contenido", "content", "fade", "desvanecer", "escala", "scale", "crossfade"],
+        keywords: &[
+            "transicion",
+            "contenido",
+            "content",
+            "fade",
+            "desvanecer",
+            "escala",
+            "scale",
+            "crossfade",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -122,7 +199,14 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.spring_bounciness_title",
         desc_key: "settings.spring_bounciness_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["rebote", "bounciness", "intensidad", "elasticidad", "spring", "resorte"],
+        keywords: &[
+            "rebote",
+            "bounciness",
+            "intensidad",
+            "elasticidad",
+            "spring",
+            "resorte",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -130,7 +214,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.squash_stretch_title",
         desc_key: "settings.squash_stretch_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["squash", "stretch", "fisica", "fluidos", "physics", "elastico", "compresion", "inercial"],
+        keywords: &[
+            "squash",
+            "stretch",
+            "fisica",
+            "fluidos",
+            "physics",
+            "elastico",
+            "compresion",
+            "inercial",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -138,7 +231,15 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.stagger_animation_title",
         desc_key: "settings.stagger_animation_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["cascada", "stagger", "escalonado", "satelites", "orbitas", "paneles", "desfase"],
+        keywords: &[
+            "cascada",
+            "stagger",
+            "escalonado",
+            "satelites",
+            "orbitas",
+            "paneles",
+            "desfase",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -146,7 +247,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.reduced_motion_title",
         desc_key: "settings.reduced_motion_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["reducir", "movimiento", "reduced", "motion", "accesibilidad", "accessibility", "bateria", "ahorro"],
+        keywords: &[
+            "reducir",
+            "movimiento",
+            "reduced",
+            "motion",
+            "accesibilidad",
+            "accessibility",
+            "bateria",
+            "ahorro",
+        ],
         control: SearchControl::Navigate(SettingsTab::Appearance),
     },
     SearchDefinition {
@@ -154,27 +264,52 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.old_capsule",
         desc_key: "settings.restart_hint",
         tab: SettingsTab::Appearance,
-        keywords: &["antigua", "vieja", "old", "legacy", "clasica", "capsula", "obsoleta"],
+        keywords: &[
+            "antigua", "vieja", "old", "legacy", "clasica", "capsula", "obsoleta",
+        ],
         control: SearchControl::ToggleLegacyCapsule,
     },
-
     // --- Apps ---
     SearchDefinition {
         id: "apps-defaults",
         title_key: "settings.apps_title",
         desc_key: "settings.apps_subtitle",
         tab: SettingsTab::Apps,
-        keywords: &["aplicaciones", "apps", "terminal", "consola", "browser", "navegador", "web", "editor", "codigo", "code", "archivos", "files", "explorador"],
+        keywords: &[
+            "aplicaciones",
+            "apps",
+            "terminal",
+            "consola",
+            "browser",
+            "navegador",
+            "web",
+            "editor",
+            "codigo",
+            "code",
+            "archivos",
+            "files",
+            "explorador",
+        ],
         control: SearchControl::Navigate(SettingsTab::Apps),
     },
-
     // --- Media ---
     SearchDefinition {
         id: "audio-output",
         title_key: "settings.output_volume_title",
         desc_key: "settings.output_volume_subtitle",
         tab: SettingsTab::Media,
-        keywords: &["audio", "volumen", "volume", "salida", "output", "altavoces", "speakers", "parlantes", "sonido", "sound"],
+        keywords: &[
+            "audio",
+            "volumen",
+            "volume",
+            "salida",
+            "output",
+            "altavoces",
+            "speakers",
+            "parlantes",
+            "sonido",
+            "sound",
+        ],
         control: SearchControl::Navigate(SettingsTab::Media),
     },
     SearchDefinition {
@@ -182,7 +317,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.input_volume_title",
         desc_key: "settings.input_volume_subtitle",
         tab: SettingsTab::Media,
-        keywords: &["microfono", "mic", "input", "entrada", "audio", "grabacion", "voz", "sonido"],
+        keywords: &[
+            "microfono",
+            "mic",
+            "input",
+            "entrada",
+            "audio",
+            "grabacion",
+            "voz",
+            "sonido",
+        ],
         control: SearchControl::Navigate(SettingsTab::Media),
     },
     SearchDefinition {
@@ -190,10 +334,18 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.music_players_title",
         desc_key: "settings.music_players_subtitle",
         tab: SettingsTab::Media,
-        keywords: &["reproductores", "players", "musica", "music", "spotify", "mpris", "autorizados", "whitelist"],
+        keywords: &[
+            "reproductores",
+            "players",
+            "musica",
+            "music",
+            "spotify",
+            "mpris",
+            "autorizados",
+            "whitelist",
+        ],
         control: SearchControl::Navigate(SettingsTab::Media),
     },
-
     // --- Lock Screen ---
     SearchDefinition {
         id: "lock-clock",
@@ -208,7 +360,17 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.show_media_title",
         desc_key: "settings.show_media_subtitle",
         tab: SettingsTab::LockScreen,
-        keywords: &["reproductor", "bloqueo", "lockscreen", "mpris", "musica", "music", "spotify", "cancion", "media"],
+        keywords: &[
+            "reproductor",
+            "bloqueo",
+            "lockscreen",
+            "mpris",
+            "musica",
+            "music",
+            "spotify",
+            "cancion",
+            "media",
+        ],
         control: SearchControl::ToggleLockscreenMedia,
     },
     SearchDefinition {
@@ -216,7 +378,16 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.idle_timeout_title",
         desc_key: "settings.lockscreen_header_subtitle",
         tab: SettingsTab::LockScreen,
-        keywords: &["inactividad", "bloqueo", "timeout", "idle", "suspension", "lock", "pantalla de bloqueo", "tiempo"],
+        keywords: &[
+            "inactividad",
+            "bloqueo",
+            "timeout",
+            "idle",
+            "suspension",
+            "lock",
+            "pantalla de bloqueo",
+            "tiempo",
+        ],
         control: SearchControl::Navigate(SettingsTab::LockScreen),
     },
     SearchDefinition {
@@ -224,17 +395,21 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.time_format_title",
         desc_key: "settings.date_format_title",
         tab: SettingsTab::LockScreen,
-        keywords: &["formato", "hora", "fecha", "format", "time", "date", "chrono", "reloj"],
+        keywords: &[
+            "formato", "hora", "fecha", "format", "time", "date", "chrono", "reloj",
+        ],
         control: SearchControl::Navigate(SettingsTab::LockScreen),
     },
-
     // --- System ---
     SearchDefinition {
         id: "system-language",
         title_key: "settings.language_title",
         desc_key: "settings.language_subtitle",
         tab: SettingsTab::System,
-        keywords: &["idioma", "lenguaje", "language", "español", "espanol", "spanish", "ingles", "english", "interfaz"],
+        keywords: &[
+            "idioma", "lenguaje", "language", "español", "espanol", "spanish", "ingles", "english",
+            "interfaz",
+        ],
         control: SearchControl::Navigate(SettingsTab::System),
     },
     SearchDefinition {
@@ -242,17 +417,35 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.power_plan_title",
         desc_key: "settings.power_plan_subtitle",
         tab: SettingsTab::System,
-        keywords: &["energia", "power", "bateria", "battery", "rendimiento", "performance", "perfil", "plan", "balanceado", "ahorro"],
+        keywords: &[
+            "energia",
+            "power",
+            "bateria",
+            "battery",
+            "rendimiento",
+            "performance",
+            "perfil",
+            "plan",
+            "balanceado",
+            "ahorro",
+        ],
         control: SearchControl::Navigate(SettingsTab::System),
     },
-
     // --- Record ---
     SearchDefinition {
         id: "record-output",
         title_key: "settings.record_output_title",
         desc_key: "settings.record_output_subtitle",
         tab: SettingsTab::Record,
-        keywords: &["grabacion", "record", "pantalla", "screen", "monitor", "video", "salida"],
+        keywords: &[
+            "grabacion",
+            "record",
+            "pantalla",
+            "screen",
+            "monitor",
+            "video",
+            "salida",
+        ],
         control: SearchControl::Navigate(SettingsTab::Record),
     },
     SearchDefinition {
@@ -260,7 +453,20 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.record_quality_title",
         desc_key: "settings.record_fps_title",
         tab: SettingsTab::Record,
-        keywords: &["fps", "resolucion", "calidad", "quality", "frame rate", "video", "1080p", "720p", "mkv", "mp4", "contenedor", "container"],
+        keywords: &[
+            "fps",
+            "resolucion",
+            "calidad",
+            "quality",
+            "frame rate",
+            "video",
+            "1080p",
+            "720p",
+            "mkv",
+            "mp4",
+            "contenedor",
+            "container",
+        ],
         control: SearchControl::Navigate(SettingsTab::Record),
     },
     SearchDefinition {
@@ -268,16 +474,20 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         title_key: "settings.record_cursor_title",
         desc_key: "settings.record_cursor_subtitle",
         tab: SettingsTab::Record,
-        keywords: &["cursor", "puntero", "raton", "mouse", "pointer", "grabacion", "record"],
+        keywords: &[
+            "cursor",
+            "puntero",
+            "raton",
+            "mouse",
+            "pointer",
+            "grabacion",
+            "record",
+        ],
         control: SearchControl::ToggleRecordCursor,
     },
 ];
 
-pub fn render_search_results(
-    query: &str,
-    theme: &Theme,
-    cx: &mut Context<Settings>,
-) -> AnyElement {
+pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settings>) -> AnyElement {
     let query_clean = query.trim().to_lowercase();
     let query_words: Vec<&str> = query_clean.split_whitespace().collect();
 
@@ -298,7 +508,10 @@ pub fn render_search_results(
             title.to_lowercase().contains(qw)
                 || desc.to_lowercase().contains(qw)
                 || tab_str.to_lowercase().contains(qw)
-                || def.keywords.iter().any(|k| k.to_lowercase().contains(qw) || qw.contains(&k.to_lowercase()))
+                || def
+                    .keywords
+                    .iter()
+                    .any(|k| k.to_lowercase().contains(qw) || qw.contains(&k.to_lowercase()))
         });
 
         if !matches {
@@ -355,11 +568,12 @@ pub fn render_search_results(
                     cx.listener(|_this, _, _, cx| {
                         if cx.has_global::<AppState>() {
                             let _ = cx.global::<AppState>().config.update(|cfg| {
-                                cfg.ui.capsule_style = if cfg.ui.capsule_style == CapsuleStyle::Normal {
-                                    CapsuleStyle::Concave
-                                } else {
-                                    CapsuleStyle::Normal
-                                };
+                                cfg.ui.capsule_style =
+                                    if cfg.ui.capsule_style == CapsuleStyle::Normal {
+                                        CapsuleStyle::Concave
+                                    } else {
+                                        CapsuleStyle::Normal
+                                    };
                             });
                         }
                         cx.notify();
@@ -431,7 +645,8 @@ pub fn render_search_results(
                     cx.listener(|_this, _, _, cx| {
                         if cx.has_global::<AppState>() {
                             let _ = cx.global::<AppState>().config.update(|cfg| {
-                                cfg.lockscreen.show_media_player = !cfg.lockscreen.show_media_player;
+                                cfg.lockscreen.show_media_player =
+                                    !cfg.lockscreen.show_media_player;
                             });
                         }
                         cx.notify();
@@ -502,8 +717,8 @@ pub fn render_search_results(
     };
 
     if matched_rows.is_empty() {
-        let no_sub = text("settings.search_no_results_subtitle", cx)
-            .replace("{query}", &display_query);
+        let no_sub =
+            text("settings.search_no_results_subtitle", cx).replace("{query}", &display_query);
 
         div()
             .flex()

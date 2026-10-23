@@ -12,11 +12,11 @@ use ui::components::{Button, ButtonSize, ButtonVariant};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
+use super::SettingsView;
 use super::common::{
     card, control_row, heading, hero_header, pill_button, row_divider, segmented_selector,
     slider_row, toggle_row,
 };
-use super::SettingsView;
 use crate::capsule::animator::Animator;
 use crate::capsule::orbit::Preview;
 use crate::capsule::widgets::style;
@@ -203,8 +203,7 @@ impl AppearanceView {
             theme,
             cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
                 if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                    view.active_slider =
-                        Some((slider_kind, tracker_clone.clone(), min, max, step));
+                    view.active_slider = Some((slider_kind, tracker_clone.clone(), min, max, step));
                     view.update_slider_value(event.position.x.into(), cx);
                 }
             }),

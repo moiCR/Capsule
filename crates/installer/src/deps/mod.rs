@@ -102,9 +102,7 @@ impl DependsManager {
             Some(DistroKind::Ubuntu(display_label))
         } else if id == "debian" || like_tokens.contains(&"debian") {
             Some(DistroKind::Debian(display_label))
-        } else if id == "fedora"
-            || like_tokens.contains(&"fedora")
-            || like_tokens.contains(&"rhel")
+        } else if id == "fedora" || like_tokens.contains(&"fedora") || like_tokens.contains(&"rhel")
         {
             Some(DistroKind::Fedora(display_label))
         } else if id == "arch"

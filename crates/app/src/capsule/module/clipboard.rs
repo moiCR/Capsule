@@ -215,8 +215,8 @@ impl ClipboardModule {
         let shift = event.keystroke.modifiers.shift;
         let key = event.keystroke.key.as_str();
 
-        if key == "escape" {
-            if !self.search_input.is_empty() {
+        if (key == "f4" && event.keystroke.modifiers.alt) || key == "escape" {
+            if key == "escape" && !self.search_input.is_empty() {
                 self.search_input.clear();
                 self.search(String::new(), cx);
             } else {

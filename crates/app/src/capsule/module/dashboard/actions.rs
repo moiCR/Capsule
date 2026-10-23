@@ -3,7 +3,6 @@ use crate::capsule::{module::CapsuleModuleEvent, widgets::dashboard::DashboardAc
 use gpui::Context;
 use services::{AppState, NotificationStore};
 impl DashboardModule {
-    
     pub fn dispatch(&mut self, action: DashboardAction, cx: &mut Context<Self>) {
         let state = cx.global::<AppState>().clone();
         match action {
@@ -43,9 +42,7 @@ impl DashboardModule {
             DashboardAction::ConnectWifi => {
                 if let Some(ssid) = &self.navigation.selected_ssid {
                     let pwd = self.navigation.password_input.text();
-                    state
-                        .network
-                        .connect_wifi(ssid, Some(&pwd));
+                    state.network.connect_wifi(ssid, Some(&pwd));
                     self.navigation.password_input.clear();
                 }
             }

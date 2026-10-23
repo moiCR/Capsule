@@ -43,6 +43,65 @@ impl WallpaperService {
                 }
             }
         }
+        Self::detect_system_wallpaper()
+    }
+
+    pub fn detect_system_wallpaper() -> Option<PathBuf> {
+        if let Some(home) = dirs::home_dir() {
+            let plasma_cfg = home.join(".config/plasma-org.kde.plasma.desktop-appletsrc");
+            if let Ok(content) = fs::read_to_string(&plasma_cfg) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if let Some(raw) = trimmed.strip_prefix("Image=") {
+                        let clean = raw.trim().trim_start_matches("file://");
+                        let p = PathBuf::from(clean);
+                        if p.is_file() {
+                            return Some(p);
+                        }
+                    }
+                }
+            }
+        }
+
+        let search_dirs = [
+            Path::new("/usr/share/wallpapers"),
+            Path::new("/usr/share/backgrounds"),
+        ];
+
+        for dir in search_dirs {
+            if !dir.is_dir() {
+                continue;
+            }
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                        if ext.eq_ignore_ascii_case("jpg")
+                            || ext.eq_ignore_ascii_case("jpeg")
+                            || ext.eq_ignore_ascii_case("png")
+                            || ext.eq_ignore_ascii_case("webp")
+                        {
+                            return Some(path);
+                        }
+                    } else if path.is_dir() {
+                        let candidate_4k = path.join("contents/images/3840x2160.png");
+                        if candidate_4k.is_file() {
+                            return Some(candidate_4k);
+                        }
+                        let candidate_4k_jpg = path.join("contents/images/3840x2160.jpg");
+                        if candidate_4k_jpg.is_file() {
+                            return Some(candidate_4k_jpg);
+                        }
+                        let candidate_fhd = path.join("contents/images/1920x1080.png");
+                        if candidate_fhd.is_file() {
+                            return Some(candidate_fhd);
+                        }
+                    }
+                }
+            }
+        }
+
         None
     }
 
@@ -169,8 +228,16 @@ impl WallpaperService {
                         *current_guard = Some(path.clone());
                     }
                     let _ = self.changed.send(path);
+                    return;
                 }
             }
+        }
+
+        if let Some(detected) = Self::detect_system_wallpaper() {
+            if let Ok(mut current_guard) = self.current.lock() {
+                *current_guard = Some(detected.clone());
+            }
+            let _ = self.changed.send(detected);
         }
     }
 

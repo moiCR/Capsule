@@ -1,12 +1,12 @@
 use gpui::{
-    AnyElement, App, ColorExt, Context, ElementId, FontWeight, IntoElement, ParentElement,
-    Styled, Window, div, px,
+    AnyElement, App, ColorExt, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled,
+    Window, div, px,
 };
 use services::{AppState, RecordService};
 use ui::theme::Theme;
 
-use super::common::{card, control_row, hero_header, pill_button, row_divider, toggle_row};
 use super::SettingsView;
+use super::common::{card, control_row, hero_header, pill_button, row_divider, toggle_row};
 use crate::settings::Settings;
 
 fn text(key: &str, cx: &App) -> String {
@@ -102,28 +102,30 @@ impl SettingsView for RecordView {
                 card(&theme).child(control_row(
                     &text("settings.record_output_title", cx),
                     Some(&text("settings.record_output_subtitle", cx)),
-                    div()
-                        .flex()
-                        .gap(px(6.0))
-                        .children(monitor_options.into_iter().enumerate().map(|(idx, (val, label))| {
-                            let is_selected = config.record.output == val;
-                            let val_str = val.clone();
-                            pill_button(
-                                ElementId::NamedInteger("output-pill".into(), idx as u64),
-                                &label,
-                                is_selected,
-                                &theme,
-                                cx.listener(move |_this, _, _, cx| {
-                                    if cx.has_global::<AppState>() {
-                                        let target = val_str.clone();
-                                        let _ = cx.global::<AppState>().config.update(|cfg| {
-                                            cfg.record.output = target;
-                                        });
-                                    }
-                                    cx.notify();
-                                }),
-                            )
-                        })),
+                    div().flex().gap(px(6.0)).children(
+                        monitor_options
+                            .into_iter()
+                            .enumerate()
+                            .map(|(idx, (val, label))| {
+                                let is_selected = config.record.output == val;
+                                let val_str = val.clone();
+                                pill_button(
+                                    ElementId::NamedInteger("output-pill".into(), idx as u64),
+                                    &label,
+                                    is_selected,
+                                    &theme,
+                                    cx.listener(move |_this, _, _, cx| {
+                                        if cx.has_global::<AppState>() {
+                                            let target = val_str.clone();
+                                            let _ = cx.global::<AppState>().config.update(|cfg| {
+                                                cfg.record.output = target;
+                                            });
+                                        }
+                                        cx.notify();
+                                    }),
+                                )
+                            }),
+                    ),
                     &theme,
                 )),
             )
@@ -133,10 +135,8 @@ impl SettingsView for RecordView {
                     .child(control_row(
                         &text("settings.record_fps_title", cx),
                         Some(&text("settings.record_fps_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(fps_options.into_iter().enumerate().map(|(idx, fps)| {
+                        div().flex().gap(px(6.0)).children(
+                            fps_options.into_iter().enumerate().map(|(idx, fps)| {
                                 let is_selected = config.record.fps == fps;
                                 pill_button(
                                     ElementId::NamedInteger("fps-pill".into(), idx as u64),
@@ -152,91 +152,104 @@ impl SettingsView for RecordView {
                                         cx.notify();
                                     }),
                                 )
-                            })),
+                            }),
+                        ),
                         &theme,
                     ))
                     .child(row_divider(&theme))
                     .child(control_row(
                         &text("settings.record_resolution_title", cx),
                         Some(&text("settings.record_resolution_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(res_options.into_iter().enumerate().map(|(idx, (val, label))| {
-                                let is_selected = config.record.resolution == val;
-                                let val_str = val.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("res-pill".into(), idx as u64),
-                                    &label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = val_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.record.resolution = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            res_options
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (val, label))| {
+                                    let is_selected = config.record.resolution == val;
+                                    let val_str = val.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger("res-pill".into(), idx as u64),
+                                        &label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = val_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.record.resolution = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     ))
                     .child(row_divider(&theme))
                     .child(control_row(
                         &text("settings.record_quality_title", cx),
                         Some(&text("settings.record_quality_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(quality_options.into_iter().enumerate().map(|(idx, (val, label))| {
-                                let is_selected = config.record.quality == val;
-                                let val_str = val.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("quality-pill".into(), idx as u64),
-                                    &label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = val_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.record.quality = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            quality_options
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (val, label))| {
+                                    let is_selected = config.record.quality == val;
+                                    let val_str = val.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger("quality-pill".into(), idx as u64),
+                                        &label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = val_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.record.quality = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     ))
                     .child(row_divider(&theme))
                     .child(control_row(
                         &text("settings.record_container_title", cx),
                         Some(&text("settings.record_container_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(container_options.into_iter().enumerate().map(|(idx, (val, label))| {
-                                let is_selected = config.record.container == val;
-                                let val_str = val.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("container-pill".into(), idx as u64),
-                                    label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = val_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.record.container = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            container_options
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (val, label))| {
+                                    let is_selected = config.record.container == val;
+                                    let val_str = val.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger(
+                                            "container-pill".into(),
+                                            idx as u64,
+                                        ),
+                                        label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = val_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.record.container = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     )),
             )
@@ -246,28 +259,31 @@ impl SettingsView for RecordView {
                     .child(control_row(
                         &text("settings.record_audio_title", cx),
                         Some(&text("settings.record_audio_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(audio_options.into_iter().enumerate().map(|(idx, (val, label))| {
-                                let is_selected = config.record.audio == val;
-                                let val_str = val.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("audio-pill".into(), idx as u64),
-                                    &label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = val_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.record.audio = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            audio_options
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (val, label))| {
+                                    let is_selected = config.record.audio == val;
+                                    let val_str = val.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger("audio-pill".into(), idx as u64),
+                                        &label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = val_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.record.audio = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     ))
                     .child(row_divider(&theme))
@@ -303,12 +319,7 @@ impl SettingsView for RecordView {
                         .bg(theme.accent().opacity(0.12))
                         .border_1()
                         .border_color(theme.accent().opacity(0.3))
-                        .child(
-                            div()
-                                .size(px(6.0))
-                                .rounded_full()
-                                .bg(theme.accent()),
-                        )
+                        .child(div().size(px(6.0)).rounded_full().bg(theme.accent()))
                         .child(
                             div()
                                 .text_size(px(12.0))

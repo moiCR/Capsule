@@ -1,5 +1,5 @@
-use super::common::{hero_header, toggle_row};
 use super::SettingsView;
+use super::common::{hero_header, toggle_row};
 use crate::capsule::widgets::style;
 use crate::settings::Settings;
 use gpui::{
@@ -120,7 +120,12 @@ impl SettingsView for MediaView {
                 if !clean.is_empty() && cx.has_global::<AppState>() {
                     let state = cx.global::<AppState>();
                     let _ = state.config.update(|cfg| {
-                        if !cfg.mpris.players.iter().any(|p| p.eq_ignore_ascii_case(&clean)) {
+                        if !cfg
+                            .mpris
+                            .players
+                            .iter()
+                            .any(|p| p.eq_ignore_ascii_case(&clean))
+                        {
                             cfg.mpris.players.push(clean);
                         }
                     });
@@ -194,7 +199,11 @@ impl SettingsView for MediaView {
         let output_drag_bar = Slider::new("settings-output-slider")
             .fraction(out_fraction)
             .height(32.0)
-            .icon(if out_muted { "volume-x.svg" } else { "volume-2.svg" })
+            .icon(if out_muted {
+                "volume-x.svg"
+            } else {
+                "volume-2.svg"
+            })
             .label(format!("{out_vol}%"))
             .track_bounds(&self.output_bounds)
             .active_color(active_color)
@@ -438,37 +447,37 @@ impl SettingsView for MediaView {
             );
         } else {
             for (idx, player) in config.mpris.players.iter().enumerate() {
-            let p_name = player.clone();
-            players_list = players_list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .w_full()
-                    .p(px(10.0))
-                    .rounded(px(style::INNER_RADIUS))
-                    .bg(style::surface(&theme))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(p_name),
-                    )
-                    .child(
-                        IconButton::new(format!("remove-player-{}", idx), "close.svg")
-                            .size(22.0)
-                            .icon_size(10.0)
-                            .on_click(cx.listener(move |_this, _, _, cx| {
-                                if cx.has_global::<AppState>() {
-                                    let _ = cx.global::<AppState>().config.update(|cfg| {
-                                        if idx < cfg.mpris.players.len() {
-                                            cfg.mpris.players.remove(idx);
-                                        }
-                                    });
-                                }
-                            })),
-                    ),
-            );
+                let p_name = player.clone();
+                players_list = players_list.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .w_full()
+                        .p(px(10.0))
+                        .rounded(px(style::INNER_RADIUS))
+                        .bg(style::surface(&theme))
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(p_name),
+                        )
+                        .child(
+                            IconButton::new(format!("remove-player-{}", idx), "close.svg")
+                                .size(22.0)
+                                .icon_size(10.0)
+                                .on_click(cx.listener(move |_this, _, _, cx| {
+                                    if cx.has_global::<AppState>() {
+                                        let _ = cx.global::<AppState>().config.update(|cfg| {
+                                            if idx < cfg.mpris.players.len() {
+                                                cfg.mpris.players.remove(idx);
+                                            }
+                                        });
+                                    }
+                                })),
+                        ),
+                );
             }
         }
 
@@ -534,18 +543,21 @@ impl SettingsView for MediaView {
                                         }
                                     }))
                                     .child(
-                                        div()
-                                            .text_size(px(12.0))
-                                            .text_color(theme.accent())
-                                            .child(if show_out_devices {
+                                        div().text_size(px(12.0)).text_color(theme.accent()).child(
+                                            if show_out_devices {
                                                 text("settings.hide_devices", cx)
                                             } else {
                                                 text("settings.choose_device", cx)
-                                            }),
+                                            },
+                                        ),
                                     )
                                     .child(
                                         svg()
-                                            .path(if show_out_devices { "chevron-down.svg" } else { "chevron-right.svg" })
+                                            .path(if show_out_devices {
+                                                "chevron-down.svg"
+                                            } else {
+                                                "chevron-right.svg"
+                                            })
                                             .size(px(14.0))
                                             .text_color(theme.accent()),
                                     ),
@@ -602,18 +614,21 @@ impl SettingsView for MediaView {
                                         }
                                     }))
                                     .child(
-                                        div()
-                                            .text_size(px(12.0))
-                                            .text_color(theme.accent())
-                                            .child(if show_in_devices {
+                                        div().text_size(px(12.0)).text_color(theme.accent()).child(
+                                            if show_in_devices {
                                                 text("settings.hide_devices", cx)
                                             } else {
                                                 text("settings.choose_device", cx)
-                                            }),
+                                            },
+                                        ),
                                     )
                                     .child(
                                         svg()
-                                            .path(if show_in_devices { "chevron-down.svg" } else { "chevron-right.svg" })
+                                            .path(if show_in_devices {
+                                                "chevron-down.svg"
+                                            } else {
+                                                "chevron-right.svg"
+                                            })
                                             .size(px(14.0))
                                             .text_color(theme.accent()),
                                     ),
@@ -639,7 +654,8 @@ impl SettingsView for MediaView {
                         cx.listener(|_this, _, _, cx| {
                             if cx.has_global::<AppState>() {
                                 let _ = cx.global::<AppState>().config.update(|cfg| {
-                                    cfg.lockscreen.show_media_player = !cfg.lockscreen.show_media_player;
+                                    cfg.lockscreen.show_media_player =
+                                        !cfg.lockscreen.show_media_player;
                                 });
                             }
                             cx.notify();
@@ -691,7 +707,12 @@ impl SettingsView for MediaView {
                                             .text_color(theme.accent())
                                             .child(text("settings.music_players_add", cx)),
                                     )
-                                    .child(svg().path("plus.svg").size(px(14.0)).text_color(theme.accent())),
+                                    .child(
+                                        svg()
+                                            .path("plus.svg")
+                                            .size(px(14.0))
+                                            .text_color(theme.accent()),
+                                    ),
                             ),
                     )
                     .when(self.is_adding_player, |s| {

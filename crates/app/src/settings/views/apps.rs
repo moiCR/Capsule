@@ -2,15 +2,14 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Context, ElementId, IntoElement, ParentElement, Styled, Window,
-    div, px, svg,
+    AnyElement, App, Context, ElementId, IntoElement, ParentElement, Styled, Window, div, px, svg,
 };
 use services::{AppState, Application};
 use ui::components::select::{Select, SelectItem};
 use ui::theme::Theme;
 
-use super::common::{card, control_row, hero_header, row_divider};
 use super::SettingsView;
+use super::common::{card, control_row, hero_header, row_divider};
 use crate::settings::Settings;
 
 fn text(key: &str, cx: &App) -> String {
@@ -144,10 +143,7 @@ fn find_matching_app<'a>(cmd: &str, apps: &'a [Application]) -> Option<&'a Appli
     })
 }
 
-fn filter_apps_for_field<'a>(
-    field: AppsField,
-    apps: &'a [Application],
-) -> Vec<&'a Application> {
+fn filter_apps_for_field<'a>(field: AppsField, apps: &'a [Application]) -> Vec<&'a Application> {
     let mut filtered: Vec<&'a Application> = apps
         .iter()
         .filter(|app| {
