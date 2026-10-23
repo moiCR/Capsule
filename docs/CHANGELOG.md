@@ -2,6 +2,23 @@
 
 All notable changes to Capsule are documented in this file.
 
+## v2.4.0
+
+### Features
+* **KWin Wayland Compositor Support**: Native backend integration detecting KWin (`KWIN_RUNNING=1` / `XDG_CURRENT_DESKTOP=KDE`), virtual desktop tracking (`kdotool`), focused window tracking, output refresh rate polling (`kscreen-doctor`), and native KDE session logout.
+* **Standalone KWin + Capsule Session**: Automated session launcher and installer (`/usr/local/bin/capsule-session-kwin` and `/usr/share/wayland-sessions/kwin-capsule.desktop`) to run Capsule as a lightweight desktop environment powered by KWin without `plasmashell`.
+* **Resilient LayerShell Lockscreen**: Fallback lockscreen implementation using `LayerShell` on `Layer::Overlay` with cached wallpaper blur (`WallpaperService::get_blurred_wallpaper()`) on compositors lacking `ext-session-lock-v1` or `wlr-screencopy` (such as KWin).
+* **Plasma Wallpaper Auto-Detection**: Detects active wallpaper from `plasma-org.kde.plasma.desktop-appletsrc` or scans `/usr/share/wallpapers/` to ensure smooth desktop overview and window switcher (Alt+Tab) rendering without black buffers.
+
+### Improvements
+* **Passive Keyboard Interactivity**: Capsule main panel defaults to `KeyboardInteractivity::None` and unfocuses (`window.blur()`), dynamically requesting `OnDemand` or `Exclusive` focus only when interactive modules are active (Launcher, Polkit, Clipboard, Emoji). Prevents stealing compositor focus or breaking window shortcuts when clicking panel items.
+* **Explicit Daemon Lifecycle**: Configured `cx.set_quit_mode(gpui::QuitMode::Explicit)` and surface watchdog to prevent compositor unmap events from terminating the Capsule process.
+* **KWin Window Rules Automation**: Added automated rule generation in `setup-kwin-session.sh` targeting Capsule windows to prevent them from appearing in KWin's task switcher, pager, or taskbar.
+
+### Bug Fixes
+* **Compositor Close Signal Interception**: Updated Wayland layer-surface event handling in `gpui-capsule` to respect `on_window_should_close()`, and configured panel to intercept `Super+Q` / `Alt+F4` close events by smoothly dismissing active modules instead of unmapping or destroying the panel.
+* **Python ConfigParser Compatibility**: Fixed `kwinrulesrc` parser handling in setup script using `RawConfigParser(strict=False)` with case preservation to prevent duplicate option errors on Python 3.14.
+
 ## v2.3.1
 
 ### Features
