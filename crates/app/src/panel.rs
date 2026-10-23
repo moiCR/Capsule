@@ -45,13 +45,24 @@ impl CapsulePanel {
             25.0 + 8.0
         };
 
+        let is_kwin = (cx.has_global::<services::AppState>()
+            && cx.global::<services::AppState>().compositor.is_kwin())
+            || std::env::var("KWIN_RUNNING").is_ok()
+            || std::env::var("KDE_FULL_SESSION").is_ok()
+            || std::env::var("XDG_CURRENT_DESKTOP")
+                .map(|d| d.to_ascii_lowercase().contains("kde"))
+                .unwrap_or(false);
         let mut options = WindowOptions {
             titlebar: None,
             window_bounds: display_bounds.map(WindowBounds::Windowed),
             app_id: Some("capsule-panel".to_string()),
             linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
-                namespace: "capsule-panel".to_string(),
+                namespace: if is_kwin {
+                    "dock".to_string()
+                } else {
+                    "capsule-panel".to_string()
+                },
                 layer: Layer::Top,
                 anchor: Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
                 margin: Some((px(0.0), px(0.0), px(0.0), px(0.0))),

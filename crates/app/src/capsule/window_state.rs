@@ -164,18 +164,22 @@ impl Capsule {
             self.window_state.orb_expanded = orb_expanded;
             self.window_state.notification_popup = passive_notification;
             let keyboard = match current {
-                CapsuleModuleId::Polkit => gpui::layer_shell::KeyboardInteractivity::Exclusive,
-                CapsuleModuleId::Launcher
-                | CapsuleModuleId::Clipboard
-                | CapsuleModuleId::Emoji
-                | CapsuleModuleId::Themes
-                | CapsuleModuleId::Dashboard => gpui::layer_shell::KeyboardInteractivity::OnDemand,
-                CapsuleModuleId::Notification
-                    if self.module_manager.notification.read(cx).history =>
-                {
-                    gpui::layer_shell::KeyboardInteractivity::OnDemand
+                CapsuleModuleId::Default | CapsuleModuleId::DefaultExpanded => {
+                    if orb_expanded {
+                        gpui::layer_shell::KeyboardInteractivity::Exclusive
+                    } else {
+                        gpui::layer_shell::KeyboardInteractivity::None
+                    }
                 }
-                _ => gpui::layer_shell::KeyboardInteractivity::None,
+                CapsuleModuleId::Notification => {
+                    if self.module_manager.notification.read(cx).history {
+                        gpui::layer_shell::KeyboardInteractivity::Exclusive
+                    } else {
+                        gpui::layer_shell::KeyboardInteractivity::None
+                    }
+                }
+                CapsuleModuleId::ShelfDrop => gpui::layer_shell::KeyboardInteractivity::None,
+                _ => gpui::layer_shell::KeyboardInteractivity::Exclusive,
             };
 
             window.set_keyboard_interactivity(keyboard);

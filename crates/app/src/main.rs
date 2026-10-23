@@ -69,6 +69,84 @@ fn run_application() {
         None => return,
     };
 
+    // Synchronize cursor theme & size so GPUI and all launched apps match compositor theme
+    if std::env::var("XCURSOR_THEME")
+        .map(|t| t.is_empty() || t == "default")
+        .unwrap_or(true)
+    {
+        if let Some(home) = dirs::home_dir() {
+            let mut detected = None;
+            let gtk_ini = home.join(".config/gtk-3.0/settings.ini");
+            if let Ok(content) = std::fs::read_to_string(&gtk_ini) {
+                for line in content.lines() {
+                    if let Some(theme) = line.strip_prefix("gtk-cursor-theme-name=") {
+                        let trimmed = theme.trim().trim_matches('"');
+                        if !trimmed.is_empty() {
+                            detected = Some(trimmed.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+            if detected.is_none() {
+                let kcminput = home.join(".config/kcminputrc");
+                if let Ok(content) = std::fs::read_to_string(&kcminput) {
+                    for line in content.lines() {
+                        if let Some(theme) = line.strip_prefix("cursorTheme=") {
+                            let trimmed = theme.trim().trim_matches('"');
+                            if !trimmed.is_empty() {
+                                detected = Some(trimmed.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            let theme = detected.unwrap_or_else(|| "breeze_cursors".to_string());
+            unsafe {
+                std::env::set_var("XCURSOR_THEME", &theme);
+            }
+        }
+    }
+    if std::env::var("XCURSOR_SIZE").is_err() {
+        unsafe {
+            std::env::set_var("XCURSOR_SIZE", "24");
+        }
+    }
+
+    // Ensure ~/.icons/default/index.theme exists pointing to the cursor theme
+    if let Some(home) = dirs::home_dir() {
+        let default_icons = home.join(".icons/default");
+        let index_theme = default_icons.join("index.theme");
+        if !index_theme.exists() {
+            let _ = std::fs::create_dir_all(&default_icons);
+            let theme =
+                std::env::var("XCURSOR_THEME").unwrap_or_else(|_| "breeze_cursors".to_string());
+            let _ = std::fs::write(
+                &index_theme,
+                format!(
+                    "[Icon Theme]\nName=Default\nComment=Default Cursor Theme\nInherits={theme}\n"
+                ),
+            );
+        }
+    }
+
+    // Synchronize display environment with D-Bus and systemd
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        let _ = std::process::Command::new("dbus-update-activation-environment")
+            .args([
+                "--systemd",
+                "WAYLAND_DISPLAY",
+                "DISPLAY",
+                "XAUTHORITY",
+                "XDG_CURRENT_DESKTOP",
+                "XDG_SESSION_TYPE",
+                "XCURSOR_THEME",
+                "XCURSOR_SIZE",
+            ])
+            .spawn();
+    }
+
     services::spawn_tokio(async {
         if let Err(err) = services::start_notification_server().await {
             eprintln!("D-Bus Notification Server warning: {err}");

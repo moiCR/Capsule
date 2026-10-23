@@ -112,11 +112,22 @@ if [[ -z "${KDE_SESSION_VERSION:-}" ]]; then
     fi
 fi
 
+# Synchronize cursor theme & size
+if [[ -z "${XCURSOR_THEME:-}" || "${XCURSOR_THEME}" == "default" ]]; then
+    DETECTED_CURSOR=$(kreadconfig6 --file kcminputrc --group Mouse --key cursorTheme 2>/dev/null)
+    if [[ -z "$DETECTED_CURSOR" && -f "$HOME/.config/gtk-3.0/settings.ini" ]]; then
+        DETECTED_CURSOR=$(grep -E '^gtk-cursor-theme-name=' "$HOME/.config/gtk-3.0/settings.ini" | cut -d'=' -f2 | tr -d ' "')
+    fi
+    export XCURSOR_THEME="${DETECTED_CURSOR:-breeze_cursors}"
+fi
+export XCURSOR_SIZE="${XCURSOR_SIZE:-24}"
+
 if command -v dbus-update-activation-environment &>/dev/null; then
     dbus-update-activation-environment --systemd --all
+    dbus-update-activation-environment --systemd XCURSOR_THEME XCURSOR_SIZE
 fi
 
-exec kwin_wayland --exit-with-session /usr/local/bin/capsule
+exec kwin_wayland --xwayland --exit-with-session /usr/local/bin/capsule
 "#;
 
 const WAYLAND_SESSION_DESKTOP_CONTENT: &str = r#"[Desktop Entry]
@@ -191,25 +202,77 @@ pub fn configure_kwin_rules() -> Result<()> {
             String::new()
         };
 
-        if !content.contains("wmclass=capsule-panel") {
-            let mut new_content = content;
-            if !new_content.contains("[General]") {
-                new_content.push_str("[General]\nOrder=capsule,capsule-lockscreen\n\n");
-            } else if let Some(idx) = new_content.find("Order=") {
+        let mut new_content = content;
+        if !new_content.contains("[General]") {
+            new_content.push_str("[General]\nOrder=capsule\n\n");
+        } else if !new_content.contains("Order=") {
+            new_content = new_content.replace("[General]", "[General]\nOrder=capsule");
+        } else if !new_content.contains("capsule") {
+            if let Some(idx) = new_content.find("Order=") {
                 let order_end = new_content[idx..]
                     .find('\n')
                     .map(|i| idx + i)
                     .unwrap_or(new_content.len());
                 let cur_order = &new_content[idx + 6..order_end];
-                let updated = format!(
-                    "Order=capsule,capsule-lockscreen,{}",
-                    cur_order.trim_start_matches(',')
-                );
+                let updated = format!("Order=capsule,{}", cur_order.trim_start_matches(','));
                 new_content.replace_range(idx..order_end, &updated);
             }
-            new_content.push_str("\n[capsule]\nDescription=Capsule Panel\nwmclass=capsule-panel\nwmclassmatch=1\ncloseable=false\ncloseablerule=2\nskipswitcher=true\nskipswitcherrule=2\nskiptaskbar=true\nskiptaskbarrule=2\nskippager=true\nskippagerrule=2\n\n[capsule-lockscreen]\nDescription=Capsule Lockscreen\nwmclass=capsule-lockscreen\nwmclassmatch=1\ncloseable=false\ncloseablerule=2\nskipswitcher=true\nskipswitcherrule=2\nskiptaskbar=true\nskiptaskbarrule=2\nskippager=true\nskippagerrule=2\nabove=true\naboverule=2\n");
-            let _ = fs::write(&rules_path, new_content);
         }
+
+        // Clean out legacy rule sections if present
+        if new_content.contains("[capsule]") {
+            let start = new_content.find("[capsule]").unwrap_or(0);
+            let next_sec = new_content[start + 9..]
+                .find("\n[")
+                .map(|i| start + 9 + i)
+                .unwrap_or(new_content.len());
+            new_content.replace_range(start..next_sec, "");
+        }
+        if new_content.contains("[capsule-lockscreen]") {
+            let start = new_content.find("[capsule-lockscreen]").unwrap_or(0);
+            let next_sec = new_content[start + 20..]
+                .find("\n[")
+                .map(|i| start + 20 + i)
+                .unwrap_or(new_content.len());
+            new_content.replace_range(start..next_sec, "");
+        }
+
+        new_content.push_str("\n[capsule]\nDescription=Capsule Shell\nwmclass=capsule\nwmclassmatch=1\ncloseable=false\ncloseablerule=2\nskipswitcher=true\nskipswitcherrule=2\nskiptaskbar=true\nskiptaskbarrule=2\nskippager=true\nskippagerrule=2\ndesktopsrule=2\n");
+        let _ = fs::write(&rules_path, new_content);
+
+        // Ensure ~/.icons/default/index.theme exists so client apps fallback to the same cursor
+        let icons_default = home.join(".icons/default");
+        let index_theme = icons_default.join("index.theme");
+        if !index_theme.exists() {
+            let _ = fs::create_dir_all(&icons_default);
+            let _ = fs::write(
+                &index_theme,
+                "[Icon Theme]\nName=Default\nComment=Default Cursor Theme\nInherits=breeze_cursors\n",
+            );
+        }
+
+        // Ensure ~/.config/kcminputrc has [Mouse] cursorTheme=breeze_cursors
+        let kcminput_path = config_dir.join("kcminputrc");
+        let kcminput_content = fs::read_to_string(&kcminput_path).unwrap_or_default();
+        if !kcminput_content.contains("cursorTheme") {
+            let mut updated_kcminput = kcminput_content;
+            if !updated_kcminput.contains("[Mouse]") {
+                updated_kcminput.push_str("\n[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n");
+            } else {
+                updated_kcminput = updated_kcminput.replace("[Mouse]", "[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24");
+            }
+            let _ = fs::write(&kcminput_path, updated_kcminput);
+        }
+
+        // Tell KWin to reload rules
+        let _ = std::process::Command::new("qdbus6")
+            .args(["org.kde.KWin", "/KWin", "reconfigure"])
+            .spawn()
+            .or_else(|_| {
+                std::process::Command::new("qdbus")
+                    .args(["org.kde.KWin", "/KWin", "reconfigure"])
+                    .spawn()
+            });
     }
     Ok(())
 }
