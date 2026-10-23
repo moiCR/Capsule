@@ -8,8 +8,6 @@ use gpui::{
     session_lock::SessionLockOptions,
 };
 
-use services::IpcSubscriber;
-
 use crate::lockscreen::LockScreen;
 use crate::settings::Settings;
 
@@ -20,10 +18,16 @@ pub enum PanelMode {
     Settings,
 }
 
+static PANEL_WINDOW_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static WATCHDOG_INITIALIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub struct CapsulePanel;
 pub type IslandPanel = CapsulePanel;
 
 impl CapsulePanel {
+    pub fn set_panel_window_id(id: u64) {
+        PANEL_WINDOW_ID.store(id, Ordering::SeqCst);
+    }
     pub fn window_options(
         module_manager: &crate::island::module::CapsuleModuleManager,
         cx: &gpui::App,
@@ -42,18 +46,29 @@ impl CapsulePanel {
             25.0 + 8.0
         };
 
+        let is_kwin = (cx.has_global::<services::AppState>()
+            && cx.global::<services::AppState>().compositor.is_kwin())
+            || std::env::var("KWIN_RUNNING").is_ok()
+            || std::env::var("KDE_FULL_SESSION").is_ok()
+            || std::env::var("XDG_CURRENT_DESKTOP")
+                .map(|d| d.to_ascii_lowercase().contains("kde"))
+                .unwrap_or(false);
         let mut options = WindowOptions {
             titlebar: None,
             window_bounds: display_bounds.map(WindowBounds::Windowed),
             app_id: Some("capsule-panel".to_string()),
             linux_window_background: LinuxWindowBackground::Transparent,
             kind: WindowKind::LayerShell(LayerShellOptions {
-                namespace: "capsule-panel".to_string(),
+                namespace: if is_kwin {
+                    "dock".to_string()
+                } else {
+                    "capsule-panel".to_string()
+                },
                 layer: Layer::Top,
                 anchor: Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
                 margin: Some((px(0.0), px(0.0), px(0.0), px(0.0))),
                 exclusive_zone: Some(px(exclusive_zone)),
-                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                keyboard_interactivity: KeyboardInteractivity::None,
                 ..Default::default()
             }),
             ..Default::default()
@@ -80,16 +95,24 @@ impl CapsulePanel {
         options
     }
 
-    pub fn open(
-        cx: &mut gpui::App,
-        ipc_subscriber: IpcSubscriber,
-    ) -> Option<WindowHandle<crate::island::Capsule>> {
+    pub fn open(cx: &mut gpui::App) -> Option<WindowHandle<crate::island::Capsule>> {
         let module_manager = crate::island::module::CapsuleModuleManager::new(cx);
         let options = Self::window_options(&module_manager, cx);
         let window = match cx.open_window(options, |window, cx| {
-            cx.new(|cx| {
-                crate::island::Capsule::with_module_manager(module_manager, window, cx)
-            })
+            let entity = cx.new(|cx| crate::island::Capsule::with_module_manager(module_manager, window, cx));
+            let entity_weak = entity.downgrade();
+            window.on_window_should_close(cx, move |_window, cx| {
+                if let Some(capsule) = entity_weak.upgrade() {
+                    let _ = capsule.update(cx, |capsule, cx| {
+                        capsule.handle_module_event(
+                            &crate::island::module::CapsuleModuleEvent::Close,
+                            cx,
+                        );
+                    });
+                }
+                false
+            });
+            entity
         }) {
             Ok(window) => window,
             Err(error) => {
@@ -97,9 +120,28 @@ impl CapsulePanel {
                 return None;
             }
         };
-        if let Ok(entity) = window.entity(cx) {
-            ipc_subscriber.start(cx, entity, crate::island::Capsule::handle_ipc_command);
+
+        let window_id = window.window_id();
+        PANEL_WINDOW_ID.store(window_id.as_u64(), Ordering::SeqCst);
+
+        if !WATCHDOG_INITIALIZED.swap(true, Ordering::SeqCst) {
+            cx.on_window_closed(move |cx, closed_id| {
+                if closed_id.as_u64() == PANEL_WINDOW_ID.load(Ordering::SeqCst) {
+                    services::log_warn!(
+                        "PANEL",
+                        "Capsule panel window closed unexpectedly by compositor; respawning..."
+                    );
+                    cx.defer(move |cx| {
+                        Self::open(cx);
+                    });
+                }
+            })
+            .detach();
         }
+
+        Some(window)
+    }
+
         Some(window)
     }
 }
@@ -129,6 +171,25 @@ impl LockScreenPanel {
         }
     }
 
+    pub fn fallback_window_options(display: &dyn PlatformDisplay) -> WindowOptions {
+        WindowOptions {
+            display_id: Some(display.id()),
+            titlebar: None,
+            window_bounds: Some(WindowBounds::Windowed(display.bounds())),
+            app_id: Some("capsule-lockscreen".to_string()),
+            linux_window_background: LinuxWindowBackground::Opaque,
+            kind: WindowKind::LayerShell(LayerShellOptions {
+                namespace: "capsule-lockscreen".to_string(),
+                layer: Layer::Overlay,
+                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                exclusive_zone: Some(px(-1.0)),
+                keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
     pub fn open_all(cx: &mut gpui::App) -> Vec<WindowHandle<LockScreen>> {
         if IS_LOCKSCREEN_OPEN
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -137,67 +198,107 @@ impl LockScreenPanel {
             return Vec::new();
         }
 
+        let is_kwin = cx.has_global::<services::AppState>()
+            && cx.global::<services::AppState>().compositor.is_kwin();
+
+        let fallback_blur = cx
+            .has_global::<services::AppState>()
+            .then(|| {
+                cx.global::<services::AppState>()
+                    .wallpaper
+                    .get_blurred_wallpaper()
+            })
+            .flatten();
+
         let displays = cx.displays();
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
 
-        let blur_paths: Vec<Option<std::path::PathBuf>> = std::thread::scope(|s| {
-            let mut threads = Vec::new();
-            for (index, display) in displays.iter().enumerate() {
-                let bounds = display.bounds();
-                threads.push(s.spawn(move || {
-                    let blur_file = format!("/tmp/capsule_lock_blur_{index}_{timestamp}.jpg");
-                    let x: f32 = bounds.origin.x.into();
-                    let y: f32 = bounds.origin.y.into();
-                    let w: f32 = bounds.size.width.into();
-                    let h: f32 = bounds.size.height.into();
-                    let geom = format!(
-                        "{},{} {}x{}",
-                        x as i32,
-                        y as i32,
-                        w as u32,
-                        h as u32
-                    );
-                    let cmd = format!(
-                        "IM_BIN=magick; command -v magick >/dev/null 2>&1 || IM_BIN=convert; grim -g '{geom}' -t ppm - | $IM_BIN - -scale 20% -blur 0x5 -resize 500% {blur_file}"
-                    );
-                    let ok = std::process::Command::new("sh")
-                        .args(["-c", &cmd])
-                        .status()
-                        .map(|s| s.success())
-                        .unwrap_or(false);
-                    if ok && std::path::Path::new(&blur_file).exists() {
-                        Some(std::path::PathBuf::from(blur_file))
-                    } else {
-                        None
-                    }
-                }));
-            }
-            threads
-                .into_iter()
-                .map(|t| t.join().unwrap_or(None))
-                .collect()
-        });
+        let blur_paths: Vec<Option<std::path::PathBuf>> = if is_kwin {
+            // KWin does not implement wlr-screencopy, so grim will always fail.
+            // Use cached wallpaper blur directly.
+            vec![fallback_blur.clone(); displays.len()]
+        } else {
+            std::thread::scope(|s| {
+                let mut threads = Vec::new();
+                for (index, display) in displays.iter().enumerate() {
+                    let bounds = display.bounds();
+                    threads.push(s.spawn(move || {
+                        let blur_file = format!("/tmp/capsule_lock_blur_{index}_{timestamp}.jpg");
+                        let x: f32 = bounds.origin.x.into();
+                        let y: f32 = bounds.origin.y.into();
+                        let w: f32 = bounds.size.width.into();
+                        let h: f32 = bounds.size.height.into();
+                        let geom = format!(
+                            "{},{} {}x{}",
+                            x as i32,
+                            y as i32,
+                            w as u32,
+                            h as u32
+                        );
+                        let cmd = format!(
+                            "IM_BIN=magick; command -v magick >/dev/null 2>&1 || IM_BIN=convert; grim -g '{geom}' -t ppm - | $IM_BIN - -scale 20% -blur 0x5 -resize 500% {blur_file}"
+                        );
+                        let ok = std::process::Command::new("sh")
+                            .args(["-c", &cmd])
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false);
+                        if ok && std::path::Path::new(&blur_file).exists() {
+                            Some(std::path::PathBuf::from(blur_file))
+                        } else {
+                            None
+                        }
+                    }));
+                }
+                threads
+                    .into_iter()
+                    .map(|t| t.join().unwrap_or(None))
+                    .collect()
+            })
+        };
 
         let mut handles = Vec::new();
 
         for (index, display) in displays.iter().enumerate() {
             let is_primary = index == 0;
-            let options = Self::window_options(&**display);
-            let blur_path = blur_paths.get(index).cloned().flatten();
+            let blur_path = blur_paths
+                .get(index)
+                .cloned()
+                .flatten()
+                .or_else(|| fallback_blur.clone());
 
-            match cx.open_window(options, |window, cx| {
-                let view = cx.new(|cx| LockScreen::new(cx, is_primary, blur_path));
-                if is_primary {
-                    let focus = view.read(cx).focus_handle.clone();
-                    window.focus(&focus, cx);
+            let open_fn = |options: WindowOptions, cx: &mut gpui::App| {
+                let blur = blur_path.clone();
+                cx.open_window(options, |window, cx| {
+                    window.on_window_should_close(cx, |_, _| false);
+                    let view = cx.new(|cx| LockScreen::new(cx, is_primary, blur));
+                    if is_primary {
+                        let focus = view.read(cx).focus_handle.clone();
+                        window.focus(&focus, cx);
+                    }
+                    view
+                })
+            };
+
+            let window = if is_kwin {
+                open_fn(Self::fallback_window_options(&**display), cx).ok()
+            } else {
+                match open_fn(Self::window_options(&**display), cx) {
+                    Ok(w) => Some(w),
+                    Err(err) => {
+                        eprintln!(
+                            "SessionLock unsupported or failed ({err}); falling back to LayerShell Overlay"
+                        );
+                        open_fn(Self::fallback_window_options(&**display), cx).ok()
+                    }
                 }
-                view
-            }) {
-                Ok(w) => handles.push(w),
-                Err(err) => eprintln!("Failed to open lockscreen on display {index}: {err}"),
+            };
+
+            if let Some(w) = window {
+                handles.push(w);
             }
         }
 
@@ -284,9 +385,7 @@ impl SettingsPanel {
 
         let options = Self::window_options(cx);
 
-        match cx.open_window(options, |window, cx| {
-            cx.new(|cx| Settings::new(window, cx))
-        }) {
+        match cx.open_window(options, |window, cx| cx.new(|cx| Settings::new(window, cx))) {
             Ok(w) => Some(w),
             Err(err) => {
                 IS_SETTINGS_OPEN.store(false, Ordering::SeqCst);

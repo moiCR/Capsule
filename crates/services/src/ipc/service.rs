@@ -166,6 +166,9 @@ impl IpcSubscriber {
     }
 
     pub fn start_listener(&mut self) {
+        if let Some(cmd) = self.initial_command.take() {
+            push_ipc_command(cmd);
+        }
         if let Some(listener) = self.listener.take() {
             let path_clone = self.socket_path.clone();
             crate::spawn_tokio(async move {

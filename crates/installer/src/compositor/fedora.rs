@@ -28,6 +28,11 @@ impl CompositorBackend for FedoraCompositorBackend {
                 "dnf copr enable -y yalter/niri && ",
                 "dnf install -y niri xwayland-satellite"
             ),
+            Compositor::KWin => concat!(
+                "set -e && ",
+                "echo '==> Installing KWin Wayland from Fedora repositories...' && ",
+                "dnf install -y kwin-wayland"
+            ),
             Compositor::MangoWm => concat!(
                 "set -e && ",
                 "echo '==> Installing MangoWM via Fedora COPR (with source fallback)...' && ",

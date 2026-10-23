@@ -2,16 +2,16 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ColorExt, Context, DurationWithEasing, ElementId, FontWeight, InteractiveElement,
-    IntoElement, ParentElement, StatefulInteractiveElement, Styled, Window, div, ease_in_out, millis,
-    px, svg,
+    AnyElement, App, ColorExt, Context, DurationWithEasing, ElementId, FontWeight,
+    InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, Window,
+    div, ease_in_out, millis, px, svg,
 };
 use services::{AppState, PowerProfile};
 use ui::components::select::{Select, SelectItem};
 use ui::theme::Theme;
 
-use super::common::{card, control_row, hero_header, row_divider};
 use super::SettingsView;
+use super::common::{card, control_row, hero_header, row_divider};
 use crate::settings::Settings;
 
 fn text(key: &str, cx: &App) -> String {
@@ -98,9 +98,7 @@ impl SettingsView for SystemView {
                     } else {
                         gpui::transparent_black()
                     })
-                    .transitions(|t| {
-                        t.bg(millis(160).with_easing(ease_in_out))
-                    })
+                    .transitions(|t| t.bg(millis(160).with_easing(ease_in_out)))
                     .hover(|s| {
                         if !is_active {
                             s.bg(theme.surface().opacity(0.4))
@@ -126,9 +124,7 @@ impl SettingsView for SystemView {
                             } else {
                                 theme.foreground_muted()
                             })
-                            .transitions(|t| {
-                                t.text_color(millis(160).with_easing(ease_in_out))
-                            }),
+                            .transitions(|t| t.text_color(millis(160).with_easing(ease_in_out))),
                     )
                     .child(
                         div()
@@ -143,9 +139,7 @@ impl SettingsView for SystemView {
                             } else {
                                 theme.foreground()
                             })
-                            .transitions(|t| {
-                                t.text_color(millis(160).with_easing(ease_in_out))
-                            })
+                            .transitions(|t| t.text_color(millis(160).with_easing(ease_in_out)))
                             .child(label),
                     ),
             );
@@ -204,7 +198,9 @@ impl SettingsView for SystemView {
                     if cx.has_global::<AppState>() {
                         let app_state = cx.global::<AppState>();
                         let _ = app_state.language.set_language(&target_file);
-                        let _ = app_state.config.update(|cfg| cfg.ui.language = target_file.clone());
+                        let _ = app_state
+                            .config
+                            .update(|cfg| cfg.ui.language = target_file.clone());
                     }
                     if let Some(view) = this.view_as_mut::<SystemView>() {
                         view.is_lang_open = false;

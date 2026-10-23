@@ -8,12 +8,7 @@ use ui::tracker::DimensionTracker;
 
 use crate::island::widgets::style;
 
-pub fn hero_header(
-    icon: &'static str,
-    title: &str,
-    subtitle: &str,
-    theme: &Theme,
-) -> AnyElement {
+pub fn hero_header(icon: &'static str, title: &str, subtitle: &str, theme: &Theme) -> AnyElement {
     div()
         .flex()
         .items_center()
@@ -29,12 +24,7 @@ pub fn hero_header(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(px(18.0))
-                        .text_color(theme.accent()),
-                ),
+                .child(svg().path(icon).size(px(18.0)).text_color(theme.accent())),
         )
         .child(
             div()
@@ -132,13 +122,7 @@ pub fn control_row(
                     )
                 }),
         )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .flex_shrink_0()
-                .child(control),
-        )
+        .child(div().flex().items_center().flex_shrink_0().child(control))
         .into_any_element()
 }
 
@@ -186,11 +170,7 @@ pub fn toggle_row(
                     )
                 }),
         )
-        .child(
-            Switch::new(id)
-                .checked(is_on)
-                .on_click(on_click),
-        )
+        .child(Switch::new(id).checked(is_on).on_click(on_click))
         .into_any_element()
 }
 
@@ -283,9 +263,14 @@ pub fn segmented_selector<T: PartialEq + Clone + 'static>(
     selected: T,
     theme: &Theme,
     cx: &mut Context<crate::settings::Settings>,
-    on_select: impl Fn(&mut crate::settings::Settings, T, &mut Window, &mut Context<crate::settings::Settings>)
-        + 'static
-        + Copy,
+    on_select: impl Fn(
+        &mut crate::settings::Settings,
+        T,
+        &mut Window,
+        &mut Context<crate::settings::Settings>,
+    )
+    + 'static
+    + Copy,
 ) -> Div {
     let mut container = div()
         .flex()
@@ -316,9 +301,7 @@ pub fn segmented_selector<T: PartialEq + Clone + 'static>(
                 } else {
                     gpui::transparent_black()
                 })
-                .transitions(|t| {
-                    t.bg(gpui::millis(160).with_easing(gpui::ease_in_out))
-                })
+                .transitions(|t| t.bg(gpui::millis(160).with_easing(gpui::ease_in_out)))
                 .hover(|s| {
                     if !is_active {
                         s.bg(theme.surface().opacity(0.4))

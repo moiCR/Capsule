@@ -10,7 +10,7 @@ impl DashboardModule {
         cx: &mut Context<Self>,
     ) {
         match event.keystroke.key.as_str() {
-            "escape" => {
+            "escape" | "f4" if event.keystroke.key.as_str() == "escape" || event.keystroke.modifiers.alt => {
                 if self.satellites.iter().any(|satellite| satellite.open) {
                     if let Some(panel) = self.satellites.iter().rev().find(|panel| panel.open) {
                         cx.emit(

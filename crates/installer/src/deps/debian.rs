@@ -65,8 +65,7 @@ impl DebianPackageManager {
         }
         if let Some(home) = std::env::var_os("HOME") {
             let local_themes = Path::new(&home).join(".local/share/themes");
-            if local_themes.join("adw-gtk3").exists()
-                && local_themes.join("adw-gtk3-dark").exists()
+            if local_themes.join("adw-gtk3").exists() && local_themes.join("adw-gtk3-dark").exists()
             {
                 return true;
             }

@@ -222,7 +222,9 @@ impl WallpaperPanel {
                 ..Default::default()
             };
 
-            match cx.open_window(options, |window, cx| cx.new(|cx| Wallpaper::new(window, cx))) {
+            match cx.open_window(options, |window, cx| {
+                cx.new(|cx| Wallpaper::new(window, cx))
+            }) {
                 Ok(_) => {
                     services::log_info!(
                         "WALLPAPER",
@@ -259,12 +261,17 @@ impl WallpaperPanel {
             ..Default::default()
         };
 
-        match cx.open_window(options, |window, cx| cx.new(|cx| Wallpaper::new(window, cx))) {
+        match cx.open_window(options, |window, cx| {
+            cx.new(|cx| Wallpaper::new(window, cx))
+        }) {
             Ok(_) => {
                 services::log_info!("WALLPAPER", "Created default fallback wallpaper surface");
             }
             Err(err) => {
-                services::log_error!("WALLPAPER", "Failed to open default wallpaper window: {err}");
+                services::log_error!(
+                    "WALLPAPER",
+                    "Failed to open default wallpaper window: {err}"
+                );
             }
         }
     }

@@ -80,17 +80,15 @@ pub(super) fn wifi(
             cx,
         ));
         if module.navigation.selected_ssid.as_deref() == Some(&ap.ssid) {
-            let password_input = Input::from_state(
-                "dashboard-wifi-password",
-                &module.navigation.password_input,
-            )
-            .placeholder(module.text("quick_settings.password_placeholder", cx))
-            .masked(true)
-            .focused(true)
-            .h_px(38.0)
-            .flex_1(true)
-            .rounded(px(10.0))
-            .bg(style::surface(theme));
+            let password_input =
+                Input::from_state("dashboard-wifi-password", &module.navigation.password_input)
+                    .placeholder(module.text("quick_settings.password_placeholder", cx))
+                    .masked(true)
+                    .focused(true)
+                    .h_px(38.0)
+                    .flex_1(true)
+                    .rounded(px(10.0))
+                    .bg(style::surface(theme));
 
             content = content.child(
                 div()

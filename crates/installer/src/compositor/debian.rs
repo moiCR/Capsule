@@ -86,6 +86,12 @@ impl DebianCompositorBackend {
                 "  install -Dm644 \"$BUILD_DIR/niri/resources/niri.desktop\" /usr/share/wayland-sessions/niri.desktop; ",
                 "fi"
             ),
+            Compositor::KWin => concat!(
+                "set -e && export DEBIAN_FRONTEND=noninteractive && ",
+                "echo '==> Installing KWin Wayland from repositories...' && ",
+                "apt-get update -y && ",
+                "apt-get install -y kwin-wayland"
+            ),
             Compositor::MangoWm => concat!(
                 "set -e && export DEBIAN_FRONTEND=noninteractive && ",
                 "echo '==> Installing MangoWM build dependencies via APT...' && ",

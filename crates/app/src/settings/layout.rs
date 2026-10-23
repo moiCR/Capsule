@@ -36,9 +36,10 @@ pub(crate) fn render_settings(
     };
 
     let header = header::render_header(&settings.search_input, &theme, cx);
-    let sidebar_element = settings
-        .sidebar
-        .render(settings.active_tab, !query.is_empty(), &theme, cx);
+    let sidebar_element =
+        settings
+            .sidebar
+            .render(settings.active_tab, !query.is_empty(), &theme, cx);
 
     let card = div()
         .id("settings-modal-card")
@@ -86,7 +87,8 @@ pub(crate) fn render_settings(
         .on_mouse_up(
             gpui::MouseButton::Left,
             cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                if let Some((_, view)) = this.views.iter_mut().find(|(t, _)| *t == this.active_tab) {
+                if let Some((_, view)) = this.views.iter_mut().find(|(t, _)| *t == this.active_tab)
+                {
                     if view.handle_mouse_up(event, cx) {
                         cx.notify();
                     }
@@ -137,7 +139,9 @@ pub(crate) fn render_settings(
         .on_mouse_move_all(move |event, phase, _hitbox, _window, cx| {
             if phase == gpui::DispatchPhase::Bubble {
                 let _ = entity_move.update(cx, |this, cx| {
-                    if let Some((_, view)) = this.views.iter_mut().find(|(t, _)| *t == this.active_tab) {
+                    if let Some((_, view)) =
+                        this.views.iter_mut().find(|(t, _)| *t == this.active_tab)
+                    {
                         if view.handle_mouse_move(event, cx) {
                             cx.notify();
                         }
@@ -147,7 +151,8 @@ pub(crate) fn render_settings(
         })
         .on_mouse_up_all(move |event, _phase, _hitbox, _window, cx| {
             let _ = entity_up.update(cx, |this, cx| {
-                if let Some((_, view)) = this.views.iter_mut().find(|(t, _)| *t == this.active_tab) {
+                if let Some((_, view)) = this.views.iter_mut().find(|(t, _)| *t == this.active_tab)
+                {
                     if view.handle_mouse_up(event, cx) {
                         cx.notify();
                     }

@@ -1,13 +1,15 @@
 use gpui::{
-    AnyElement, App, Context, ElementId, IntoElement, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Styled, Window, div, px,
+    AnyElement, App, Context, ElementId, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Styled, Window, div, px,
 };
 use services::AppState;
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
-use super::common::{card, control_row, heading, hero_header, pill_button, row_divider, slider_row, toggle_row};
 use super::SettingsView;
+use super::common::{
+    card, control_row, heading, hero_header, pill_button, row_divider, slider_row, toggle_row,
+};
 use crate::settings::Settings;
 
 fn text(key: &str, cx: &App) -> String {
@@ -87,10 +89,7 @@ impl SettingsView for LockScreenView {
         };
         let timeout_pct = (idle_mins / 60.0).clamp(0.0, 1.0);
 
-        let time_presets = [
-            ("%H:%M", "24h (14:30)"),
-            ("%I:%M %p", "12h (02:30 PM)"),
-        ];
+        let time_presets = [("%H:%M", "24h (14:30)"), ("%I:%M %p", "12h (02:30 PM)")];
 
         let date_presets = [
             ("%A, %B %e, %Y", "%A, %B %e, %Y"),
@@ -162,7 +161,8 @@ impl SettingsView for LockScreenView {
                         cx.listener(|_this, _, _, cx| {
                             if cx.has_global::<AppState>() {
                                 let _ = cx.global::<AppState>().config.update(|cfg| {
-                                    cfg.lockscreen.show_media_player = !cfg.lockscreen.show_media_player;
+                                    cfg.lockscreen.show_media_player =
+                                        !cfg.lockscreen.show_media_player;
                                 });
                             }
                             cx.notify();
@@ -172,60 +172,69 @@ impl SettingsView for LockScreenView {
             // Time & Date Formats Card
             .child(
                 card(&theme)
-                    .child(heading(&text("settings.lockscreen_formats_title", cx), &theme))
+                    .child(heading(
+                        &text("settings.lockscreen_formats_title", cx),
+                        &theme,
+                    ))
                     .child(control_row(
                         &text("settings.time_format_title", cx),
                         Some(&text("settings.time_format_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(time_presets.into_iter().enumerate().map(|(idx, (fmt, label))| {
-                                let is_selected = config.lockscreen.time_format == fmt;
-                                let fmt_str = fmt.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("time-fmt-pill".into(), idx as u64),
-                                    label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = fmt_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.lockscreen.time_format = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            time_presets
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (fmt, label))| {
+                                    let is_selected = config.lockscreen.time_format == fmt;
+                                    let fmt_str = fmt.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger("time-fmt-pill".into(), idx as u64),
+                                        label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = fmt_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.lockscreen.time_format = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     ))
                     .child(row_divider(&theme))
                     .child(control_row(
                         &text("settings.date_format_title", cx),
                         Some(&text("settings.date_format_subtitle", cx)),
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .children(date_presets.into_iter().enumerate().map(|(idx, (fmt, label))| {
-                                let is_selected = config.lockscreen.date_format == fmt;
-                                let fmt_str = fmt.to_string();
-                                pill_button(
-                                    ElementId::NamedInteger("date-fmt-pill".into(), idx as u64),
-                                    label,
-                                    is_selected,
-                                    &theme,
-                                    cx.listener(move |_this, _, _, cx| {
-                                        if cx.has_global::<AppState>() {
-                                            let target = fmt_str.clone();
-                                            let _ = cx.global::<AppState>().config.update(|cfg| {
-                                                cfg.lockscreen.date_format = target;
-                                            });
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                            })),
+                        div().flex().gap(px(6.0)).children(
+                            date_presets
+                                .into_iter()
+                                .enumerate()
+                                .map(|(idx, (fmt, label))| {
+                                    let is_selected = config.lockscreen.date_format == fmt;
+                                    let fmt_str = fmt.to_string();
+                                    pill_button(
+                                        ElementId::NamedInteger("date-fmt-pill".into(), idx as u64),
+                                        label,
+                                        is_selected,
+                                        &theme,
+                                        cx.listener(move |_this, _, _, cx| {
+                                            if cx.has_global::<AppState>() {
+                                                let target = fmt_str.clone();
+                                                let _ =
+                                                    cx.global::<AppState>().config.update(|cfg| {
+                                                        cfg.lockscreen.date_format = target;
+                                                    });
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                         &theme,
                     )),
             )

@@ -103,13 +103,19 @@ impl MprisService {
                 };
 
                 if let Ok(builder) = MediaPlayer2PlayerProxy::builder(&conn).destination(target) {
-                    if let Ok(Ok(proxy)) = tokio::time::timeout(Duration::from_millis(500), builder.build()).await {
+                    if let Ok(Ok(proxy)) =
+                        tokio::time::timeout(Duration::from_millis(500), builder.build()).await
+                    {
                         // 1. Try SetPosition with track_id from Metadata
-                        if let Ok(Ok(meta)) = tokio::time::timeout(Duration::from_millis(300), proxy.metadata()).await {
+                        if let Ok(Ok(meta)) =
+                            tokio::time::timeout(Duration::from_millis(300), proxy.metadata()).await
+                        {
                             let track_id_opt = meta.get("mpris:trackid").and_then(extract_track_id);
 
                             if let Some(track_id_str) = track_id_opt {
-                                if let Ok(obj_path) = zbus::zvariant::ObjectPath::try_from(track_id_str.as_str()) {
+                                if let Ok(obj_path) =
+                                    zbus::zvariant::ObjectPath::try_from(track_id_str.as_str())
+                                {
                                     if let Ok(Ok(())) = tokio::time::timeout(
                                         Duration::from_millis(300),
                                         proxy.set_position(obj_path, target_micros),
@@ -128,9 +134,14 @@ impl MprisService {
                         }
 
                         // 2. Try Seek(offset) as fallback if SetPosition wasn't supported
-                        if let Ok(Ok(curr_pos)) = tokio::time::timeout(Duration::from_millis(300), proxy.position()).await {
+                        if let Ok(Ok(curr_pos)) =
+                            tokio::time::timeout(Duration::from_millis(300), proxy.position()).await
+                        {
                             let offset = target_micros - curr_pos;
-                            if let Ok(Ok(())) = tokio::time::timeout(Duration::from_millis(300), proxy.seek(offset)).await {
+                            if let Ok(Ok(())) =
+                                tokio::time::timeout(Duration::from_millis(300), proxy.seek(offset))
+                                    .await
+                            {
                                 crate::log_info!(
                                     "MPRIS",
                                     "Native D-Bus Seek fallback succeeded on {}",

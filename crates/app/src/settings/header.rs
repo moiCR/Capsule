@@ -1,6 +1,4 @@
-use gpui::{
-    ColorExt, Context, FontWeight, IntoElement, ParentElement, Styled, div, px, svg,
-};
+use gpui::{ColorExt, Context, FontWeight, IntoElement, ParentElement, Styled, div, px, svg};
 use ui::components::{IconButton, Input};
 use ui::theme::Theme;
 
@@ -96,7 +94,9 @@ pub fn render_header(
             IconButton::new("settings-close-btn", "close.svg")
                 .size(30.0)
                 .tooltip(if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().language.get("common.close")
+                    cx.global::<services::AppState>()
+                        .language
+                        .get("common.close")
                 } else {
                     "Cerrar".to_string()
                 })

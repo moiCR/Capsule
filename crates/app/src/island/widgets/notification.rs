@@ -3,7 +3,9 @@ use crate::island::module::{CapsuleModuleEvent, notification::NotificationModule
 use gpui::{AnyElement, Context, FontWeight, IntoElement, div, img, prelude::*, px, svg};
 use services::{NotificationItem, NotificationStore};
 use std::path::PathBuf;
-use ui::components::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Chip, IconButton, Input};
+use ui::components::{
+    Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Chip, IconButton, Input,
+};
 use ui::theme::Theme;
 
 pub const WIDTH: f32 = 440.0;
@@ -378,11 +380,12 @@ fn card(
         let label = action_label(key, label, cx);
         let key = key.clone();
         actions = actions.child(
-            Chip::new(format!("notification-action-{id}-{key}"), label)
-                .on_click(cx.listener(move |module, _, window, cx| {
+            Chip::new(format!("notification-action-{id}-{key}"), label).on_click(cx.listener(
+                move |module, _, window, cx| {
                     cx.stop_propagation();
                     module.action(id, key.clone(), window, cx);
-                })),
+                },
+            )),
         );
     }
     if has_actions {
@@ -397,15 +400,12 @@ fn card(
                 .flex_col()
                 .gap(px(6.0))
                 .child(
-                    Input::from_state(
-                        format!("notification-reply-input-{id}"),
-                        &reply.input,
-                    )
-                    .placeholder(module.text("notifications_module.reply_placeholder", cx))
-                    .h_px(36.0)
-                    .rounded(px(style::INNER_RADIUS))
-                    .bg(style::surface(theme))
-                    .focused(true),
+                    Input::from_state(format!("notification-reply-input-{id}"), &reply.input)
+                        .placeholder(module.text("notifications_module.reply_placeholder", cx))
+                        .h_px(36.0)
+                        .rounded(px(style::INNER_RADIUS))
+                        .bg(style::surface(theme))
+                        .focused(true),
                 )
                 .child(
                     div()

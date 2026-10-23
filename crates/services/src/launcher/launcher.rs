@@ -458,7 +458,11 @@ mod tests {
         let service = LauncherService::default();
         let mut sub = service.subscribe();
         service.refresh().await?;
-        assert!(tokio::time::timeout(std::time::Duration::from_millis(500), sub.recv()).await.is_ok());
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(500), sub.recv())
+                .await
+                .is_ok()
+        );
         Ok(())
     }
 }

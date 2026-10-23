@@ -54,6 +54,7 @@ impl CompositorBackend for ArchCompositorBackend {
                 self.pacman_or_helper_install(&["hyprland", "xdg-desktop-portal-hyprland"])
             }
             Compositor::Niri => self.pacman_or_helper_install(&["niri", "xwayland-satellite"]),
+            Compositor::KWin => self.pacman_or_helper_install(&["kwin", "plasma-workspace"]),
             Compositor::MangoWm => match &self.helper {
                 Some(AurHelper::Paru) => {
                     let mut cmd = Command::new("paru");

@@ -81,9 +81,10 @@ impl Capsule {
                 return;
             }
             let previous_window = capsule.window_state.handle;
-            let options =
-                crate::panel::CapsulePanel::window_options(&capsule.module_manager, cx);
+            let options = crate::panel::CapsulePanel::window_options(&capsule.module_manager, cx);
             let result = cx.open_window(options, |window, cx| {
+                crate::panel::CapsulePanel::set_panel_window_id(window.window_handle().window_id().as_u64());
+                window.on_window_should_close(cx, |_, _| false);
                 entity.update(cx, |capsule, cx| {
                     capsule.location = location;
                     capsule.window_state = WindowState::new(window);
@@ -162,24 +163,29 @@ impl Capsule {
             self.window_state.satellite_open = satellite_open;
             self.window_state.orb_expanded = orb_expanded;
             self.window_state.notification_popup = passive_notification;
-            let keyboard = if !passive_notification
-                && !matches!(
-                    current,
-                    CapsuleModuleId::Default
-                        | CapsuleModuleId::DefaultExpanded
-                        | CapsuleModuleId::Shelf
-                        | CapsuleModuleId::ShelfDrop
-                )
-                || satellite_open
-                || orb_expanded
-            {
-                gpui::layer_shell::KeyboardInteractivity::Exclusive
-            } else {
-                gpui::layer_shell::KeyboardInteractivity::OnDemand
+            let keyboard = match current {
+                CapsuleModuleId::Default | CapsuleModuleId::DefaultExpanded => {
+                    if orb_expanded {
+                        gpui::layer_shell::KeyboardInteractivity::Exclusive
+                    } else {
+                        gpui::layer_shell::KeyboardInteractivity::None
+                    }
+                }
+                CapsuleModuleId::Notification => {
+                    if self.module_manager.notification.read(cx).history {
+                        gpui::layer_shell::KeyboardInteractivity::Exclusive
+                    } else {
+                        gpui::layer_shell::KeyboardInteractivity::None
+                    }
+                }
+                CapsuleModuleId::ShelfDrop => gpui::layer_shell::KeyboardInteractivity::None,
+                _ => gpui::layer_shell::KeyboardInteractivity::Exclusive,
             };
 
             window.set_keyboard_interactivity(keyboard);
-            if orb_expanded {
+            if keyboard == gpui::layer_shell::KeyboardInteractivity::None {
+                window.blur(cx);
+            } else if orb_expanded {
                 let focus = self.orbit.read(cx).focus_handle.clone();
                 window.focus(&focus, cx);
             } else if satellite_open {

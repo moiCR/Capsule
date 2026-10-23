@@ -49,7 +49,8 @@ impl FromStr for IpcCommand {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let trimmed_raw = s.trim();
-        if let Some(path_str) = trimmed_raw.strip_prefix("wallpaper ")
+        if let Some(path_str) = trimmed_raw
+            .strip_prefix("wallpaper ")
             .or_else(|| trimmed_raw.strip_prefix("set-wallpaper "))
             .or_else(|| trimmed_raw.strip_prefix("set_wallpaper "))
         {
