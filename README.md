@@ -11,6 +11,7 @@
 [![Niri](https://img.shields.io/badge/Niri-supported-5e81ac?logo=wayland&logoColor=white)](https://github.com/YaLTeR/niri)
 [![Hyprland](https://img.shields.io/badge/Hyprland-supported-58e1ff?logo=wayland&logoColor=white)](https://github.com/hyprwm/Hyprland)
 [![MangoWM](https://img.shields.io/badge/MangoWM-supported-f2a65a?logo=wayland&logoColor=white)](https://github.com/DreamMaoMao/mangowc)
+[![KWin](https://img.shields.io/badge/KWin-supported-f2a65a?logo=wayland&logoColor=white)](https://github.com/KDE/kwin)
 
 </div>
 
