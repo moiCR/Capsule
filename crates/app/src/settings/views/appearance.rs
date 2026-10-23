@@ -17,7 +17,6 @@ use super::common::{
     card, control_row, heading, hero_header, pill_button, row_divider, segmented_selector,
     slider_row, toggle_row,
 };
-use super::SettingsView;
 use crate::island::animator::Animator;
 use crate::island::orbit::Preview;
 use crate::island::widgets::style;

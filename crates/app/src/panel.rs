@@ -141,9 +141,6 @@ impl CapsulePanel {
 
         Some(window)
     }
-
-        Some(window)
-    }
 }
 
 static IS_LOCKSCREEN_OPEN: AtomicBool = AtomicBool::new(false);
