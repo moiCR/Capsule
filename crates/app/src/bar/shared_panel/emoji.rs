@@ -84,29 +84,24 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
         .px(px(4.0))
         .flex()
         .items_center()
-        .gap(px(10.0))
-        .child(
-            svg()
-                .path("search.svg")
-                .size(px(16.0))
-                .text_color(theme.foreground_muted()),
-        )
         .child(
             Input::from_state("bar-emoji-search", &state.search_input)
                 .placeholder(placeholder)
-                .cleanable(!state.search_input.is_empty())
+                .prefix(
+                    svg()
+                        .path("search.svg")
+                        .size(px(16.0))
+                        .text_color(theme.foreground_muted())
+                        .into_any_element(),
+                )
+                .padding_x(px(0.0))
+                .gap(px(10.0))
                 .w_full()
                 .h_px(36.0)
                 .text_size(px(13.5))
                 .bg(gpui::transparent_black())
                 .border_color(gpui::transparent_black())
-                .focused_border_color(gpui::transparent_black())
-                .on_clear(cx.listener(|bar, _, _, cx| {
-                    bar.shared_panel.emoji_state.search_input.clear();
-                    bar.shared_panel.emoji_state.selected = 0;
-                    bar.shared_panel.emoji_state.page = 0;
-                    cx.notify();
-                })),
+                .focused_border_color(gpui::transparent_black()),
         );
 
     let divider = div()
