@@ -1,9 +1,9 @@
 use crate::theme::Theme;
 use crate::tracker::DimensionTracker;
 use gpui::{
-    App, Bounds, ColorExt, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseUpEvent, ParentElement, RenderOnce, SharedString,
-    Styled, Window, canvas, div, fill, px, size, svg, white,
+    App, Bounds, ColorExt, ElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement, RenderOnce, SharedString, Styled, Window, canvas, div, fill, px,
+    size, svg, white,
 };
 
 pub type MouseDownListener = Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>;
@@ -115,7 +115,9 @@ impl Slider {
 impl RenderOnce for Slider {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.global::<Theme>();
-        let track_color = self.track_color.unwrap_or_else(|| theme.surface().opacity(0.35));
+        let track_color = self
+            .track_color
+            .unwrap_or_else(|| theme.surface().opacity(0.35));
         let active_color = self.active_color.unwrap_or_else(|| theme.accent());
         let corner_radius = self.height / 2.0;
         let fraction = self.fraction;
@@ -205,16 +207,12 @@ impl RenderOnce for Slider {
             };
 
             el = el.child(
-                div()
-                    .absolute()
-                    .left(px(10.0))
-                    .top(px(icon_top))
-                    .child(
-                        svg()
-                            .path(icon_path)
-                            .size(px(self.icon_size))
-                            .text_color(icon_color),
-                    ),
+                div().absolute().left(px(10.0)).top(px(icon_top)).child(
+                    svg()
+                        .path(icon_path)
+                        .size(px(self.icon_size))
+                        .text_color(icon_color),
+                ),
             );
         }
 
@@ -264,4 +262,3 @@ mod tests {
         assert_eq!(s_negative.fraction, 0.0);
     }
 }
-

@@ -3,11 +3,13 @@ use gpui::App;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingsTab {
     Appearance = 0,
-    Apps = 1,
-    Media = 2,
-    LockScreen = 3,
-    System = 4,
-    Record = 5,
+    Island = 1,
+    Bar = 2,
+    Apps = 3,
+    Media = 4,
+    LockScreen = 5,
+    System = 6,
+    Record = 7,
 }
 
 pub trait SidebarItem {

@@ -1,4 +1,6 @@
+use arc_swap::ArcSwap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant, sleep, timeout};
 use zbus::interface;
@@ -21,9 +23,9 @@ pub struct SniItem {
 
 #[derive(Clone)]
 pub struct SniHostService {
-    items: Arc<Mutex<Vec<SniItem>>>,
+    items: Arc<ArcSwap<Vec<SniItem>>>,
     raw_services: Arc<Mutex<Vec<String>>>,
-    selected_tray_idx: Arc<Mutex<Option<usize>>>,
+    selected_tray_idx: Arc<AtomicIsize>,
     notify: Arc<tokio::sync::Notify>,
 }
 
@@ -32,35 +34,37 @@ impl SniHostService {
         let _guard = crate::tokio_handle().enter();
         let _ = std::fs::create_dir_all("/tmp/capsule_tray_icons");
         Self {
-            items: Arc::new(Mutex::new(Vec::new())),
+            items: Arc::new(ArcSwap::from_pointee(Vec::new())),
             raw_services: Arc::new(Mutex::new(Vec::new())),
-            selected_tray_idx: Arc::new(Mutex::new(None)),
+            selected_tray_idx: Arc::new(AtomicIsize::new(-1)),
             notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
+    pub fn items_arc(&self) -> Arc<Vec<SniItem>> {
+        self.items.load_full()
+    }
+
     pub fn get_items(&self) -> Vec<SniItem> {
-        self.items.lock().map(|g| g.clone()).unwrap_or_default()
+        self.items.load().as_ref().clone()
     }
 
     fn set_items(&self, new: Vec<SniItem>) {
-        if let Ok(mut g) = self.items.lock() {
-            *g = new;
-        }
+        self.items.store(Arc::new(new));
     }
 
     pub fn get_selected_idx(&self) -> Option<usize> {
-        self.selected_tray_idx.lock().ok().and_then(|g| *g)
+        let val = self.selected_tray_idx.load(Ordering::Relaxed);
+        usize::try_from(val).ok()
     }
 
     pub fn set_selected_idx(&self, idx: Option<usize>) {
-        if let Ok(mut g) = self.selected_tray_idx.lock() {
-            *g = idx;
-        }
+        let val = idx.and_then(|i| isize::try_from(i).ok()).unwrap_or(-1);
+        self.selected_tray_idx.store(val, Ordering::Relaxed);
     }
 
     pub fn activate_item(&self, idx: usize) {
-        let items = self.get_items();
+        let items = self.items.load();
         if let Some(item) = items.get(idx) {
             let bus = item.bus_name.clone();
             let path = item.object_path.clone();
@@ -299,7 +303,7 @@ async fn run_sni_service(host: SniHostService) -> anyhow::Result<()> {
             detailed_items.push(item);
         }
 
-        if host.get_items() != detailed_items {
+        if host.items.load().as_slice() != detailed_items.as_slice() {
             host.set_items(detailed_items);
         }
 
@@ -321,14 +325,16 @@ fn resolve_icon_file(
             continue;
         }
 
-        // 1. Absolute path check
-        if Path::new(name).is_absolute() && Path::new(name).exists() {
+        let path = Path::new(name);
+        if path.is_absolute()
+            && path.exists()
+            && path.extension().and_then(|e| e.to_str()) != Some("xpm")
+        {
             return Some(name.to_string());
         }
 
-        // 2. IconThemePath check
         if let Some(tp) = theme_path {
-            for ext in &["png", "svg", "xpm"] {
+            for ext in &["png", "svg"] {
                 let p = PathBuf::from(tp).join(format!("{name}.{ext}"));
                 if p.exists() {
                     return Some(p.to_string_lossy().to_string());
@@ -336,7 +342,6 @@ fn resolve_icon_file(
             }
         }
 
-        // 3. XDG Icon Directory Search
         let home = std::env::var("HOME").unwrap_or_default();
         let search_dirs = [
             format!("{home}/.local/share/icons/hicolor/128x128/apps"),
@@ -353,8 +358,8 @@ fn resolve_icon_file(
         ];
 
         let clean_name = name.to_lowercase().replace(' ', "-");
-        for dir in &search_dirs {
-            for ext in &["png", "svg", "xpm"] {
+        for ext in &["png", "svg"] {
+            for dir in &search_dirs {
                 let p1 = PathBuf::from(dir).join(format!("{name}.{ext}"));
                 if p1.exists() {
                     return Some(p1.to_string_lossy().to_string());

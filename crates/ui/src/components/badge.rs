@@ -115,7 +115,11 @@ impl RenderOnce for Badge {
         let h = self.size.height();
         let font_size = self.size.text_size();
         let icon_sz = self.size.icon_size();
-        let px_val = if self.circle { 0.0 } else { self.size.padding_x() };
+        let px_val = if self.circle {
+            0.0
+        } else {
+            self.size.padding_x()
+        };
 
         let (bg, text_col, border_col) = match self.variant {
             BadgeVariant::Neutral => (
@@ -123,11 +127,7 @@ impl RenderOnce for Badge {
                 theme.foreground_muted(),
                 theme.surface().opacity(0.3),
             ),
-            BadgeVariant::Accent => (
-                theme.accent(),
-                theme.on_accent(),
-                theme.accent(),
-            ),
+            BadgeVariant::Accent => (theme.accent(), theme.on_accent(), theme.accent()),
             BadgeVariant::Danger => (
                 theme.red().opacity(0.18),
                 theme.red(),

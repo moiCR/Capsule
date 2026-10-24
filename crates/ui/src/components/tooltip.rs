@@ -1,7 +1,7 @@
 use crate::theme::Theme;
 use gpui::{
-    AnyView, App, AppContext, ColorExt, Context, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window, div, prelude::FluentBuilder, px,
+    AnyView, App, AppContext, ColorExt, Context, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window, div, prelude::FluentBuilder, px,
 };
 
 pub struct TooltipView {

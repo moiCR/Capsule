@@ -83,7 +83,9 @@ impl Capsule {
             let previous_window = capsule.window_state.handle;
             let options = crate::panel::CapsulePanel::window_options(&capsule.module_manager, cx);
             let result = cx.open_window(options, |window, cx| {
-                crate::panel::CapsulePanel::set_panel_window_id(window.window_handle().window_id().as_u64());
+                crate::panel::CapsulePanel::set_panel_window_id(
+                    window.window_handle().window_id().as_u64(),
+                );
                 window.on_window_should_close(cx, |_, _| false);
                 entity.update(cx, |capsule, cx| {
                     capsule.location = location;
@@ -97,7 +99,10 @@ impl Capsule {
                 entity.clone()
             });
             match result {
-                Ok(_) => {
+                Ok(window) => {
+                    if cx.has_global::<crate::panel::ShellState>() {
+                        cx.global_mut::<crate::panel::ShellState>().window = Some(window.into());
+                    }
                     let _ = previous_window.update(cx, |_, window, _| window.remove_window());
                 }
                 Err(error) => eprintln!("Failed to move Capsule window: {error}"),
@@ -143,7 +148,7 @@ impl Capsule {
         maximum
     }
 
-    pub(super) fn sync_window(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn sync_window(&mut self, cx: &mut Context<Self>) {
         let handle = self.window_state.handle;
         let _ = handle.update(cx, |_, window, cx| self.apply_window_geometry(window, cx));
     }

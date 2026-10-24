@@ -298,6 +298,8 @@ impl LauncherService {
         let mut map = HashMap::new();
         let subdirs = [
             "hicolor/scalable/apps",
+            "hicolor/scalable/categories",
+            "hicolor/scalable/preferences",
             "hicolor/512x512/apps",
             "hicolor/256x256/apps",
             "hicolor/128x128/apps",
@@ -307,6 +309,10 @@ impl LauncherService {
             "hicolor/32x32/apps",
             "hicolor/24x24/apps",
             "hicolor/16x16/apps",
+            "breeze/apps/48",
+            "breeze/apps/32",
+            "breeze-dark/apps/48",
+            "breeze-dark/apps/32",
             "pixmaps",
         ];
         for base in base_dirs {
@@ -318,7 +324,12 @@ impl LauncherService {
                         if path.is_file()
                             && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
                         {
-                            map.entry(stem.to_string()).or_insert(path);
+                            map.entry(stem.to_string()).or_insert_with(|| path.clone());
+                            if let Some(short) = stem.rsplit('.').next() {
+                                if short != stem {
+                                    map.entry(short.to_string()).or_insert_with(|| path.clone());
+                                }
+                            }
                         }
                     }
                 }
@@ -397,7 +408,21 @@ impl LauncherService {
             if p.is_absolute() && p.exists() {
                 Some(p.to_path_buf())
             } else {
-                icon_map.get(ic).cloned()
+                let clean = ic
+                    .strip_suffix(".png")
+                    .or_else(|| ic.strip_suffix(".svg"))
+                    .or_else(|| ic.strip_suffix(".xpm"))
+                    .unwrap_or(ic);
+                icon_map
+                    .get(clean)
+                    .or_else(|| icon_map.get(ic))
+                    .or_else(|| {
+                        clean
+                            .rsplit('.')
+                            .next()
+                            .and_then(|short| icon_map.get(short))
+                    })
+                    .cloned()
             }
         });
 

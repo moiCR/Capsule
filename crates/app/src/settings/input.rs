@@ -53,7 +53,9 @@ impl Settings {
         // Tab switches sidebar sections when not searching
         if key == "tab" && !self.search_input.focused {
             let next_tab = match self.active_tab {
-                SettingsTab::Appearance => SettingsTab::Apps,
+                SettingsTab::Appearance => SettingsTab::Island,
+                SettingsTab::Island => SettingsTab::Bar,
+                SettingsTab::Bar => SettingsTab::Apps,
                 SettingsTab::Apps => SettingsTab::Media,
                 SettingsTab::Media => SettingsTab::LockScreen,
                 SettingsTab::LockScreen => SettingsTab::System,

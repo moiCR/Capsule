@@ -9,8 +9,8 @@ pub use lock_screen_config::{LockScreenConfig, LockscreenConfig};
 pub use mpris_config::MprisConfig;
 pub use record_config::RecordConfig;
 pub use ui_config::{
-    CapsuleAnimation, CapsuleLocation, CapsuleStyle, ContentTransition, UIConfig, UiConfig,
-    WallpaperTransition,
+    BarConfig, BarWidgetId, BarZone, CapsuleAnimation, CapsuleLocation, CapsuleStyle,
+    ContentTransition, ShellMode, UIConfig, UiConfig, WallpaperTransition,
 };
 
 use arc_swap::ArcSwap;

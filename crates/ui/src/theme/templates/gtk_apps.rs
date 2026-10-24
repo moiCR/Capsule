@@ -72,7 +72,12 @@ fn update_settings_ini(path: &Path, updates: &[(&str, String)]) {
     let _ = fs::write(path, new_lines.join("\n") + "\n");
 }
 
-fn update_xsettingsd_conf(path: &Path, gtk_theme_name: &str, color_scheme: &str, prefer_dark: bool) {
+fn update_xsettingsd_conf(
+    path: &Path,
+    gtk_theme_name: &str,
+    color_scheme: &str,
+    prefer_dark: bool,
+) {
     let existing = if path.exists() {
         fs::read_to_string(path).unwrap_or_default()
     } else {
@@ -83,7 +88,10 @@ fn update_xsettingsd_conf(path: &Path, gtk_theme_name: &str, color_scheme: &str,
     let updates = [
         ("Net/ThemeName", format!("\"{gtk_theme_name}\"")),
         ("Gtk/ColorScheme", format!("\"{color_scheme}\"")),
-        ("Gtk/ApplicationPreferDarkTheme", prefer_dark_num.to_string()),
+        (
+            "Gtk/ApplicationPreferDarkTheme",
+            prefer_dark_num.to_string(),
+        ),
     ];
 
     let mut new_lines: Vec<String> = existing

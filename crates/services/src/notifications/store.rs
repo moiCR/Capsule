@@ -157,6 +157,14 @@ impl NotificationStore {
         None
     }
 
+    pub fn is_hovered(&self) -> bool {
+        if let Ok(guard) = self.latest_notification.lock() {
+            guard.hovered_at.is_some()
+        } else {
+            false
+        }
+    }
+
     pub fn set_hovered(&self, hovered: bool) {
         self.set_hovered_at(hovered, Instant::now());
         self.changes.send_replace(());

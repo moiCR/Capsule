@@ -32,6 +32,14 @@ if hl.plugin.hyprglass then
 	{exclude = true}
     )
     hg.layer(
+	"capsule-bar",
+	{exclude = true}
+    )
+    hg.layer(
+	"capsule-wallpaper",
+	{exclude = true}
+    )
+    hg.layer(
         "selection",
         {exclude = true}
     )

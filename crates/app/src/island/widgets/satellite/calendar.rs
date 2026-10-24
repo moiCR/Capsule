@@ -33,11 +33,9 @@ fn control(
                     cx,
                 );
             } else {
-                cx.emit(
-                    crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
-                        crate::island::satellite::SatelliteId::Calendar,
-                    ),
-                );
+                cx.emit(crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
+                    crate::island::satellite::SatelliteId::Calendar,
+                ));
             }
         }))
         .child(

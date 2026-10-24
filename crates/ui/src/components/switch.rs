@@ -1,8 +1,8 @@
 use crate::theme::Theme;
 use gpui::{
-    App, ClickEvent, ColorExt, DurationWithEasing, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window,
-    div, ease_in_out, millis, px, white,
+    App, ClickEvent, ColorExt, DurationWithEasing, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, ease_in_out,
+    millis, px, white,
 };
 
 pub type ClickListener = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -83,9 +83,7 @@ impl RenderOnce for Switch {
             });
 
         if !self.disabled {
-            track = track
-                .cursor_pointer()
-                .hover(move |s| s.bg(hover_bg));
+            track = track.cursor_pointer().hover(move |s| s.bg(hover_bg));
 
             if let Some(on_click) = self.on_click {
                 track = track.on_click(move |evt, window, app| {
@@ -123,17 +121,12 @@ mod tests {
 
     #[test]
     fn test_switch_builder() {
-        let sw = Switch::new("my-switch")
-            .checked(true)
-            .disabled(false);
+        let sw = Switch::new("my-switch").checked(true).disabled(false);
         assert!(sw.checked);
         assert!(!sw.disabled);
 
-        let sw_disabled = Switch::new("disabled-sw")
-            .checked(false)
-            .disabled(true);
+        let sw_disabled = Switch::new("disabled-sw").checked(false).disabled(true);
         assert!(!sw_disabled.checked);
         assert!(sw_disabled.disabled);
     }
 }
-

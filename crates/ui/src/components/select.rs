@@ -355,7 +355,11 @@ impl RenderOnce for Select {
             );
 
         let chevron = svg()
-            .path(if self.is_open { "chevron-up.svg" } else { "chevron-down.svg" })
+            .path(if self.is_open {
+                "chevron-up.svg"
+            } else {
+                "chevron-down.svg"
+            })
             .size(px(14.0))
             .flex_shrink_0()
             .text_color(if self.is_open {
@@ -363,9 +367,7 @@ impl RenderOnce for Select {
             } else {
                 theme.foreground_muted()
             })
-            .transitions(|t| {
-                t.text_color(millis(160).with_easing(ease_in_out))
-            });
+            .transitions(|t| t.text_color(millis(160).with_easing(ease_in_out)));
 
         let trigger_element = trigger.child(trigger_content).child(chevron);
 

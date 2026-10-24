@@ -1,7 +1,7 @@
-mod launch_apps;
+pub(crate) mod launch_apps;
 
 use gpui::{Context, Task};
-use services::IpcCommand;
+use services::{AppState, IpcCommand};
 
 use super::{
     Capsule,
@@ -9,27 +9,8 @@ use super::{
 };
 
 impl Capsule {
-    pub(super) fn start_ipc(cx: &mut Context<Self>) -> Task<()> {
-        cx.spawn(async move |this, cx| {
-            loop {
-                services::wait_for_ipc_command().await;
-                if this
-                    .update(cx, |capsule, cx| {
-                        let mut received = false;
-                        while let Some(command) = services::pop_ipc_command() {
-                            received = true;
-                            capsule.handle_ipc_command(command, cx);
-                        }
-                        if received {
-                            capsule.sync_window(cx);
-                        }
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        })
+    pub(super) fn start_ipc(_cx: &mut Context<Self>) -> Task<()> {
+        Task::ready(())
     }
 
     pub fn handle_ipc_command(&mut self, command: IpcCommand, cx: &mut Context<Self>) {
@@ -53,7 +34,7 @@ impl Capsule {
             | IpcCommand::Browser
             | IpcCommand::Editor
             | IpcCommand::FileManager) => {
-                launch_apps::launch(command, cx);
+                launch_apps::launch(command, cx.global::<AppState>());
             }
 
             IpcCommand::ShowDashboard => {

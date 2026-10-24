@@ -15,8 +15,8 @@ use crate::panel::SettingsPanel;
 use animator::SettingsAnimator;
 use sidebar::{SettingsTab, Sidebar};
 use views::{
-    SettingsView, appearance::AppearanceView, apps::AppsView, lockscreen::LockScreenView,
-    media::MediaView, record::RecordView, system::SystemView,
+    SettingsView, appearance::AppearanceView, apps::AppsView, bar::BarView, island::IslandView,
+    lockscreen::LockScreenView, media::MediaView, record::RecordView, system::SystemView,
 };
 
 pub const WIDTH: f32 = 1120.0;
@@ -49,6 +49,8 @@ impl Settings {
 
         let views: Vec<(SettingsTab, Box<dyn SettingsView>)> = vec![
             (SettingsTab::Appearance, Box::new(AppearanceView::new())),
+            (SettingsTab::Island, Box::new(IslandView::new())),
+            (SettingsTab::Bar, Box::new(BarView::new())),
             (SettingsTab::Apps, Box::new(AppsView::new())),
             (SettingsTab::Media, Box::new(MediaView::new())),
             (SettingsTab::LockScreen, Box::new(LockScreenView::new())),

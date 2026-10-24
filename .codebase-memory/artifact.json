@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "75fd7b8fd2305163545b1ec7d958afd482b7cee1",
-    "indexed_at": "2026-10-21T08:37:39Z",
-    "project": "home-moi-Proyectos-Capsule",
-    "nodes": 4616,
-    "edges": 19515,
-    "original_size": 21757952,
-    "compressed_size": 3526105,
+    "commit": "f3a7a7cf3c1c99d6e9435b9c67eeca6b0a7ebdfb",
+    "indexed_at": "2026-10-24T07:05:29Z",
+    "project": "home-moi-pro-Capsule",
+    "nodes": 5204,
+    "edges": 23400,
+    "original_size": 23199744,
+    "compressed_size": 3954399,
     "compression_level": 3
 }

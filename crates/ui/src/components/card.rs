@@ -112,15 +112,9 @@ impl RenderOnce for Card {
         let theme = cx.global::<Theme>();
 
         let (base_bg, hover_bg) = if self.elevated {
-            (
-                theme.surface().opacity(0.7),
-                theme.surface().opacity(0.9),
-            )
+            (theme.surface().opacity(0.7), theme.surface().opacity(0.9))
         } else {
-            (
-                theme.surface().opacity(0.4),
-                theme.surface().opacity(0.6),
-            )
+            (theme.surface().opacity(0.4), theme.surface().opacity(0.6))
         };
 
         if self.interactive || self.on_click.is_some() || self.id.is_some() {
@@ -149,9 +143,7 @@ impl RenderOnce for Card {
             }
 
             if self.border {
-                el = el
-                    .border_1()
-                    .border_color(theme.surface().opacity(0.2));
+                el = el.border_1().border_color(theme.surface().opacity(0.2));
             }
 
             if self.interactive || self.on_click.is_some() {
@@ -195,9 +187,7 @@ impl RenderOnce for Card {
             }
 
             if self.border {
-                el = el
-                    .border_1()
-                    .border_color(theme.surface().opacity(0.2));
+                el = el.border_1().border_color(theme.surface().opacity(0.2));
             }
 
             el.children(self.children).into_any_element()

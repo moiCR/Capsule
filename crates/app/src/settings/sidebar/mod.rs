@@ -22,6 +22,16 @@ impl Sidebar {
                 "palette.svg",
             )),
             Box::new(TabSidebarItem::new(
+                SettingsTab::Island,
+                "settings.tab_island",
+                "island.svg",
+            )),
+            Box::new(TabSidebarItem::new(
+                SettingsTab::Bar,
+                "settings.tab_bar",
+                "bar.svg",
+            )),
+            Box::new(TabSidebarItem::new(
                 SettingsTab::Apps,
                 "settings.tab_apps",
                 "grid-dots.svg",

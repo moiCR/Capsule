@@ -103,3 +103,12 @@ hl.window_rule({
     center = true,
     size = "1000 700",
 })
+
+hl.layer_rule({
+    name = "capsule-panel-blur",
+    match = {
+        namespace = "^capsule-panel$",
+    },
+    blur = true,
+    ignore_alpha = 0.05,
+})

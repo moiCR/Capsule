@@ -1,9 +1,6 @@
 use std::process::Stdio;
 
-use gpui::Context;
 use services::{AppState, IpcCommand, config::Defaults};
-
-use crate::island::Capsule;
 
 fn configured_command(command: &IpcCommand, defaults: &Defaults) -> Option<String> {
     let (application, terminal_apps): (&str, &[&str]) = match command {
@@ -30,8 +27,8 @@ fn configured_command(command: &IpcCommand, defaults: &Defaults) -> Option<Strin
     }
 }
 
-pub(super) fn launch(command: IpcCommand, cx: &Context<Capsule>) {
-    let config = cx.global::<AppState>().config.get();
+pub fn launch(command: IpcCommand, app_state: &AppState) {
+    let config = app_state.config.get();
     let Some(application) = configured_command(&command, &config.defaults) else {
         services::log_warn!("IPC", "No application configured for {:?}", command);
         return;

@@ -273,18 +273,14 @@ impl InputState {
     }
 
     pub fn copy(&self, cx: &mut App) {
-        let text = self
-            .selected_text()
-            .unwrap_or_else(|| self.text());
+        let text = self.selected_text().unwrap_or_else(|| self.text());
         if !text.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
     }
 
     pub fn cut(&mut self, cx: &mut App) {
-        let text = self
-            .selected_text()
-            .unwrap_or_else(|| self.text());
+        let text = self.selected_text().unwrap_or_else(|| self.text());
         if !text.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             if !self.delete_selection() {
@@ -661,7 +657,9 @@ impl RenderOnce for Input {
         };
 
         let is_empty = chars.is_empty();
-        let show_cursor = self.cursor_visible.unwrap_or(self.focused && !self.disabled);
+        let show_cursor = self
+            .cursor_visible
+            .unwrap_or(self.focused && !self.disabled);
 
         let height = self.height.unwrap_or(px(44.0));
         let rounded = self.rounded.unwrap_or(px(9999.0));
@@ -673,7 +671,8 @@ impl RenderOnce for Input {
         } else if self.focused {
             self.focused_border_color.unwrap_or_else(|| theme.accent())
         } else {
-            self.border_color.unwrap_or_else(|| theme.surface().opacity(0.35))
+            self.border_color
+                .unwrap_or_else(|| theme.surface().opacity(0.35))
         };
 
         let mut container = div()
@@ -757,7 +756,11 @@ impl RenderOnce for Input {
                     .text_ellipsis()
                     .whitespace_nowrap()
                     .text_size(font_size)
-                    .text_color(theme.foreground_muted().opacity(if self.focused { 0.6 } else { 0.85 }))
+                    .text_color(theme.foreground_muted().opacity(if self.focused {
+                        0.6
+                    } else {
+                        0.85
+                    }))
                     .when(self.centered, |s| s.text_center())
                     .child(self.placeholder),
             );
@@ -834,7 +837,10 @@ impl RenderOnce for Input {
                 } else if cursor_pos + half >= chars.len() {
                     (chars.len().saturating_sub(max_v), chars.len())
                 } else {
-                    (cursor_pos - half, (cursor_pos - half + max_v).min(chars.len()))
+                    (
+                        cursor_pos - half,
+                        (cursor_pos - half + max_v).min(chars.len()),
+                    )
                 }
             } else {
                 (0, chars.len())
@@ -1056,4 +1062,3 @@ mod tests {
         assert_eq!(state.text(), "hello");
     }
 }
-

@@ -7,8 +7,8 @@ use ui::theme::Theme;
 
 use super::common::{card, control_row, hero_header, row_divider, toggle_row};
 use crate::island::widgets::style;
-use crate::settings::sidebar::SettingsTab;
 use crate::settings::Settings;
+use crate::settings::sidebar::SettingsTab;
 
 fn text(key: &str, cx: &App) -> String {
     if cx.has_global::<AppState>() {
@@ -21,6 +21,8 @@ fn text(key: &str, cx: &App) -> String {
 fn tab_name(tab: SettingsTab, cx: &App) -> String {
     match tab {
         SettingsTab::Appearance => text("settings.tab_appearance", cx),
+        SettingsTab::Island => text("settings.tab_island", cx),
+        SettingsTab::Bar => text("settings.tab_bar", cx),
         SettingsTab::Apps => text("settings.tab_apps", cx),
         SettingsTab::Media => text("settings.tab_media", cx),
         SettingsTab::LockScreen => text("settings.tab_lockscreen", cx),
@@ -34,6 +36,7 @@ pub enum SearchControl {
     ToggleDynamicColors,
     ToggleDarkMode,
     ToggleConcaveStyle,
+    ToggleConvexBar,
     ToggleClock24,
     ToggleLegacyCapsule,
     ToggleLockscreenClock,
@@ -84,7 +87,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         id: "concave-style",
         title_key: "settings.concave_style",
         desc_key: "settings.style_description",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "concavo",
             "modo concavo",
@@ -99,10 +102,27 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         control: SearchControl::ToggleConcaveStyle,
     },
     SearchDefinition {
+        id: "convex-bar",
+        title_key: "settings.convex_bar",
+        desc_key: "settings.convex_bar_desc",
+        tab: SettingsTab::Bar,
+        keywords: &[
+            "convexo",
+            "modo convexo",
+            "convex",
+            "curvo",
+            "esquinas",
+            "corners",
+            "barra",
+            "bar",
+        ],
+        control: SearchControl::ToggleConvexBar,
+    },
+    SearchDefinition {
         id: "clock-24",
         title_key: "settings.clock_24",
         desc_key: "settings.clock_format_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "reloj", "clock", "24", "12", "hora", "time", "formato", "format",
         ],
@@ -112,7 +132,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         id: "capsule-location",
         title_key: "settings.location_title",
         desc_key: "settings.location_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "ubicacion",
             "posicion",
@@ -124,13 +144,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "position",
             "capsula",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "dimensions-radii",
         title_key: "settings.radii_heading",
         desc_key: "settings.appearance_subtitle",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "radio",
             "radius",
@@ -146,7 +166,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "gap",
             "separacion",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "motion-duration",
@@ -574,6 +594,24 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                                     } else {
                                         CapsuleStyle::Normal
                                     };
+                            });
+                        }
+                        cx.notify();
+                    }),
+                )
+            }
+            SearchControl::ToggleConvexBar => {
+                let is_on = config.ui.bar.convex;
+                toggle_row(
+                    ElementId::Name(format!("search-toggle-{}", def.id).into()),
+                    &title,
+                    Some(&subtitle),
+                    is_on,
+                    theme,
+                    cx.listener(|_this, _, _, cx| {
+                        if cx.has_global::<AppState>() {
+                            let _ = cx.global::<AppState>().config.update(|cfg| {
+                                cfg.ui.bar.convex = !cfg.ui.bar.convex;
                             });
                         }
                         cx.notify();

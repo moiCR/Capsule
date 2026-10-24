@@ -6,7 +6,7 @@ use gpui::{
 use crate::island::{animator::Animator, module::CapsuleModuleManager};
 
 pub(crate) mod animator;
-mod ipc_handler;
+pub(crate) mod ipc_handler;
 pub(crate) mod module;
 pub(crate) mod orbit;
 pub(crate) mod satellite;

@@ -10,14 +10,14 @@ impl DashboardModule {
         cx: &mut Context<Self>,
     ) {
         match event.keystroke.key.as_str() {
-            "escape" | "f4" if event.keystroke.key.as_str() == "escape" || event.keystroke.modifiers.alt => {
+            "escape" | "f4"
+                if event.keystroke.key.as_str() == "escape" || event.keystroke.modifiers.alt =>
+            {
                 if self.satellites.iter().any(|satellite| satellite.open) {
                     if let Some(panel) = self.satellites.iter().rev().find(|panel| panel.open) {
-                        cx.emit(
-                            crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
-                                panel.id.clone(),
-                            ),
-                        );
+                        cx.emit(crate::island::module::CapsuleModuleEvent::CloseSatelliteId(
+                            panel.id.clone(),
+                        ));
                     }
                 } else {
                     self.dispatch(DashboardAction::Close, cx);

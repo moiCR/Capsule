@@ -1,3 +1,4 @@
+pub mod animator;
 pub mod bar;
 pub mod island;
 pub use island as capsule;

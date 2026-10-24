@@ -111,6 +111,14 @@ pub fn pop_polkit_request() -> Option<PolkitPendingAuth> {
     }
 }
 
+pub fn has_polkit_request() -> bool {
+    if let Ok(queue) = polkit_queue().lock() {
+        !queue.is_empty()
+    } else {
+        false
+    }
+}
+
 pub fn push_cancelled_cookie(cookie: &str) {
     if let Ok(mut queue) = cancelled_cookies().lock() {
         queue.push_back(cookie.to_string());
@@ -154,6 +162,10 @@ impl PolkitService {
 
     pub fn pop_request(&self) -> Option<PolkitPendingAuth> {
         pop_polkit_request()
+    }
+
+    pub fn has_request(&self) -> bool {
+        has_polkit_request()
     }
 
     pub fn pop_cancelled(&self) -> Option<String> {
