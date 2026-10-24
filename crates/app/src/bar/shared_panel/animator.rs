@@ -257,7 +257,6 @@ impl SharedPanelAnimator {
         (running, false)
     }
 }
-}
 
 #[cfg(test)]
 mod tests {

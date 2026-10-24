@@ -1683,6 +1683,28 @@ impl Render for Bar {
             let dock_edge = anim.dock_edge;
             let content = self.shared_panel.render_content(window, cx);
 
+            let content_prog = anim.content_progress;
+            let content_opacity = if anim.is_closing() {
+                content_prog
+            } else {
+                (content_prog * 1.35).clamp(0.0, 1.0)
+            };
+            let blur_val = if content_prog < 1.0 {
+                (1.0 - content_prog) * 6.0
+            } else {
+                0.0
+            };
+            let slide_y = if anim.is_closing() {
+                (1.0 - content_prog) * -6.0
+            } else {
+                (1.0 - content_prog).powi(2) * -10.0
+            };
+            let content_offset_x = match dock_edge {
+                shared_panel::DockEdge::Center => (current_size.width - target_size.width) / 2.0,
+                shared_panel::DockEdge::Left => px(0.0),
+                shared_panel::DockEdge::Right => current_size.width - target_size.width,
+            };
+
             let backdrop = div()
                 .id("shared-panel-backdrop")
                 .absolute()
@@ -1740,11 +1762,21 @@ impl Render for Bar {
                 ))
                 .child(
                     div()
+                        .relative()
+                        .left(content_offset_x)
                         .w(target_size.width)
                         .h(target_size.height + px(1.0))
                         .pt(px(13.0))
                         .overflow_hidden()
-                        .child(content),
+                        .child(
+                            div()
+                                .size_full()
+                                .relative()
+                                .top(px(slide_y))
+                                .opacity(content_opacity)
+                                .when(blur_val > 0.05, |d| d.blur(px(blur_val)))
+                                .child(content),
+                        ),
                 );
 
             root = root.child(backdrop).child(panel);
