@@ -113,30 +113,25 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
         .map(|l| l.get("clipboard.copy_hint"))
         .unwrap_or_else(|| "↑↓←→ navegar · Enter copiar · Tab cambiar".to_string());
 
-    let search_bar = div()
-        .flex_1()
-        .h(px(40.0))
-        .flex()
-        .items_center()
-        .child(
-            Input::from_state("bar-clipboard-search", &state.search_input)
-                .placeholder(placeholder)
-                .prefix(
-                    svg()
-                        .path("search.svg")
-                        .size(px(16.0))
-                        .text_color(theme.foreground_muted())
-                        .into_any_element(),
-                )
-                .padding_x(px(0.0))
-                .gap(px(10.0))
-                .w_full()
-                .h_px(36.0)
-                .text_size(px(13.5))
-                .bg(gpui::transparent_black())
-                .border_color(gpui::transparent_black())
-                .focused_border_color(gpui::transparent_black()),
-        );
+    let search_bar = div().flex_1().h(px(40.0)).flex().items_center().child(
+        Input::from_state("bar-clipboard-search", &state.search_input)
+            .placeholder(placeholder)
+            .prefix(
+                svg()
+                    .path("search.svg")
+                    .size(px(16.0))
+                    .text_color(theme.foreground_muted())
+                    .into_any_element(),
+            )
+            .padding_x(px(0.0))
+            .gap(px(10.0))
+            .w_full()
+            .h_px(36.0)
+            .text_size(px(13.5))
+            .bg(gpui::transparent_black())
+            .border_color(gpui::transparent_black())
+            .focused_border_color(gpui::transparent_black()),
+    );
 
     let clear_hover = theme.red().opacity(0.18);
     let clear_btn = div()

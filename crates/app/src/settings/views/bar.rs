@@ -153,6 +153,104 @@ fn render_mini_widget_visual(id: BarWidgetId, theme: &Theme) -> gpui::Div {
                 .size(px(14.5))
                 .text_color(theme.red()),
         ),
+        BarWidgetId::Resources => div()
+            .flex()
+            .items_center()
+            .gap(px(5.0))
+            .child(
+                svg()
+                    .path("cpu.svg")
+                    .size(px(13.0))
+                    .text_color(theme.accent()),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground())
+                    .child("24%"),
+            ),
+        BarWidgetId::Record => div()
+            .flex()
+            .items_center()
+            .gap(px(4.0))
+            .child(
+                svg()
+                    .path("camera.svg")
+                    .size(px(13.0))
+                    .text_color(theme.red()),
+            )
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme.red())
+                    .child("REC"),
+            ),
+        BarWidgetId::Clipboard => div().flex().items_center().child(
+            svg()
+                .path("clipboard-list.svg")
+                .size(px(14.0))
+                .text_color(theme.foreground()),
+        ),
+        BarWidgetId::Caffeine => div().flex().items_center().child(
+            svg()
+                .path("coffee.svg")
+                .size(px(14.0))
+                .text_color(theme.accent()),
+        ),
+        BarWidgetId::ActiveWindow => div()
+            .flex()
+            .items_center()
+            .gap(px(4.0))
+            .child(
+                svg()
+                    .path("monitor.svg")
+                    .size(px(13.0))
+                    .text_color(theme.foreground_muted()),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground())
+                    .child("Active App"),
+            ),
+        BarWidgetId::Keyboard => div().flex().items_center().child(
+            div()
+                .text_size(px(11.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme.foreground())
+                .child("ES"),
+        ),
+        BarWidgetId::Notifications => div()
+            .flex()
+            .items_center()
+            .gap(px(4.0))
+            .child(
+                svg()
+                    .path("bell.svg")
+                    .size(px(13.5))
+                    .text_color(theme.foreground()),
+            )
+            .child(div().size(px(5.0)).rounded_full().bg(theme.accent())),
+        BarWidgetId::Weather => div()
+            .flex()
+            .items_center()
+            .gap(px(4.0))
+            .child(
+                svg()
+                    .path("cloud-sun.svg")
+                    .size(px(13.5))
+                    .text_color(theme.yellow()),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground())
+                    .child("22°C"),
+            ),
     }
 }
 

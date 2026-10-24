@@ -157,6 +157,10 @@ impl Theme {
         self.green_color.to_hsla()
     }
 
+    pub fn yellow(&self) -> Hsla {
+        parse_hex_to_hsla("#E5A93C")
+    }
+
     pub fn on_accent(&self) -> Hsla {
         fn luminance(color: Hsla) -> f32 {
             let color = hsla_to_rgba(color);

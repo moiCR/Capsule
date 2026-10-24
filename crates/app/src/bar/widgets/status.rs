@@ -10,44 +10,48 @@ pub fn render(
     theme: &Theme,
     cx: &mut Context<Bar>,
 ) -> AnyElement {
-    let (network_icon, vol_icon, battery_info) = if let Some(state) = cx.try_global::<AppState>() {
-        let net = state.network.get_status();
-        let net_icon = if net.ethernet_connected {
-            "ethernet.svg"
-        } else if !net.wifi_enabled || net.wifi_ssid.is_empty() {
-            "wifi-zero.svg"
-        } else if net.wifi_signal > 60 {
-            "wifi-high.svg"
-        } else if net.wifi_signal > 20 {
-            "wifi-low.svg"
-        } else {
-            "wifi.svg"
-        };
-
-        let sys = state.system.get_status();
-        let v_icon = if sys.is_muted || sys.volume == 0 {
-            "volume-x.svg"
-        } else {
-            "volume-2.svg"
-        };
-
-        let bat = state.power.get_battery().map(|b| {
-            let icon = if b.is_charging {
-                "battery-charging.svg"
-            } else if b.percentage <= 15 {
-                "battery-low.svg"
-            } else if b.percentage <= 40 {
-                "battery-medium.svg"
+    let (network_icon, vol_icon, battery_info, privacy_info) =
+        if let Some(state) = cx.try_global::<AppState>() {
+            let net = state.network.get_status();
+            let net_icon = if net.ethernet_connected {
+                "ethernet.svg"
+            } else if !net.wifi_enabled || net.wifi_ssid.is_empty() {
+                "wifi-zero.svg"
+            } else if net.wifi_signal > 60 {
+                "wifi-high.svg"
+            } else if net.wifi_signal > 20 {
+                "wifi-low.svg"
             } else {
-                "battery-full.svg"
+                "wifi.svg"
             };
-            (icon, b.percentage, b.is_charging)
-        });
 
-        (net_icon, v_icon, bat)
-    } else {
-        ("wifi.svg", "volume-2.svg", None)
-    };
+            let sys = state.system.get_status();
+            let v_icon = if sys.is_muted || sys.volume == 0 {
+                "volume-x.svg"
+            } else {
+                "volume-2.svg"
+            };
+
+            let bat = state.power.get_battery().map(|b| {
+                let icon = if b.is_charging {
+                    "battery-charging.svg"
+                } else if b.percentage <= 15 {
+                    "battery-low.svg"
+                } else if b.percentage <= 40 {
+                    "battery-medium.svg"
+                } else {
+                    "battery-full.svg"
+                };
+                (icon, b.percentage, b.is_charging)
+            });
+
+            let capture = state.system.get_capture_status();
+            let privacy = (capture.camera_in_use, capture.microphone_in_use);
+
+            (net_icon, v_icon, bat, privacy)
+        } else {
+            ("wifi.svg", "volume-2.svg", None, (false, false))
+        };
 
     let hover_bg = style::hover(theme);
     let anchor = std::rc::Rc::new(std::cell::Cell::new(px(0.0)));
@@ -107,6 +111,24 @@ pub fn render(
                 .size(px(15.0))
                 .text_color(theme.foreground()),
         );
+
+    if privacy_info.0 {
+        status = status.child(
+            svg()
+                .path("camera.svg")
+                .size(px(13.5))
+                .text_color(theme.green()),
+        );
+    }
+
+    if privacy_info.1 {
+        status = status.child(
+            svg()
+                .path("mic.svg")
+                .size(px(13.5))
+                .text_color(theme.yellow()),
+        );
+    }
 
     if let Some((bat_icon, pct, is_charging)) = battery_info {
         let bat_color = if is_charging {

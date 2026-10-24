@@ -20,6 +20,8 @@ pub struct SharedPanelAnimator {
     pub backdrop_opacity: f32,
     pub content_progress: f32,
 
+    pub anchor_x: Pixels,
+
     duration: Duration,
     animation: CapsuleAnimation,
     bounciness: f32,
@@ -28,7 +30,8 @@ pub struct SharedPanelAnimator {
 
     open_start: Instant,
     close_start: Option<Instant>,
-    close_start_height: f32,
+    close_start_x: Pixels,
+    close_start_size: Size<Pixels>,
     close_start_opacity: f32,
 
     switch_start: Option<Instant>,
@@ -37,7 +40,8 @@ pub struct SharedPanelAnimator {
 impl SharedPanelAnimator {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        initial_x: Pixels,
+        anchor_x: Pixels,
+        target_x: Pixels,
         target_size: Size<Pixels>,
         dock_edge: super::DockEdge,
         duration: Duration,
@@ -46,26 +50,34 @@ impl SharedPanelAnimator {
         squash_stretch: bool,
         reduced_motion: bool,
     ) -> Self {
-        let initial_size = if reduced_motion {
-            target_size
+        let (start_x, start_size, opacity, content_progress) = if reduced_motion {
+            (target_x, target_size, 1.0, 1.0)
         } else {
-            Size {
-                width: target_size.width,
-                height: px(0.0),
-            }
+            let initial_width = px(44.0_f32.min(f32::from(target_size.width)));
+            let initial_x = (anchor_x - initial_width / 2.0).max(px(0.0));
+            (
+                initial_x,
+                Size {
+                    width: initial_width,
+                    height: px(0.0),
+                },
+                0.0,
+                0.0,
+            )
         };
 
         Self {
-            current_x: initial_x,
-            start_x: initial_x,
-            target_x: initial_x,
-            current_size: initial_size,
-            start_size: initial_size,
+            current_x: start_x,
+            start_x,
+            target_x,
+            current_size: start_size,
+            start_size,
             target_size,
             dock_edge,
-            opacity: if reduced_motion { 1.0 } else { 0.0 },
+            opacity,
             backdrop_opacity: 0.0,
-            content_progress: 1.0,
+            content_progress,
+            anchor_x,
             duration,
             animation,
             bounciness,
@@ -73,7 +85,8 @@ impl SharedPanelAnimator {
             reduced_motion,
             open_start: Instant::now(),
             close_start: None,
-            close_start_height: 0.0,
+            close_start_x: start_x,
+            close_start_size: start_size,
             close_start_opacity: 0.0,
             switch_start: None,
         }
@@ -81,7 +94,8 @@ impl SharedPanelAnimator {
 
     pub fn request_close(&mut self) {
         if self.close_start.is_none() {
-            self.close_start_height = f32::from(self.current_size.height);
+            self.close_start_x = self.current_x;
+            self.close_start_size = self.current_size;
             self.close_start_opacity = self.opacity;
             self.close_start = Some(Instant::now());
         }
@@ -96,14 +110,17 @@ impl SharedPanelAnimator {
         target_x: Pixels,
         target_size: Size<Pixels>,
         dock_edge: super::DockEdge,
+        anchor_x: Pixels,
         now: Instant,
     ) {
         self.dock_edge = dock_edge;
+        self.anchor_x = anchor_x;
         self.start_x = self.current_x;
         self.target_x = target_x;
         self.start_size = self.current_size;
         self.target_size = target_size;
         self.content_progress = 0.0;
+        self.close_start = None;
         self.switch_start = Some(now);
     }
 
@@ -114,18 +131,40 @@ impl SharedPanelAnimator {
             }
             let elapsed = now.duration_since(close_start);
             let t = (elapsed.as_secs_f32() / self.duration.as_secs_f32()).clamp(0.0, 1.0);
-            let (_, prog_h) = morph_progress(t, false, self.animation, self.bounciness);
-            self.current_size.height = px((self.close_start_height * (1.0 - prog_h)).max(0.0));
+            let (prog_w, prog_h) = morph_progress(t, false, self.animation, self.bounciness);
+            let x_prog = scalar_progress(t, self.animation, self.bounciness);
+
+            let initial_w = px(44.0_f32.min(f32::from(self.close_start_size.width)));
+            let close_target_x = (self.anchor_x - initial_w / 2.0).max(px(0.0));
+            let close_target_size = Size {
+                width: initial_w,
+                height: px(0.0),
+            };
+
+            let x_diff = f32::from(close_target_x - self.close_start_x);
+            self.current_x = self.close_start_x + px(x_diff * x_prog);
+
+            let w_diff = f32::from(close_target_size.width - self.close_start_size.width);
+            let h_diff = f32::from(close_target_size.height - self.close_start_size.height);
+            self.current_size.width =
+                (self.close_start_size.width + px(w_diff * prog_w)).max(px(0.0));
+            self.current_size.height =
+                (self.close_start_size.height + px(h_diff * prog_h)).max(px(0.0));
+
             self.opacity = if t < 0.65 {
                 self.close_start_opacity
             } else {
                 (self.close_start_opacity * (1.0 - (t - 0.65) / 0.35)).clamp(0.0, 1.0)
             };
-            self.content_progress = (1.0 - t / 0.4).clamp(0.0, 1.0);
+            self.content_progress = (1.0 - t / 0.35).clamp(0.0, 1.0);
             self.backdrop_opacity = 0.0;
             if t >= 1.0 {
-                self.current_size.height = px(0.0);
+                self.current_size = Size {
+                    width: px(0.0),
+                    height: px(0.0),
+                };
                 self.opacity = 0.0;
+                self.content_progress = 0.0;
                 return (false, true);
             }
             return (true, false);
@@ -180,21 +219,44 @@ impl SharedPanelAnimator {
         } else if !self.reduced_motion {
             let elapsed = now.duration_since(self.open_start);
             let t = (elapsed.as_secs_f32() / self.duration.as_secs_f32()).clamp(0.0, 1.0);
-            let prog = scalar_progress(t, self.animation, self.bounciness);
-            self.current_size.height = px(f32::from(self.target_size.height) * prog);
-            self.opacity = prog;
+            let (prog_w, prog_h) = morph_progress(t, true, self.animation, self.bounciness);
+            let x_prog = scalar_progress(t, self.animation, self.bounciness);
+
+            let x_diff = f32::from(self.target_x - self.start_x);
+            self.current_x = self.start_x + px(x_diff * x_prog);
+
+            let w_diff = f32::from(self.target_size.width - self.start_size.width);
+            let h_diff = f32::from(self.target_size.height - self.start_size.height);
+            let raw_w = self.start_size.width + px(w_diff * prog_w);
+            let raw_h = self.start_size.height + px(h_diff * prog_h);
+
+            if self.squash_stretch {
+                self.current_size =
+                    apply_squash_stretch(self.start_size, self.target_size, raw_w, raw_h, t);
+            } else {
+                self.current_size = Size {
+                    width: raw_w,
+                    height: raw_h,
+                };
+            }
+
+            self.opacity = (t / 0.15).clamp(0.0, 1.0);
+            self.content_progress = t;
             self.backdrop_opacity = 0.0;
             if t < 1.0 {
                 running = true;
             } else {
+                self.current_x = self.target_x;
                 self.current_size = self.target_size;
                 self.opacity = 1.0;
+                self.content_progress = 1.0;
                 self.backdrop_opacity = 0.0;
             }
         }
 
         (running, false)
     }
+}
 }
 
 #[cfg(test)]
@@ -204,6 +266,7 @@ mod tests {
     #[test]
     fn test_shared_panel_animator_initialization() {
         let animator = SharedPanelAnimator::new(
+            px(150.0),
             px(100.0),
             Size {
                 width: px(300.0),
@@ -216,8 +279,10 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(animator.current_x, px(100.0));
-        assert_eq!(animator.current_size.width, px(300.0));
+        assert_eq!(animator.anchor_x, px(150.0));
+        assert_eq!(animator.target_x, px(100.0));
+        assert_eq!(animator.current_x, px(128.0));
+        assert_eq!(animator.current_size.width, px(44.0));
         assert_eq!(animator.current_size.height, px(0.0));
         assert_eq!(animator.opacity, 0.0);
     }
@@ -225,6 +290,7 @@ mod tests {
     #[test]
     fn test_shared_panel_animator_advance_to_full() {
         let mut animator = SharedPanelAnimator::new(
+            px(150.0),
             px(100.0),
             Size {
                 width: px(300.0),
@@ -241,6 +307,8 @@ mod tests {
         let (running, closed) = animator.advance(future);
         assert!(!running);
         assert!(!closed);
+        assert_eq!(animator.current_x, px(100.0));
+        assert_eq!(animator.current_size.width, px(300.0));
         assert_eq!(animator.current_size.height, px(200.0));
         assert_eq!(animator.opacity, 1.0);
     }
@@ -248,6 +316,7 @@ mod tests {
     #[test]
     fn test_shared_panel_animator_switch_glide() {
         let mut animator = SharedPanelAnimator::new(
+            px(150.0),
             px(100.0),
             Size {
                 width: px(300.0),
@@ -267,8 +336,15 @@ mod tests {
             width: px(350.0),
             height: px(400.0),
         };
-        animator.switch_to(px(500.0), new_target, super::super::DockEdge::Right, now);
+        animator.switch_to(
+            px(500.0),
+            new_target,
+            super::super::DockEdge::Right,
+            px(550.0),
+            now,
+        );
         assert_eq!(animator.target_x, px(500.0));
+        assert_eq!(animator.anchor_x, px(550.0));
         assert_eq!(animator.target_size, new_target);
         assert_eq!(animator.dock_edge, super::super::DockEdge::Right);
 
@@ -287,6 +363,7 @@ mod tests {
     #[test]
     fn test_shared_panel_animator_close() {
         let mut animator = SharedPanelAnimator::new(
+            px(150.0),
             px(100.0),
             Size {
                 width: px(300.0),
@@ -314,6 +391,7 @@ mod tests {
     #[test]
     fn test_shared_panel_animator_reduced_motion() {
         let mut animator = SharedPanelAnimator::new(
+            px(150.0),
             px(100.0),
             Size {
                 width: px(300.0),
@@ -326,6 +404,7 @@ mod tests {
             false,
             true,
         );
+        assert_eq!(animator.current_x, px(100.0));
         assert_eq!(animator.current_size.height, px(200.0));
         assert_eq!(animator.opacity, 1.0);
 

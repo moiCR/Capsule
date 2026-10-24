@@ -6,6 +6,7 @@ pub mod emoji;
 pub mod media;
 pub mod notification_popup;
 pub mod power;
+pub mod record;
 pub mod tray_menu;
 pub mod view;
 
@@ -27,6 +28,7 @@ pub enum SharedPanelModule {
     NotificationPopup(u32),
     Clipboard,
     Emoji,
+    Record,
 }
 
 impl SharedPanelModule {
@@ -105,6 +107,10 @@ impl SharedPanelModule {
                 width: px(540.0),
                 height: px(500.0),
             },
+            Self::Record => Size {
+                width: px(280.0),
+                height: px(68.0),
+            },
         }
     }
 }
@@ -168,6 +174,7 @@ pub struct SharedPanel {
     pub dashboard_state: dashboard::DashboardState,
     pub clipboard_state: clipboard::ClipboardState,
     pub emoji_state: emoji::EmojiState,
+    pub record_state: record::RecordPanelState,
     pub focus_handle: Option<gpui::FocusHandle>,
     pub animation_frame_pending: std::rc::Rc<std::cell::Cell<bool>>,
 }
@@ -191,6 +198,7 @@ impl SharedPanel {
             dashboard_state: dashboard::DashboardState::default(),
             clipboard_state: clipboard::ClipboardState::default(),
             emoji_state: emoji::EmojiState::default(),
+            record_state: record::RecordPanelState::default(),
             focus_handle: None,
             animation_frame_pending: std::rc::Rc::new(std::cell::Cell::new(false)),
         }
@@ -235,6 +243,14 @@ impl SharedPanel {
             self.dashboard_state.reset();
         }
 
+        if module == SharedPanelModule::Record {
+            if let Some(state) = cx.try_global::<AppState>() {
+                self.record_state.status = state.record.get_status();
+                self.record_state.seconds = state.record.get_duration_secs();
+                self.record_state.transition = None;
+            }
+        }
+
         let is_notif = matches!(module, SharedPanelModule::NotificationPopup(_));
         if self.is_open {
             self.old_module = self.active_module.clone();
@@ -243,7 +259,7 @@ impl SharedPanel {
             let (target_x, dock_edge) =
                 compute_target_position(anchor_x, target_size.width, self.screen_width, is_notif);
             if let Some(ref mut anim) = self.animator {
-                anim.switch_to(target_x, target_size, dock_edge, Instant::now());
+                anim.switch_to(target_x, target_size, dock_edge, anchor_x, Instant::now());
             }
             Bar::queue_animation_frame_checked(window, entity, &self.animation_frame_pending);
             return;
@@ -270,11 +286,12 @@ impl SharedPanel {
             };
 
         let target_size = module.default_size(cx);
-        let (initial_x, dock_edge) =
+        let (target_x, dock_edge) =
             compute_target_position(anchor_x, target_size.width, self.screen_width, is_notif);
 
         self.animator = Some(SharedPanelAnimator::new(
-            initial_x,
+            anchor_x,
+            target_x,
             target_size,
             dock_edge,
             duration,
@@ -411,6 +428,7 @@ impl SharedPanel {
             SharedPanelModule::NotificationPopup(id) => notification_popup::render(*id, window, cx),
             SharedPanelModule::Clipboard => clipboard::render(&self.clipboard_state, window, cx),
             SharedPanelModule::Emoji => emoji::render(&self.emoji_state, window, cx),
+            SharedPanelModule::Record => record::render(&self.record_state, window, cx),
         }
     }
 }

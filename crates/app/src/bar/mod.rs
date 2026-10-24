@@ -50,6 +50,7 @@ pub struct Bar {
     _polkit_task: Option<Task<()>>,
     _notification_task: Option<Task<()>>,
     _notification_expiry_task: Option<Task<()>>,
+    _record_task: Option<Task<()>>,
 }
 
 impl Bar {
@@ -72,11 +73,42 @@ impl Bar {
         let clock_task = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                if this
+                    .update(cx, |bar, cx| {
+                        if let Some(state) = cx.try_global::<AppState>() {
+                            bar.shared_panel.record_state.seconds =
+                                state.record.get_duration_secs();
+                            bar.shared_panel.record_state.status = state.record.get_status();
+                        }
+                        cx.notify();
+                    })
+                    .is_err()
+                {
                     break;
                 }
             }
         });
+
+        let record_task = if cx.has_global::<AppState>() {
+            let mut rx = cx.global::<AppState>().record.subscribe_status();
+            Some(cx.spawn(async move |this, cx| {
+                while let Ok(status) = rx.recv().await {
+                    if this
+                        .update(cx, |bar, cx| {
+                            bar.shared_panel
+                                .record_state
+                                .handle_status_change(status, cx);
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }))
+        } else {
+            None
+        };
 
         let config_task = if cx.has_global::<AppState>() {
             let mut rx = cx.global::<AppState>().config.subscribe();
@@ -208,6 +240,7 @@ impl Bar {
             _polkit_task: polkit_task,
             _notification_task: Some(notification_task),
             _notification_expiry_task: None,
+            _record_task: record_task,
         }
     }
 

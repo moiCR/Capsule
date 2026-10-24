@@ -1,12 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "6eccf6d5777fcb7c624f83b684e6f9bbf8a9350e",
-    "indexed_at": "2026-10-24T17:23:51Z",
+    "commit": "6c11f5a552b26680da8ebbf2448489d26212aa9e",
+    "indexed_at": "2026-10-24T21:03:57Z",
     "project": "home-moi-pro-Capsule",
-    "nodes": 5205,
-    "edges": 23410,
-    "original_size": 23199744,
-    "compressed_size": 3957562,
-    "compression_level": 3,
-    "reconcile_basis": "git-clean-head"
+    "nodes": 5328,
+    "edges": 23996,
+    "original_size": 23461888,
+    "compressed_size": 4014100,
+    "compression_level": 3
 }

@@ -1,8 +1,16 @@
+pub mod active_window;
+pub mod caffeine;
+pub mod clipboard;
 pub mod clock;
+pub mod keyboard;
 pub mod media;
+pub mod notifications;
 pub mod power;
+pub mod record;
+pub mod resources;
 pub mod status;
 pub mod tray;
+pub mod weather;
 pub mod workspaces;
 
 use std::cell::Cell;
@@ -44,5 +52,13 @@ pub fn render_widget(
         BarWidgetId::Status => status::render(status_center, theme, cx),
         BarWidgetId::Tray => tray::render(theme, cx),
         BarWidgetId::Power => power::render(theme, cx),
+        BarWidgetId::Resources => resources::render(theme, cx),
+        BarWidgetId::Record => record::render(theme, cx),
+        BarWidgetId::Clipboard => clipboard::render(theme, cx),
+        BarWidgetId::Caffeine => caffeine::render(theme, cx),
+        BarWidgetId::ActiveWindow => active_window::render(theme, cx),
+        BarWidgetId::Keyboard => keyboard::render(theme, cx),
+        BarWidgetId::Notifications => notifications::render(theme, cx),
+        BarWidgetId::Weather => weather::render(theme, cx),
     }
 }

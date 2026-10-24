@@ -25,16 +25,33 @@ pub enum BarWidgetId {
     Status,
     Tray,
     Power,
+    Resources,
+    Record,
+    Clipboard,
+    Caffeine,
+    #[serde(alias = "active_window")]
+    ActiveWindow,
+    Keyboard,
+    Notifications,
+    Weather,
 }
 
 impl BarWidgetId {
-    pub const ALL: [BarWidgetId; 6] = [
+    pub const ALL: [BarWidgetId; 14] = [
         BarWidgetId::Workspaces,
         BarWidgetId::Clock,
         BarWidgetId::Media,
         BarWidgetId::Status,
         BarWidgetId::Tray,
         BarWidgetId::Power,
+        BarWidgetId::Resources,
+        BarWidgetId::Record,
+        BarWidgetId::Clipboard,
+        BarWidgetId::Caffeine,
+        BarWidgetId::ActiveWindow,
+        BarWidgetId::Keyboard,
+        BarWidgetId::Notifications,
+        BarWidgetId::Weather,
     ];
 
     pub fn icon(&self) -> &'static str {
@@ -45,6 +62,14 @@ impl BarWidgetId {
             Self::Status => "wifi.svg",
             Self::Tray => "package.svg",
             Self::Power => "power.svg",
+            Self::Resources => "cpu.svg",
+            Self::Record => "camera.svg",
+            Self::Clipboard => "clipboard-list.svg",
+            Self::Caffeine => "coffee.svg",
+            Self::ActiveWindow => "monitor.svg",
+            Self::Keyboard => "languages.svg",
+            Self::Notifications => "bell.svg",
+            Self::Weather => "cloud-sun.svg",
         }
     }
 
@@ -56,6 +81,14 @@ impl BarWidgetId {
             Self::Status => "settings.widget_status",
             Self::Tray => "settings.widget_tray",
             Self::Power => "settings.widget_power",
+            Self::Resources => "settings.widget_resources",
+            Self::Record => "settings.widget_record",
+            Self::Clipboard => "settings.widget_clipboard",
+            Self::Caffeine => "settings.widget_caffeine",
+            Self::ActiveWindow => "settings.widget_active_window",
+            Self::Keyboard => "settings.widget_keyboard",
+            Self::Notifications => "settings.widget_notifications",
+            Self::Weather => "settings.widget_weather",
         }
     }
 }

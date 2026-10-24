@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::config::ConfigService;
 use crate::ipc::{IpcCommand, push_ipc_command};
 use tokio::sync::broadcast;
@@ -11,6 +14,7 @@ pub enum IdleEvent {
 pub struct IdleService {
     tx: broadcast::Sender<IdleEvent>,
     config: ConfigService,
+    inhibited: Arc<AtomicBool>,
 }
 
 impl Default for IdleService {
@@ -23,7 +27,12 @@ impl IdleService {
     pub fn new(config: ConfigService) -> Self {
         let _guard = crate::tokio_handle().enter();
         let (tx, _) = broadcast::channel(16);
-        let service = Self { tx, config };
+        let inhibited = Arc::new(AtomicBool::new(false));
+        let service = Self {
+            tx,
+            config,
+            inhibited,
+        };
 
         let svc_dbus = service.clone();
         crate::spawn_tokio(async move {
@@ -40,6 +49,19 @@ impl IdleService {
 
     pub fn subscribe(&self) -> broadcast::Receiver<IdleEvent> {
         self.tx.subscribe()
+    }
+
+    pub fn is_inhibited(&self) -> bool {
+        self.inhibited.load(Ordering::SeqCst)
+    }
+
+    pub fn set_inhibited(&self, val: bool) {
+        self.inhibited.store(val, Ordering::SeqCst);
+    }
+
+    pub fn toggle_inhibited(&self) -> bool {
+        let prev = self.inhibited.fetch_xor(true, Ordering::SeqCst);
+        !prev
     }
 
     async fn start_physical_input_tracker(&self) {
@@ -88,7 +110,7 @@ impl IdleService {
                 })
             };
 
-            if has_activity || is_video_playing {
+            if has_activity || is_video_playing || self.is_inhibited() {
                 last_activity = std::time::Instant::now();
             } else if timeout_secs > 0 && last_activity.elapsed().as_secs() >= timeout_secs {
                 eprintln!(

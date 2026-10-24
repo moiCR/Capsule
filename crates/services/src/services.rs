@@ -22,6 +22,7 @@ pub mod shelf;
 pub mod system;
 pub mod tray;
 pub mod wallpaper;
+pub mod weather;
 
 pub use calendar::CalendarService;
 
@@ -30,7 +31,7 @@ pub use shelf::{ShelfItem, ShelfService};
 
 pub use app_state::AppState;
 pub use clipboard::{ClipboardItem, ClipboardService, Snippet};
-pub use compositor::{CompositorService, WorkspaceInfo};
+pub use compositor::{ActiveWindowInfo, CompositorService, WorkspaceInfo};
 pub use config::{
     AppConfig, BarConfig, BarWidgetId, BarZone, CapsuleAnimation, CapsuleLocation, CapsuleStyle,
     ConfigService, ContentTransition, Defaults, LockScreenConfig, LockscreenConfig, MprisConfig,
@@ -59,6 +60,7 @@ pub use record::{
 };
 pub use system::{AudioSink, AudioSource, SystemService, SystemStatus};
 pub use tray::{SniHostService, SniItem, TrayAction, TrayService};
+pub use weather::{WeatherService, WeatherStatus};
 
 use std::sync::OnceLock;
 

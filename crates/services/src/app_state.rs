@@ -2,6 +2,7 @@ use crate::{
     CalendarService, ClipboardService, CompositorService, ConfigService, IdleService, LangService,
     LauncherService, LyricsService, MprisService, NetworkService, PolkitService, PowerService,
     RecordService, ShelfService, SniHostService, SystemService, wallpaper::WallpaperService,
+    weather::WeatherService,
 };
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct AppState {
     pub language: LangService,
     pub record: RecordService,
     pub shelf: ShelfService,
+    pub weather: WeatherService,
 }
 
 impl gpui::Global for AppState {}
@@ -50,6 +52,7 @@ impl AppState {
         let language = LangService::new(&config.get().ui.language);
         let record = RecordService::new();
         let shelf = ShelfService::new();
+        let weather = WeatherService::new();
 
         Self {
             config: config.clone(),
@@ -69,6 +72,7 @@ impl AppState {
             language,
             record,
             shelf,
+            weather,
         }
     }
 }
