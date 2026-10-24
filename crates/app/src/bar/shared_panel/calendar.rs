@@ -128,14 +128,14 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
             };
 
             let mut item_card = div()
-                .p(px(12.0))
-                .rounded_xl()
-                .bg(style::background(&theme).opacity(0.65))
+                .p(px(10.0))
+                .rounded(px(10.0))
+                .bg(style::background(&theme).opacity(0.55))
                 .border_1()
-                .border_color(style::border(&theme).opacity(0.35))
+                .border_color(style::border(&theme).opacity(0.14))
                 .flex()
                 .flex_col()
-                .gap(px(5.0))
+                .gap(px(4.0))
                 .child(
                     div()
                         .flex()
@@ -149,7 +149,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                                 .child(icon_el)
                                 .child(
                                     div()
-                                        .text_size(px(12.5))
+                                        .text_size(px(12.0))
                                         .font_weight(gpui::FontWeight::MEDIUM)
                                         .text_color(theme.foreground_muted())
                                         .line_clamp(1)
@@ -163,17 +163,17 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             div()
                                 .id(format!("shared-notif-remove-{id}"))
-                                .size(px(24.0))
+                                .size(px(22.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded_full()
+                                .rounded(px(6.0))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .child(
                                     svg()
-                                        .path("x.svg")
-                                        .size(px(13.0))
+                                        .path("close.svg")
+                                        .size(px(12.0))
                                         .text_color(theme.foreground_muted()),
                                 )
                                 .on_click(cx.listener(move |_, _, _, cx| {
@@ -185,7 +185,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                 .when(!notif.summary.is_empty(), |s| {
                     s.child(
                         div()
-                            .text_size(px(13.5))
+                            .text_size(px(13.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.foreground())
                             .line_clamp(1)
@@ -195,7 +195,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                 .when(!notif.body.is_empty(), |s| {
                     s.child(
                         div()
-                            .text_size(px(12.5))
+                            .text_size(px(12.0))
                             .text_color(theme.foreground_muted())
                             .line_clamp(2)
                             .child(notif.body),
@@ -203,7 +203,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                 });
 
             if !notif.actions.is_empty() {
-                let mut actions_row = div().flex().items_center().gap(px(6.0)).pt(px(4.0));
+                let mut actions_row = div().flex().items_center().gap(px(6.0)).pt(px(2.0));
                 for (act_idx, (key, label)) in notif.actions.into_iter().enumerate() {
                     let key_clone = key.clone();
                     let label_str = if label.is_empty() {
@@ -214,15 +214,17 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                     actions_row = actions_row.child(
                         div()
                             .id(format!("shared-notif-act-{id}-{act_idx}"))
-                            .h(px(26.0))
-                            .px(px(12.0))
-                            .rounded_full()
-                            .bg(style::surface(&theme))
+                            .h(px(24.0))
+                            .px(px(10.0))
+                            .rounded(px(6.0))
+                            .bg(style::surface(&theme).opacity(0.85))
+                            .border_1()
+                            .border_color(style::border(&theme).opacity(0.16))
                             .hover(move |s| s.bg(hover_bg))
                             .cursor_pointer()
                             .flex()
                             .items_center()
-                            .text_size(px(11.5))
+                            .text_size(px(11.0))
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .text_color(theme.foreground())
                             .child(label_str)
@@ -248,22 +250,22 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(10.0))
         .child(
             div()
                 .flex_1()
                 .min_h_0()
                 .w_full()
-                .rounded_2xl()
-                .bg(style::surface(&theme))
+                .rounded(px(14.0))
+                .bg(style::surface(&theme).opacity(0.55))
                 .border_1()
-                .border_color(style::border(&theme).opacity(0.35))
+                .border_color(style::border(&theme).opacity(0.18))
                 .overflow_hidden()
                 .child(notif_card_content),
         )
         .child(
             div()
-                .h(px(36.0))
+                .h(px(32.0))
                 .w_full()
                 .flex_shrink_0()
                 .px(px(4.0))
@@ -275,7 +277,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .id("shared-notif-dnd-row")
                         .flex()
                         .items_center()
-                        .gap(px(10.0))
+                        .gap(px(8.0))
                         .cursor_pointer()
                         .on_click(cx.listener(|_, _, _, cx| {
                             NotificationStore::global().toggle_dnd();
@@ -292,7 +294,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         )
                         .child(
                             div()
-                                .text_size(px(13.5))
+                                .text_size(px(12.5))
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.foreground())
                                 .child(dnd_label),
@@ -301,12 +303,12 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                 .child(
                     div()
                         .id("shared-notif-clear-btn")
-                        .h(px(34.0))
-                        .px(px(18.0))
-                        .rounded_xl()
-                        .bg(style::surface(&theme))
+                        .h(px(28.0))
+                        .px(px(12.0))
+                        .rounded(px(7.0))
+                        .bg(style::surface(&theme).opacity(0.60))
                         .border_1()
-                        .border_color(style::border(&theme).opacity(0.4))
+                        .border_color(style::border(&theme).opacity(0.16))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -318,7 +320,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         }))
                         .child(
                             div()
-                                .text_size(px(13.0))
+                                .text_size(px(11.5))
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.foreground())
                                 .child(clear_label),
@@ -387,11 +389,11 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
     let calendar_card = div()
         .flex_1()
         .w_full()
-        .rounded_2xl()
-        .bg(style::surface(&theme))
+        .rounded(px(14.0))
+        .bg(style::surface(&theme).opacity(0.55))
         .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
-        .p(px(16.0))
+        .border_color(style::border(&theme).opacity(0.18))
+        .p(px(14.0))
         .flex()
         .flex_col()
         .gap(px(8.0))
@@ -415,8 +417,8 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         }))
                         .child(
                             div()
-                                .text_size(px(16.0))
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_size(px(15.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.accent())
                                 .child(format!("{month_name} {year}")),
                         ),
@@ -429,11 +431,11 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             div()
                                 .id("shared-calendar-prev-btn")
-                                .size(px(28.0))
+                                .size(px(26.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded_full()
+                                .rounded(px(6.0))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .on_click(cx.listener(|_, _, _, cx| {
@@ -452,11 +454,11 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             div()
                                 .id("shared-calendar-next-btn")
-                                .size(px(28.0))
+                                .size(px(26.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded_full()
+                                .rounded(px(6.0))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .on_click(cx.listener(|_, _, _, cx| {
@@ -483,7 +485,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
         .flex_shrink_0()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(10.0))
         .child(
             div()
                 .w_full()
@@ -496,16 +498,16 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                 .gap(px(2.0))
                 .child(
                     div()
-                        .text_size(px(44.0))
-                        .line_height(px(48.0))
+                        .text_size(px(40.0))
+                        .line_height(px(44.0))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.foreground())
                         .child(time_str),
                 )
                 .child(
                     div()
-                        .text_size(px(20.0))
-                        .line_height(px(24.0))
+                        .text_size(px(18.0))
+                        .line_height(px(22.0))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(theme.accent())
                         .child(weekday_full),
@@ -516,10 +518,10 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
     div()
         .id("shared-panel-calendar")
         .size_full()
-        .p(px(18.0))
+        .p(px(14.0))
         .flex()
         .items_center()
-        .gap(px(16.0))
+        .gap(px(14.0))
         .font_family(theme.font_family())
         .child(left_column)
         .child(right_column)

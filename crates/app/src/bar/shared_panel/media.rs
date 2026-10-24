@@ -67,13 +67,17 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
     let art_element = if let Some(art_path) = &track.local_art_path {
         img(PathBuf::from(art_path))
             .size(px(68.0))
-            .rounded_2xl()
+            .rounded(px(12.0))
+            .border_1()
+            .border_color(style::border(&theme).opacity(0.18))
             .into_any_element()
     } else {
         div()
             .size(px(68.0))
-            .rounded_2xl()
-            .bg(style::surface(&theme))
+            .rounded(px(12.0))
+            .bg(style::surface(&theme).opacity(0.60))
+            .border_1()
+            .border_color(style::border(&theme).opacity(0.18))
             .flex()
             .items_center()
             .justify_center()
@@ -106,9 +110,9 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
     let progress_bar = div()
         .id("shared-media-seek")
         .w_full()
-        .h(px(8.0))
+        .h(px(5.0))
         .rounded_full()
-        .bg(style::surface(&theme))
+        .bg(style::surface(&theme).opacity(0.60))
         .cursor_pointer()
         .relative()
         .child(
@@ -138,8 +142,8 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
         .flex()
         .flex_col()
         .justify_between()
-        .p(px(20.0))
-        .gap(px(14.0))
+        .p(px(16.0))
+        .gap(px(12.0))
         .font_family(theme.font_family())
         .child(
             div()
@@ -153,18 +157,18 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .gap(px(4.0))
+                        .gap(px(3.0))
                         .child(
                             div()
-                                .text_size(px(15.5))
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_size(px(15.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.foreground())
                                 .line_clamp(1)
                                 .child(track.title),
                         )
                         .child(
                             div()
-                                .text_size(px(13.5))
+                                .text_size(px(13.0))
                                 .text_color(theme.foreground_muted())
                                 .line_clamp(1)
                                 .child(track.artist),
@@ -182,7 +186,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .text_size(px(12.0))
+                        .text_size(px(11.5))
                         .text_color(theme.foreground_muted())
                         .child(pos_str)
                         .child(len_str),
@@ -201,12 +205,12 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             svg()
                                 .path("volume-2.svg")
-                                .size(px(16.0))
+                                .size(px(15.0))
                                 .text_color(theme.foreground_muted()),
                         )
                         .child(
                             div()
-                                .text_size(px(13.0))
+                                .text_size(px(12.5))
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.foreground_muted())
                                 .child(format!("{volume}%")),
@@ -216,21 +220,21 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(10.0))
+                        .gap(px(8.0))
                         .child(
                             div()
                                 .id("shared-media-prev-btn")
-                                .size(px(36.0))
+                                .size(px(32.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded_full()
+                                .rounded(px(8.0))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(prev_hover))
                                 .child(
                                     svg()
                                         .path("skip-back.svg")
-                                        .size(px(16.0))
+                                        .size(px(15.0))
                                         .text_color(theme.foreground()),
                                 )
                                 .on_click(cx.listener(move |_, _, _, _| {
@@ -243,7 +247,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             div()
                                 .id("shared-media-play-btn")
-                                .size(px(44.0))
+                                .size(px(38.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -253,7 +257,7 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                                 .child(
                                     svg()
                                         .path(play_icon)
-                                        .size(px(18.0))
+                                        .size(px(17.0))
                                         .text_color(theme.on_accent()),
                                 )
                                 .on_click(cx.listener(move |_, _, _, _| {
@@ -266,17 +270,17 @@ pub fn render(_window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
                         .child(
                             div()
                                 .id("shared-media-next-btn")
-                                .size(px(36.0))
+                                .size(px(32.0))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded_full()
+                                .rounded(px(8.0))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(next_hover))
                                 .child(
                                     svg()
                                         .path("skip-forward.svg")
-                                        .size(px(16.0))
+                                        .size(px(15.0))
                                         .text_color(theme.foreground()),
                                 )
                                 .on_click(cx.listener(move |_, _, _, _| {

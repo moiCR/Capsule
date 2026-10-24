@@ -88,7 +88,7 @@ pub fn render(idx: usize, _window: &mut Window, cx: &mut Context<Bar>) -> AnyEle
                         .flex_shrink_0()
                         .my(px(4.0))
                         .w_full()
-                        .bg(style::border(&theme).opacity(0.35)),
+                        .bg(style::border(&theme).opacity(0.16)),
                 );
             } else {
                 let id = menu_item.id;
@@ -102,11 +102,11 @@ pub fn render(idx: usize, _window: &mut Window, cx: &mut Context<Bar>) -> AnyEle
                     .id(("tray-item-row", item_i))
                     .flex()
                     .items_center()
-                    .h(px(36.0))
+                    .h(px(34.0))
                     .flex_shrink_0()
-                    .px(px(12.0))
-                    .rounded_xl()
-                    .text_size(px(13.5));
+                    .px(px(10.0))
+                    .rounded(px(8.0))
+                    .text_size(px(13.0));
 
                 if enabled {
                     row = row
@@ -144,7 +144,7 @@ pub fn render(idx: usize, _window: &mut Window, cx: &mut Context<Bar>) -> AnyEle
                 .items_center()
                 .gap(px(10.0))
                 .border_b_1()
-                .border_color(style::border(&theme).opacity(0.3))
+                .border_color(style::border(&theme).opacity(0.16))
                 .child(icon_el)
                 .child(
                     div()

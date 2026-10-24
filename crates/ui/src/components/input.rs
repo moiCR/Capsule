@@ -449,6 +449,8 @@ pub struct Input {
     max_visible_chars: usize,
     cursor_visible: Option<bool>,
     flex_1: bool,
+    padding_x: Option<Pixels>,
+    gap: Option<Pixels>,
     on_click: Option<InputClickListener>,
     on_clear: Option<InputClickListener>,
 }
@@ -480,6 +482,8 @@ impl Input {
             max_visible_chars: 30,
             cursor_visible: None,
             flex_1: false,
+            padding_x: None,
+            gap: None,
             on_click: None,
             on_clear: None,
         }
@@ -629,6 +633,16 @@ impl Input {
         self
     }
 
+    pub fn padding_x(mut self, px_val: impl Into<Pixels>) -> Self {
+        self.padding_x = Some(px_val.into());
+        self
+    }
+
+    pub fn gap(mut self, gap: impl Into<Pixels>) -> Self {
+        self.gap = Some(gap.into());
+        self
+    }
+
     pub fn on_click<F>(mut self, listener: F) -> Self
     where
         F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -686,8 +700,8 @@ impl RenderOnce for Input {
             .bg(bg_color)
             .border_1()
             .border_color(current_border)
-            .px(px(14.0))
-            .gap(px(10.0))
+            .px(self.padding_x.unwrap_or(px(14.0)))
+            .gap(self.gap.unwrap_or(px(10.0)))
             .cursor_text()
             .transitions(|t| {
                 t.border_color(millis(160).with_easing(ease_in_out))

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
-use gpui::{AnyElement, ColorExt, Context, IntoElement, Window, div, px, svg};
+use gpui::{AnyElement, BoxShadow, ColorExt, Context, IntoElement, Window, div, point, px, svg};
 use services::{AppState, NotificationStore, PowerProfile};
 use ui::components::{Input, InputState, Slider};
 use ui::theme::Theme;
@@ -162,9 +162,9 @@ pub fn render(state: &DashboardState, _window: &mut Window, cx: &mut Context<Bar
             .id("bar-dash-subview-backdrop")
             .absolute()
             .inset_0()
-            .backdrop_blur(px(12.0 * progress))
-            .bg(style::background(&theme).opacity(0.18 * progress))
-            .p(px(18.0))
+            .backdrop_blur(px(16.0 * progress))
+            .bg(gpui::black().opacity(0.25 * progress))
+            .p(px(14.0))
             .flex()
             .items_center()
             .justify_center()
@@ -182,12 +182,18 @@ pub fn render(state: &DashboardState, _window: &mut Window, cx: &mut Context<Bar
                     .relative()
                     .top(px(offset_y))
                     .opacity(progress)
-                    .rounded_2xl()
-                    .bg(style::background(&theme))
+                    .rounded(px(16.0))
+                    .bg(style::background(&theme).opacity(0.92))
                     .border_1()
-                    .border_color(style::border(&theme).opacity(0.55))
-                    .shadow_xl()
-                    .p(px(16.0))
+                    .border_color(style::border(&theme).opacity(0.18))
+                    .shadow(vec![BoxShadow {
+                        color: gpui::black().opacity(0.40).into(),
+                        offset: point(px(0.0), px(16.0)),
+                        blur_radius: px(36.0),
+                        spread_radius: px(0.0),
+                        inset: false,
+                    }])
+                    .p(px(14.0))
                     .overflow_hidden()
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
                         cx.stop_propagation();
@@ -428,11 +434,11 @@ fn render_home(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
     let tiles_box = div()
         .w_full()
         .flex_shrink_0()
-        .p(px(12.0))
-        .rounded_2xl()
-        .bg(style::surface(theme))
+        .p(px(10.0))
+        .rounded(px(14.0))
+        .bg(style::surface(theme).opacity(0.65))
         .border_1()
-        .border_color(style::border(theme).opacity(0.35))
+        .border_color(style::border(theme).opacity(0.18))
         .flex()
         .items_center()
         .justify_between()
@@ -554,16 +560,6 @@ fn render_home(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
         .into_any_element()
 }
 
-fn solid_hover_accent(theme: &Theme) -> gpui::Hsla {
-    let mut c = theme.accent();
-    c.color.lightness = if c.color.lightness > 0.55 {
-        (c.color.lightness - 0.06).max(0.0)
-    } else {
-        (c.color.lightness + 0.06).min(1.0)
-    };
-    c
-}
-
 #[allow(clippy::too_many_arguments)]
 fn top_pill_card(
     id_prefix: &'static str,
@@ -575,43 +571,36 @@ fn top_pill_card(
     on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
     on_open_subview: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
-    let bg_color = if active {
-        theme.accent()
+    let (bg_color, border_col, icon_color, fg_sub) = if active {
+        (
+            style::surface(theme).opacity(0.85),
+            theme.accent().opacity(0.40),
+            theme.accent(),
+            theme.accent(),
+        )
     } else {
-        style::surface(theme)
+        (
+            style::surface(theme).opacity(0.50),
+            style::border(theme).opacity(0.18),
+            theme.foreground_muted(),
+            theme.foreground_muted(),
+        )
     };
-    let border_col = if active {
-        theme.accent()
-    } else {
-        style::border(theme).opacity(0.4)
-    };
-    let fg_main = if active {
-        theme.on_accent()
-    } else {
-        theme.foreground()
-    };
-    let fg_sub = if active {
-        theme.on_accent().opacity(0.8)
-    } else {
-        theme.foreground_muted()
-    };
+    let fg_main = theme.foreground();
     let card_hover_bg = if active {
-        solid_hover_accent(theme)
+        style::surface(theme)
     } else {
-        style::hover(theme)
+        style::surface(theme).opacity(0.70)
     };
-    let chevron_hover_bg = if active {
-        gpui::white().opacity(0.18)
-    } else {
-        style::background(theme).opacity(0.75)
-    };
+    let chevron_hover_bg = style::hover(theme);
 
     div()
         .id((id_prefix, 0usize))
         .flex_1()
         .h_full()
-        .px(px(14.0))
-        .rounded_2xl()
+        .pl(px(10.0))
+        .pr(px(12.0))
+        .rounded(px(14.0))
         .bg(bg_color)
         .border_1()
         .border_color(border_col)
@@ -622,11 +611,23 @@ fn top_pill_card(
         .hover(move |s| s.bg(card_hover_bg))
         .on_click(on_toggle)
         .child(
+            div()
+                .w(px(3.5))
+                .h(px(24.0))
+                .flex_shrink_0()
+                .rounded_full()
+                .bg(if active {
+                    theme.accent()
+                } else {
+                    gpui::transparent_black()
+                }),
+        )
+        .child(
             svg()
                 .path(icon)
                 .size(px(22.0))
                 .flex_shrink_0()
-                .text_color(fg_main),
+                .text_color(icon_color),
         )
         .child(
             div()
@@ -634,18 +635,18 @@ fn top_pill_card(
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(1.5))
                 .child(
                     div()
-                        .text_size(px(14.5))
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_size(px(14.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(fg_main)
                         .line_clamp(1)
                         .child(title.to_string()),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.5))
                         .text_color(fg_sub)
                         .line_clamp(1)
                         .child(subtitle.to_string()),
@@ -654,7 +655,7 @@ fn top_pill_card(
         .child(
             div()
                 .id((id_prefix, 1usize))
-                .size(px(30.0))
+                .size(px(28.0))
                 .flex_shrink_0()
                 .rounded_full()
                 .flex()
@@ -669,8 +670,8 @@ fn top_pill_card(
                 .child(
                     svg()
                         .path("chevron-right.svg")
-                        .size(px(16.0))
-                        .text_color(fg_sub),
+                        .size(px(14.0))
+                        .text_color(theme.foreground_muted()),
                 ),
         )
         .into_any_element()
@@ -683,23 +684,21 @@ fn quick_icon_tile(
     theme: &Theme,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
-    let bg = if active {
-        theme.accent()
+    let (bg, fg, border_col) = if active {
+        (
+            theme.accent().opacity(0.18),
+            theme.accent(),
+            theme.accent().opacity(0.45),
+        )
     } else {
-        style::background(theme).opacity(0.75)
-    };
-    let fg = if active {
-        theme.on_accent()
-    } else {
-        theme.foreground()
-    };
-    let border_col = if active {
-        theme.accent()
-    } else {
-        style::border(theme).opacity(0.35)
+        (
+            style::background(theme).opacity(0.50),
+            theme.foreground(),
+            style::border(theme).opacity(0.16),
+        )
     };
     let hover_bg = if active {
-        solid_hover_accent(theme)
+        theme.accent().opacity(0.28)
     } else {
         style::hover(theme)
     };
@@ -707,8 +706,8 @@ fn quick_icon_tile(
     div()
         .id(id)
         .flex_1()
-        .h(px(54.0))
-        .rounded_xl()
+        .h(px(52.0))
+        .rounded(px(12.0))
         .bg(bg)
         .border_1()
         .border_color(border_col)
@@ -718,7 +717,7 @@ fn quick_icon_tile(
         .cursor_pointer()
         .hover(move |s| s.bg(hover_bg))
         .on_click(on_click)
-        .child(svg().path(icon).size(px(21.0)).text_color(fg))
+        .child(svg().path(icon).size(px(20.0)).text_color(fg))
         .into_any_element()
 }
 
@@ -761,15 +760,15 @@ fn slider_card(
 
     let mut row = div()
         .w_full()
-        .h(px(58.0))
-        .px(px(14.0))
-        .rounded_2xl()
-        .bg(style::surface(theme))
+        .h(px(54.0))
+        .px(px(12.0))
+        .rounded(px(14.0))
+        .bg(style::surface(theme).opacity(0.65))
         .border_1()
-        .border_color(style::border(theme).opacity(0.35))
+        .border_color(style::border(theme).opacity(0.18))
         .flex()
         .items_center()
-        .gap(px(12.0))
+        .gap(px(10.0))
         .child(
             div()
                 .id((id_prefix, 0usize))
@@ -843,7 +842,7 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
 
     let hover_bg = style::hover(theme);
     let header = div()
-        .h(px(36.0))
+        .h(px(38.0))
         .w_full()
         .flex_shrink_0()
         .flex()
@@ -857,9 +856,8 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
                 .child(
                     div()
                         .id("bar-dash-wifi-back")
-                        .size(px(32.0))
+                        .size(px(30.0))
                         .rounded_full()
-                        .bg(style::surface(theme))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -877,8 +875,8 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
                 )
                 .child(
                     div()
-                        .text_size(px(15.0))
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_size(px(14.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.foreground())
                         .child(title),
                 ),
@@ -886,12 +884,12 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
         .child(
             div()
                 .id("bar-dash-wifi-rescan")
-                .h(px(32.0))
-                .px(px(12.0))
-                .rounded_full()
-                .bg(style::surface(theme))
+                .h(px(28.0))
+                .px(px(10.0))
+                .rounded(px(8.0))
+                .bg(style::surface(theme).opacity(0.60))
                 .border_1()
-                .border_color(style::border(theme).opacity(0.35))
+                .border_color(style::border(theme).opacity(0.18))
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -906,17 +904,23 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
                 .child(
                     svg()
                         .path("rotate-ccw.svg")
-                        .size(px(13.0))
+                        .size(px(12.0))
                         .text_color(theme.foreground_muted()),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.5))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(theme.foreground())
                         .child(scan_label),
                 ),
         );
+
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(theme).opacity(0.16));
 
     let mut list = div()
         .id("bar-dash-wifi-list")
@@ -926,7 +930,7 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(8.0));
+        .gap(px(4.0));
 
     if net.wifi_ap_list.is_empty() {
         list = list.items_center().justify_center().child(
@@ -941,32 +945,38 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
             let ssid_click = ssid.clone();
             let is_connected = ap.is_connected;
             let is_open = ap.security.is_empty() || ap.security == "--" || ap.is_saved;
-            let row_hover = style::hover(theme);
 
             list = list.child(
                 div()
                     .id(("bar-dash-wifi-ap", idx))
                     .w_full()
-                    .h(px(44.0))
+                    .h(px(46.0))
                     .flex_shrink_0()
-                    .px(px(14.0))
-                    .rounded_xl()
+                    .pl(px(6.0))
+                    .pr(px(10.0))
+                    .rounded(px(10.0))
                     .bg(if is_connected {
-                        theme.accent().opacity(0.18)
+                        style::surface(theme).opacity(0.85)
                     } else {
-                        style::surface(theme)
+                        gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_connected {
-                        theme.accent().opacity(0.45)
+                        style::border(theme).opacity(0.18)
                     } else {
-                        style::border(theme).opacity(0.35)
+                        gpui::transparent_black()
+                    })
+                    .hover(move |s| {
+                        if !is_connected {
+                            s.bg(style::surface(theme).opacity(0.35))
+                        } else {
+                            s
+                        }
                     })
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .hover(move |s| s.bg(row_hover))
                     .on_click(cx.listener(move |bar, _, window, cx| {
                         if let Some(s) = cx.try_global::<AppState>() {
                             if is_connected {
@@ -986,8 +996,20 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(10.0))
+                            .gap(px(8.0))
                             .min_w_0()
+                            .child(
+                                div()
+                                    .w(px(3.5))
+                                    .h(px(18.0))
+                                    .flex_shrink_0()
+                                    .rounded_full()
+                                    .bg(if is_connected {
+                                        theme.accent()
+                                    } else {
+                                        gpui::transparent_black()
+                                    }),
+                            )
                             .child(svg().path("wifi.svg").size(px(16.0)).text_color(
                                 if is_connected {
                                     theme.accent()
@@ -1010,9 +1032,17 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
                     )
                     .child(
                         div()
-                            .text_size(px(12.0))
-                            .text_color(theme.foreground_muted())
-                            .child(format!("{}%", ap.signal)),
+                            .text_size(px(11.5))
+                            .text_color(if is_connected {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            })
+                            .child(if is_connected {
+                                "Conectado".to_string()
+                            } else {
+                                format!("{}%", ap.signal)
+                            }),
                     ),
             );
 
@@ -1071,8 +1101,9 @@ fn render_wifi(state: &DashboardState, theme: &Theme, cx: &mut Context<Bar>) -> 
         .size_full()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(8.0))
         .child(header)
+        .child(divider)
         .child(list)
         .into_any_element()
 }
@@ -1104,7 +1135,7 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
 
     let hover_bg = style::hover(theme);
     let header = div()
-        .h(px(36.0))
+        .h(px(38.0))
         .w_full()
         .flex_shrink_0()
         .flex()
@@ -1118,9 +1149,8 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                 .child(
                     div()
                         .id("bar-dash-bt-back")
-                        .size(px(32.0))
+                        .size(px(30.0))
                         .rounded_full()
-                        .bg(style::surface(theme))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -1138,8 +1168,8 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                 )
                 .child(
                     div()
-                        .text_size(px(15.0))
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_size(px(14.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.foreground())
                         .child(title),
                 ),
@@ -1147,12 +1177,12 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .child(
             div()
                 .id("bar-dash-bt-rescan")
-                .h(px(32.0))
-                .px(px(12.0))
-                .rounded_full()
-                .bg(style::surface(theme))
+                .h(px(28.0))
+                .px(px(10.0))
+                .rounded(px(8.0))
+                .bg(style::surface(theme).opacity(0.60))
                 .border_1()
-                .border_color(style::border(theme).opacity(0.35))
+                .border_color(style::border(theme).opacity(0.18))
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -1167,17 +1197,23 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                 .child(
                     svg()
                         .path("rotate-ccw.svg")
-                        .size(px(13.0))
+                        .size(px(12.0))
                         .text_color(theme.foreground_muted()),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.5))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(theme.foreground())
                         .child(scan_label),
                 ),
         );
+
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(theme).opacity(0.16));
 
     let mut list = div()
         .id("bar-dash-bt-list")
@@ -1187,7 +1223,7 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(8.0));
+        .gap(px(4.0));
 
     if net.bluetooth_device_list.is_empty() {
         list = list.items_center().justify_center().child(
@@ -1200,32 +1236,38 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         for (idx, dev) in net.bluetooth_device_list.iter().enumerate() {
             let mac = dev.mac.clone();
             let is_connected = dev.is_connected;
-            let row_hover = style::hover(theme);
 
             list = list.child(
                 div()
                     .id(("bar-dash-bt-dev", idx))
                     .w_full()
-                    .h(px(44.0))
+                    .h(px(46.0))
                     .flex_shrink_0()
-                    .px(px(14.0))
-                    .rounded_xl()
+                    .pl(px(6.0))
+                    .pr(px(10.0))
+                    .rounded(px(10.0))
                     .bg(if is_connected {
-                        theme.accent().opacity(0.18)
+                        style::surface(theme).opacity(0.85)
                     } else {
-                        style::surface(theme)
+                        gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_connected {
-                        theme.accent().opacity(0.45)
+                        style::border(theme).opacity(0.18)
                     } else {
-                        style::border(theme).opacity(0.35)
+                        gpui::transparent_black()
+                    })
+                    .hover(move |s| {
+                        if !is_connected {
+                            s.bg(style::surface(theme).opacity(0.35))
+                        } else {
+                            s
+                        }
                     })
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .hover(move |s| s.bg(row_hover))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if let Some(s) = cx.try_global::<AppState>() {
                             if is_connected {
@@ -1240,8 +1282,20 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(10.0))
+                            .gap(px(8.0))
                             .min_w_0()
+                            .child(
+                                div()
+                                    .w(px(3.5))
+                                    .h(px(18.0))
+                                    .flex_shrink_0()
+                                    .rounded_full()
+                                    .bg(if is_connected {
+                                        theme.accent()
+                                    } else {
+                                        gpui::transparent_black()
+                                    }),
+                            )
                             .child(svg().path("bluetooth.svg").size(px(16.0)).text_color(
                                 if is_connected {
                                     theme.accent()
@@ -1280,8 +1334,9 @@ fn render_bluetooth(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .size_full()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(8.0))
         .child(header)
+        .child(divider)
         .child(list)
         .into_any_element()
 }
@@ -1305,18 +1360,18 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
 
     let hover_bg = style::hover(theme);
     let header = div()
-        .h(px(36.0))
+        .h(px(42.0))
         .w_full()
         .flex_shrink_0()
+        .px(px(4.0))
         .flex()
         .items_center()
         .gap(px(8.0))
         .child(
             div()
                 .id("bar-dash-audio-back")
-                .size(px(32.0))
-                .rounded_full()
-                .bg(style::surface(theme))
+                .size(px(28.0))
+                .rounded(px(8.0))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1334,11 +1389,17 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         )
         .child(
             div()
-                .text_size(px(15.0))
-                .font_weight(gpui::FontWeight::BOLD)
+                .text_size(px(14.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.foreground())
                 .child(title),
         );
+
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(theme).opacity(0.16));
 
     let mut list = div()
         .id("bar-dash-audio-list")
@@ -1348,7 +1409,7 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(8.0));
+        .gap(px(4.0));
 
     if sys.audio_sinks.is_empty() {
         list = list.items_center().justify_center().child(
@@ -1361,7 +1422,6 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         for (idx, sink) in sys.audio_sinks.iter().enumerate() {
             let sink_name = sink.name.clone();
             let is_selected = sink.is_default;
-            let row_hover = style::hover(theme);
             let desc_lower = sink.description.to_lowercase();
             let icon = if desc_lower.contains("headphone")
                 || desc_lower.contains("auricular")
@@ -1381,27 +1441,33 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                 div()
                     .id(("bar-dash-sink", idx))
                     .w_full()
-                    .min_h(px(50.0))
+                    .h(px(46.0))
                     .flex_shrink_0()
-                    .px(px(14.0))
-                    .py(px(10.0))
-                    .rounded_xl()
+                    .pl(px(6.0))
+                    .pr(px(10.0))
+                    .rounded(px(10.0))
                     .bg(if is_selected {
-                        theme.accent().opacity(0.18)
+                        style::surface(theme).opacity(0.85)
                     } else {
-                        style::surface(theme)
+                        gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_selected {
-                        theme.accent().opacity(0.45)
+                        style::border(theme).opacity(0.18)
                     } else {
-                        style::border(theme).opacity(0.35)
+                        gpui::transparent_black()
+                    })
+                    .hover(move |s| {
+                        if !is_selected {
+                            s.bg(style::surface(theme).opacity(0.35))
+                        } else {
+                            s
+                        }
                     })
                     .flex()
                     .items_center()
-                    .gap(px(12.0))
+                    .justify_between()
                     .cursor_pointer()
-                    .hover(move |s| s.bg(row_hover))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if let Some(s) = cx.try_global::<AppState>() {
                             let system = s.system.clone();
@@ -1412,36 +1478,56 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                             cx.notify();
                         }
                     }))
-                    .child(svg().path(icon).size(px(18.0)).text_color(if is_selected {
-                        theme.accent()
-                    } else {
-                        theme.foreground_muted()
-                    }))
                     .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
                             .flex()
-                            .flex_col()
-                            .gap(px(2.0))
+                            .items_center()
+                            .gap(px(8.0))
+                            .min_w_0()
+                            .flex_1()
                             .child(
                                 div()
-                                    .text_size(px(13.5))
-                                    .font_weight(if is_selected {
-                                        gpui::FontWeight::SEMIBOLD
+                                    .w(px(3.5))
+                                    .h(px(18.0))
+                                    .flex_shrink_0()
+                                    .rounded_full()
+                                    .bg(if is_selected {
+                                        theme.accent()
                                     } else {
-                                        gpui::FontWeight::MEDIUM
-                                    })
-                                    .text_color(theme.foreground())
-                                    .line_clamp(1)
-                                    .child(sink.description.clone()),
+                                        gpui::transparent_black()
+                                    }),
                             )
+                            .child(svg().path(icon).size(px(16.0)).text_color(if is_selected {
+                                theme.accent()
+                            } else {
+                                theme.foreground_muted()
+                            }))
                             .child(
                                 div()
-                                    .text_size(px(11.5))
-                                    .text_color(theme.foreground_muted())
-                                    .line_clamp(1)
-                                    .child(sink.name.clone()),
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(1.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(13.0))
+                                            .font_weight(if is_selected {
+                                                gpui::FontWeight::SEMIBOLD
+                                            } else {
+                                                gpui::FontWeight::MEDIUM
+                                            })
+                                            .text_color(theme.foreground())
+                                            .line_clamp(1)
+                                            .child(sink.description.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .text_color(theme.foreground_muted())
+                                            .line_clamp(1)
+                                            .child(sink.name.clone()),
+                                    ),
                             ),
                     ),
             );
@@ -1452,8 +1538,9 @@ fn render_audio_output(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .size_full()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(8.0))
         .child(header)
+        .child(divider)
         .child(list)
         .into_any_element()
 }
@@ -1484,18 +1571,18 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
 
     let hover_bg = style::hover(theme);
     let header = div()
-        .h(px(36.0))
+        .h(px(42.0))
         .w_full()
         .flex_shrink_0()
+        .px(px(4.0))
         .flex()
         .items_center()
         .gap(px(8.0))
         .child(
             div()
                 .id("bar-dash-audio-in-back")
-                .size(px(32.0))
-                .rounded_full()
-                .bg(style::surface(theme))
+                .size(px(28.0))
+                .rounded(px(8.0))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1513,11 +1600,17 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         )
         .child(
             div()
-                .text_size(px(15.0))
-                .font_weight(gpui::FontWeight::BOLD)
+                .text_size(px(14.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.foreground())
                 .child(title),
         );
+
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(theme).opacity(0.16));
 
     let mut list = div()
         .id("bar-dash-audio-in-list")
@@ -1527,7 +1620,7 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(8.0));
+        .gap(px(4.0));
 
     if sys.audio_sources.is_empty() {
         list = list.items_center().justify_center().child(
@@ -1540,33 +1633,38 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         for (idx, source) in sys.audio_sources.iter().enumerate() {
             let source_name = source.name.clone();
             let is_selected = source.is_default;
-            let row_hover = style::hover(theme);
 
             list = list.child(
                 div()
                     .id(("bar-dash-source", idx))
                     .w_full()
-                    .min_h(px(50.0))
+                    .h(px(46.0))
                     .flex_shrink_0()
-                    .px(px(14.0))
-                    .py(px(10.0))
-                    .rounded_xl()
+                    .pl(px(6.0))
+                    .pr(px(10.0))
+                    .rounded(px(10.0))
                     .bg(if is_selected {
-                        theme.accent().opacity(0.18)
+                        style::surface(theme).opacity(0.85)
                     } else {
-                        style::surface(theme)
+                        gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_selected {
-                        theme.accent().opacity(0.45)
+                        style::border(theme).opacity(0.18)
                     } else {
-                        style::border(theme).opacity(0.35)
+                        gpui::transparent_black()
+                    })
+                    .hover(move |s| {
+                        if !is_selected {
+                            s.bg(style::surface(theme).opacity(0.35))
+                        } else {
+                            s
+                        }
                     })
                     .flex()
                     .items_center()
-                    .gap(px(12.0))
+                    .justify_between()
                     .cursor_pointer()
-                    .hover(move |s| s.bg(row_hover))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if let Some(s) = cx.try_global::<AppState>() {
                             let system = s.system.clone();
@@ -1578,40 +1676,57 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
                         }
                     }))
                     .child(
-                        svg()
-                            .path("mic.svg")
-                            .size(px(18.0))
-                            .text_color(if is_selected {
-                                theme.accent()
-                            } else {
-                                theme.foreground_muted()
-                            }),
-                    )
-                    .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
                             .flex()
-                            .flex_col()
-                            .gap(px(2.0))
+                            .items_center()
+                            .gap(px(8.0))
+                            .min_w_0()
+                            .flex_1()
                             .child(
                                 div()
-                                    .text_size(px(13.5))
-                                    .font_weight(if is_selected {
-                                        gpui::FontWeight::SEMIBOLD
+                                    .w(px(3.5))
+                                    .h(px(18.0))
+                                    .flex_shrink_0()
+                                    .rounded_full()
+                                    .bg(if is_selected {
+                                        theme.accent()
                                     } else {
-                                        gpui::FontWeight::MEDIUM
-                                    })
-                                    .text_color(theme.foreground())
-                                    .line_clamp(1)
-                                    .child(source.description.clone()),
+                                        gpui::transparent_black()
+                                    }),
                             )
+                            .child(svg().path("mic.svg").size(px(16.0)).text_color(
+                                if is_selected {
+                                    theme.accent()
+                                } else {
+                                    theme.foreground_muted()
+                                },
+                            ))
                             .child(
                                 div()
-                                    .text_size(px(11.5))
-                                    .text_color(theme.foreground_muted())
-                                    .line_clamp(1)
-                                    .child(source.name.clone()),
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(1.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(13.0))
+                                            .font_weight(if is_selected {
+                                                gpui::FontWeight::SEMIBOLD
+                                            } else {
+                                                gpui::FontWeight::MEDIUM
+                                            })
+                                            .text_color(theme.foreground())
+                                            .line_clamp(1)
+                                            .child(source.description.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .text_color(theme.foreground_muted())
+                                            .line_clamp(1)
+                                            .child(source.name.clone()),
+                                    ),
                             ),
                     ),
             );
@@ -1622,8 +1737,9 @@ fn render_audio_input(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         .size_full()
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(8.0))
         .child(header)
+        .child(divider)
         .child(list)
         .into_any_element()
 }

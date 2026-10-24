@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent, Pixels, Size, Task,
-    WeakEntity, Window, div, px, svg,
+    AnyElement, App, BoxShadow, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent, Pixels,
+    Size, Task, WeakEntity, Window, div, point, px, svg,
 };
 use services::{AppState, CapsuleAnimation, PolkitAuthRequest};
 use ui::components::{Button, ButtonVariant, Input, InputState};
@@ -320,28 +320,36 @@ impl BarPolkit {
                     .text_color(theme.foreground_muted())
                     .into_any_element(),
             )
-            .h_px(42.0)
-            .rounded(px(10.0))
-            .bg(style::background(&theme))
+            .h_px(40.0)
+            .rounded(px(8.0))
+            .bg(style::surface(&theme).opacity(0.60))
             .border_color(if self.error.is_some() {
                 theme.red()
             } else {
-                style::border(&theme)
+                style::border(&theme).opacity(0.18)
             });
+
+        let modal_shadow = BoxShadow {
+            color: gpui::black().opacity(0.35).into(),
+            offset: point(px(0.0), px(16.0)),
+            blur_radius: px(36.0),
+            spread_radius: px(0.0),
+            inset: false,
+        };
 
         let mut modal_box = div()
             .id("polkit-popup-container")
             .w(size.width)
             .h(size.height)
             .rounded(corner_radius)
-            .bg(style::background(&theme).opacity(0.97))
+            .bg(style::background(&theme).opacity(0.92))
             .border_1()
-            .border_color(style::border(&theme).opacity(0.45))
-            .shadow_2xl()
+            .border_color(style::border(&theme).opacity(0.18))
+            .shadow(vec![modal_shadow])
             .flex()
             .flex_col()
             .justify_between()
-            .p(px(20.0))
+            .p(px(18.0))
             .overflow_hidden()
             .opacity(anim.opacity)
             .relative()
@@ -353,7 +361,7 @@ impl BarPolkit {
         let top_section = div()
             .flex()
             .flex_col()
-            .gap(px(14.0))
+            .gap(px(12.0))
             .child(
                 div()
                     .flex()
@@ -361,9 +369,9 @@ impl BarPolkit {
                     .gap(px(12.0))
                     .child(
                         div()
-                            .size(px(38.0))
-                            .rounded_full()
-                            .bg(theme.accent())
+                            .size(px(32.0))
+                            .rounded(px(8.0))
+                            .bg(theme.accent().opacity(0.16))
                             .flex()
                             .items_center()
                             .justify_center()
@@ -371,8 +379,8 @@ impl BarPolkit {
                             .child(
                                 svg()
                                     .path("lock.svg")
-                                    .size(px(18.0))
-                                    .text_color(theme.on_accent()),
+                                    .size(px(16.0))
+                                    .text_color(theme.accent()),
                             ),
                     )
                     .child(
@@ -383,7 +391,7 @@ impl BarPolkit {
                             .min_w_0()
                             .child(
                                 div()
-                                    .text_size(px(15.5))
+                                    .text_size(px(15.0))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(theme.foreground())
                                     .line_clamp(1)
@@ -402,13 +410,13 @@ impl BarPolkit {
                 div()
                     .w_full()
                     .p(px(10.0))
-                    .rounded(px(10.0))
-                    .bg(style::surface(&theme))
+                    .rounded(px(8.0))
+                    .bg(style::surface(&theme).opacity(0.50))
                     .border_1()
-                    .border_color(style::border(&theme).opacity(0.3))
+                    .border_color(style::border(&theme).opacity(0.14))
                     .flex()
                     .flex_col()
-                    .gap(px(4.0))
+                    .gap(px(3.0))
                     .child(
                         div()
                             .text_size(px(12.5))
@@ -418,7 +426,7 @@ impl BarPolkit {
                     .child(
                         div()
                             .text_size(px(10.5))
-                            .text_color(theme.foreground_muted().opacity(0.8))
+                            .text_color(theme.foreground_muted().opacity(0.70))
                             .child(request.action_id.clone()),
                     ),
             )
@@ -477,7 +485,7 @@ impl BarPolkit {
                     .id("polkit-backdrop-click")
                     .absolute()
                     .inset_0()
-                    .backdrop_blur(px(14.0 * blur_progress))
+                    .backdrop_blur(px(20.0 * blur_progress))
                     .bg(style::background(&theme).opacity(0.08 * blur_progress)),
             )
             .child(modal_box)

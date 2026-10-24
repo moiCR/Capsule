@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent, ScrollHandle, Size,
-    Task, WeakEntity, Window, div, px, svg,
+    AnyElement, App, BoxShadow, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent,
+    ScrollHandle, Size, Task, WeakEntity, Window, div, point, px, svg,
 };
 use services::{AppState, Application, CapsuleAnimation, LauncherService};
 use ui::components::{Input, InputState};
@@ -111,6 +111,11 @@ impl BarLauncher {
             squash_stretch,
             reduced_motion,
         );
+        let target_size = Size {
+            width: px(640.0),
+            height: px(54.0),
+        };
+        anim.transition_to(target_size, Instant::now());
         anim.advance(Instant::now());
         self.animator = Some(anim);
         Bar::queue_animation_frame(window, entity);
@@ -161,6 +166,9 @@ impl BarLauncher {
             self.search_input.set_text(&query);
         }
         self.query = query.clone();
+        if query.is_empty() {
+            self.show_all = false;
+        }
         let is_expanded = !query.is_empty() || self.show_all;
         if !is_expanded {
             self.apps.clear();
@@ -174,9 +182,9 @@ impl BarLauncher {
         let target_size = if is_expanded {
             let count = self.count();
             let target_h = match count {
-                0 => 220.0,
-                n => (78.0 + 12.0 + n as f32 * 64.0 + (n.saturating_sub(1) as f32) * 8.0)
-                    .clamp(190.0, 520.0),
+                0 => 230.0,
+                n => (54.0 + 1.0 + 16.0 + n as f32 * 50.0 + (n.saturating_sub(1) as f32) * 2.0)
+                    .clamp(121.0, 480.0),
             };
             Size {
                 width: px(640.0),
@@ -184,8 +192,8 @@ impl BarLauncher {
             }
         } else {
             Size {
-                width: px(500.0),
-                height: px(78.0),
+                width: px(640.0),
+                height: px(54.0),
             }
         };
         if let Some(ref mut anim) = self.animator {
@@ -212,9 +220,9 @@ impl BarLauncher {
             self.apps = self.service.search("");
             self.selected = 0;
             let target_h = match self.count() {
-                0 => 220.0,
-                n => (78.0 + 12.0 + n as f32 * 64.0 + (n.saturating_sub(1) as f32) * 8.0)
-                    .clamp(190.0, 520.0),
+                0 => 230.0,
+                n => (54.0 + 1.0 + 16.0 + n as f32 * 50.0 + (n.saturating_sub(1) as f32) * 2.0)
+                    .clamp(121.0, 480.0),
             };
             let target_size = Size {
                 width: px(640.0),
@@ -325,13 +333,17 @@ impl BarLauncher {
             .id("spotlight-container")
             .w(size.width)
             .h(size.height)
-            .p(px(14.0))
-            .gap(px(12.0))
             .rounded(corner_radius)
-            .bg(style::background(&theme))
+            .bg(style::background(&theme).opacity(0.92))
             .border_1()
-            .border_color(style::border(&theme).opacity(0.38))
-            .shadow_2xl()
+            .border_color(style::border(&theme).opacity(0.18))
+            .shadow(vec![BoxShadow {
+                color: gpui::black().opacity(0.40).into(),
+                offset: point(px(0.0), px(16.0)),
+                blur_radius: px(36.0),
+                spread_radius: px(0.0),
+                inset: false,
+            }])
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -343,61 +355,54 @@ impl BarLauncher {
             .on_click(|_, _, cx| cx.stop_propagation());
 
         let input_component = div()
+            .id("spotlight-search-header")
             .w_full()
-            .h(px(50.0))
+            .h(px(54.0))
             .flex_shrink_0()
-            .px(px(10.0))
-            .rounded_2xl()
-            .bg(style::surface(&theme))
-            .border_1()
-            .border_color(style::border(&theme).opacity(0.35))
+            .px(px(16.0))
             .flex()
             .items_center()
-            .gap(px(10.0))
-            .child(
-                div()
-                    .size(px(34.0))
-                    .flex_shrink_0()
-                    .rounded_xl()
-                    .bg(theme.accent())
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(
-                        svg()
-                            .path("search.svg")
-                            .size(px(17.0))
-                            .text_color(theme.on_accent()),
-                    ),
-            )
             .child(
                 Input::from_state("spotlight-input", &self.search_input)
                     .placeholder(placeholder)
-                    .cleanable(!self.query.is_empty())
+                    .prefix(
+                        svg()
+                            .path("search.svg")
+                            .size(px(18.0))
+                            .text_color(theme.foreground_muted())
+                            .into_any_element(),
+                    )
+                    .padding_x(px(0.0))
+                    .gap(px(10.0))
                     .flex_1(true)
                     .h_px(44.0)
-                    .text_size(px(16.5))
+                    .text_size(px(15.5))
                     .bg(gpui::transparent_black())
                     .border_color(gpui::transparent_black())
-                    .focused_border_color(gpui::transparent_black())
-                    .on_clear(cx.listener(|bar, _, window, cx| {
-                        bar.launcher
-                            .reset_search(window, cx.entity().downgrade(), cx);
-                        cx.notify();
-                    })),
+                    .focused_border_color(gpui::transparent_black()),
             );
 
         spotlight_box = spotlight_box.child(input_component);
 
         if anim.expand_progress() > 0.05 {
+            let divider = div()
+                .id("spotlight-divider")
+                .w_full()
+                .h(px(1.0))
+                .flex_shrink_0()
+                .bg(style::border(&theme).opacity(0.16));
+
+            spotlight_box = spotlight_box.child(divider);
+
             let mut cascade_list = div()
                 .id("spotlight-cascade-list")
                 .flex_1()
                 .min_h_0()
                 .w_full()
+                .p(px(8.0))
                 .flex()
                 .flex_col()
-                .gap(px(8.0))
+                .gap(px(2.0))
                 .overflow_y_scroll()
                 .track_scroll(&self.scroll)
                 .opacity(cascade_opacity);
@@ -421,29 +426,18 @@ impl BarLauncher {
                     div()
                         .w_full()
                         .flex_1()
-                        .rounded_2xl()
-                        .bg(style::surface(&theme))
-                        .border_1()
-                        .border_color(style::border(&theme).opacity(0.35))
+                        .h_full()
+                        .py(px(24.0))
                         .flex()
                         .flex_col()
                         .items_center()
                         .justify_center()
                         .gap(px(10.0))
                         .child(
-                            div()
-                                .size(px(42.0))
-                                .rounded_full()
-                                .bg(style::background(&theme).opacity(0.75))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    svg()
-                                        .path("search.svg")
-                                        .size(px(20.0))
-                                        .text_color(theme.foreground_muted()),
-                                ),
+                            svg()
+                                .path("search.svg")
+                                .size(px(28.0))
+                                .text_color(theme.foreground_muted().opacity(0.35)),
                         )
                         .child(
                             div()
@@ -484,8 +478,8 @@ impl BarLauncher {
                     .id("spotlight-backdrop-click")
                     .absolute()
                     .inset_0()
-                    .backdrop_blur(px(14.0 * blur_progress))
-                    .bg(style::background(&theme).opacity(0.08 * blur_progress))
+                    .backdrop_blur(px(20.0 * blur_progress))
+                    .bg(gpui::black().opacity(0.20 * blur_progress))
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|bar, _, window, cx| {
@@ -504,31 +498,13 @@ impl BarLauncher {
         theme: &Theme,
         cx: &mut Context<Bar>,
     ) -> AnyElement {
-        let mut hover_accent = theme.accent();
-        hover_accent.color.lightness = if hover_accent.color.lightness > 0.55 {
-            (hover_accent.color.lightness - 0.06).max(0.0)
-        } else {
-            (hover_accent.color.lightness + 0.06).min(1.0)
-        };
-
-        let (bg, border_color, hover_bg, fg_main, fg_sub, badge_bg) = if is_selected {
+        let (row_bg, border_color) = if is_selected {
             (
-                theme.accent(),
-                theme.accent(),
-                hover_accent,
-                theme.on_accent(),
-                theme.on_accent().opacity(0.82),
-                gpui::white().opacity(0.18),
+                style::surface(theme).opacity(0.85),
+                style::border(theme).opacity(0.18),
             )
         } else {
-            (
-                style::surface(theme),
-                style::border(theme).opacity(0.35),
-                style::hover(theme),
-                theme.foreground(),
-                theme.foreground_muted(),
-                style::background(theme).opacity(0.75),
-            )
+            (gpui::transparent_black(), gpui::transparent_black())
         };
 
         let copy_hint = if cx.has_global::<AppState>() {
@@ -540,70 +516,77 @@ impl BarLauncher {
         div()
             .id("spotlight-calc-row")
             .w_full()
-            .h(px(64.0))
+            .h(px(50.0))
             .flex_shrink_0()
-            .px(px(14.0))
-            .rounded_2xl()
-            .bg(bg)
+            .px(px(8.0))
+            .rounded(px(10.0))
+            .bg(row_bg)
             .border_1()
             .border_color(border_color)
-            .hover(move |s| s.bg(hover_bg))
+            .hover(move |s| {
+                if !is_selected {
+                    s.bg(style::surface(theme).opacity(0.35))
+                } else {
+                    s
+                }
+            })
             .flex()
             .items_center()
-            .justify_between()
+            .gap(px(10.0))
             .cursor_pointer()
             .on_click(cx.listener(|bar, _, window, cx| {
                 bar.activate_launcher_item(0, window, cx);
             }))
             .child(
                 div()
+                    .w(px(3.5))
+                    .h(px(20.0))
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(if is_selected {
+                        theme.accent()
+                    } else {
+                        gpui::transparent_black()
+                    }),
+            )
+            .child(
+                div()
+                    .size(px(34.0))
+                    .flex_shrink_0()
+                    .rounded(px(8.0))
+                    .bg(style::background(theme).opacity(0.55))
+                    .border_1()
+                    .border_color(style::border(theme).opacity(0.15))
                     .flex()
                     .items_center()
-                    .gap(px(12.0))
+                    .justify_center()
                     .child(
-                        div()
-                            .size(px(42.0))
-                            .rounded_xl()
-                            .bg(badge_bg)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                svg()
-                                    .path("calculator.svg")
-                                    .size(px(20.0))
-                                    .text_color(if is_selected { fg_main } else { theme.accent() }),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(18.0))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(fg_main)
-                            .child(format!("= {result}")),
+                        svg()
+                            .path("calculator.svg")
+                            .size(px(18.0))
+                            .text_color(theme.accent()),
                     ),
             )
             .child(
                 div()
-                    .h(px(28.0))
-                    .px(px(10.0))
-                    .rounded_full()
-                    .bg(badge_bg)
+                    .flex_1()
                     .flex()
-                    .items_center()
-                    .gap(px(6.0))
+                    .flex_col()
+                    .justify_center()
+                    .gap(px(1.5))
+                    .min_w_0()
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(theme.foreground())
+                            .child(format!("= {result}")),
+                    )
                     .child(
                         div()
                             .text_size(px(11.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(if is_selected { fg_main } else { fg_sub })
+                            .text_color(theme.foreground_muted())
                             .child(copy_hint),
-                    )
-                    .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(14.0))
-                            .text_color(if is_selected { fg_main } else { fg_sub }),
                     ),
             )
             .into_any_element()
@@ -617,43 +600,19 @@ impl BarLauncher {
         theme: &Theme,
         cx: &mut Context<Bar>,
     ) -> AnyElement {
-        let mut hover_accent = theme.accent();
-        hover_accent.color.lightness = if hover_accent.color.lightness > 0.55 {
-            (hover_accent.color.lightness - 0.06).max(0.0)
-        } else {
-            (hover_accent.color.lightness + 0.06).min(1.0)
-        };
-
-        let (bg, border_color, hover_bg, fg_main, fg_sub, badge_bg) = if is_selected {
+        let (row_bg, border_color) = if is_selected {
             (
-                theme.accent(),
-                theme.accent(),
-                hover_accent,
-                theme.on_accent(),
-                theme.on_accent().opacity(0.82),
-                gpui::white().opacity(0.18),
+                style::surface(theme).opacity(0.85),
+                style::border(theme).opacity(0.18),
             )
         } else {
-            (
-                style::surface(theme),
-                style::border(theme).opacity(0.35),
-                style::hover(theme),
-                theme.foreground(),
-                theme.foreground_muted(),
-                style::background(theme).opacity(0.75),
-            )
-        };
-
-        let open_action = if cx.has_global::<AppState>() {
-            cx.global::<AppState>().language.get("launcher.open_action")
-        } else {
-            "Abrir".to_string()
+            (gpui::transparent_black(), gpui::transparent_black())
         };
 
         let icon_inner = if let Some(icon_path) = &app.icon_path {
             gpui::img(icon_path.clone())
-                .size(px(30.0))
-                .rounded(px(8.0))
+                .size(px(24.0))
+                .rounded(px(5.0))
                 .into_any_element()
         } else {
             svg()
@@ -662,16 +621,18 @@ impl BarLauncher {
                 } else {
                     "package.svg"
                 })
-                .size(px(20.0))
-                .text_color(if is_selected { fg_main } else { theme.accent() })
+                .size(px(18.0))
+                .text_color(theme.foreground_muted())
                 .into_any_element()
         };
 
         let icon_element = div()
-            .size(px(42.0))
+            .size(px(34.0))
             .flex_shrink_0()
-            .rounded_xl()
-            .bg(badge_bg)
+            .rounded(px(8.0))
+            .bg(style::background(theme).opacity(0.55))
+            .border_1()
+            .border_color(style::border(theme).opacity(0.15))
             .flex()
             .items_center()
             .justify_center()
@@ -683,99 +644,66 @@ impl BarLauncher {
         div()
             .id(("spotlight-app-row", index))
             .w_full()
-            .h(px(64.0))
+            .h(px(50.0))
             .flex_shrink_0()
-            .px(px(14.0))
-            .rounded_2xl()
-            .bg(bg)
+            .px(px(8.0))
+            .rounded(px(10.0))
+            .bg(row_bg)
             .border_1()
             .border_color(border_color)
-            .hover(move |s| s.bg(hover_bg))
+            .hover(move |s| {
+                if !is_selected {
+                    s.bg(style::surface(theme).opacity(0.35))
+                } else {
+                    s
+                }
+            })
             .flex()
             .items_center()
-            .justify_between()
+            .gap(px(10.0))
             .cursor_pointer()
             .on_click(cx.listener(move |bar, _, window, cx| {
                 bar.activate_launcher_item(index, window, cx);
             }))
             .child(
                 div()
+                    .w(px(3.5))
+                    .h(px(20.0))
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(if is_selected {
+                        theme.accent()
+                    } else {
+                        gpui::transparent_black()
+                    }),
+            )
+            .child(icon_element)
+            .child(
+                div()
                     .flex_1()
                     .flex()
-                    .items_center()
-                    .gap(px(12.0))
-                    .min_w_0()
-                    .child(icon_element)
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.0))
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(15.0))
-                                    .font_weight(if is_selected {
-                                        FontWeight::BOLD
-                                    } else {
-                                        FontWeight::SEMIBOLD
-                                    })
-                                    .text_color(fg_main)
-                                    .line_clamp(1)
-                                    .child(name),
-                            )
-                            .when_some(comment, |el, c| {
-                                el.child(
-                                    div()
-                                        .text_size(px(12.0))
-                                        .text_color(fg_sub)
-                                        .line_clamp(1)
-                                        .child(c),
-                                )
-                            }),
-                    ),
-            )
-            .child(if is_selected {
-                div()
-                    .h(px(28.0))
-                    .px(px(10.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .bg(badge_bg)
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(fg_main)
-                            .child(open_action),
-                    )
-                    .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(14.0))
-                            .text_color(fg_main),
-                    )
-                    .into_any_element()
-            } else {
-                div()
-                    .size(px(28.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .flex()
-                    .items_center()
+                    .flex_col()
                     .justify_center()
+                    .gap(px(1.5))
+                    .min_w_0()
                     .child(
-                        svg()
-                            .path("chevron-right.svg")
-                            .size(px(15.0))
-                            .text_color(fg_sub),
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(theme.foreground())
+                            .line_clamp(1)
+                            .child(name),
                     )
-                    .into_any_element()
-            })
+                    .when_some(comment, |el, c| {
+                        el.child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(theme.foreground_muted())
+                                .line_clamp(1)
+                                .child(c),
+                        )
+                    }),
+            )
             .into_any_element()
     }
 }

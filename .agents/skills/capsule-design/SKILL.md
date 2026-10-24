@@ -34,7 +34,7 @@ Capsule uses **Flat Design 2.0** across both Island and Bar modes:
   - `Calendar`: 2-column layout (`Notifications | Calendar`).
   - `Dashboard`: Top 2-column `Network` & `Bluetooth` pill cards, middle 6-tile quick actions box, bottom `Slider` cards (`Output Volume`, `Input Volume`, and conditional `Brightness`), plus animated Gaussian-blurred overlay subviews.
 - **Spotlight Launcher (`crates/app/src/bar/popups/launcher.rs`)**:
-  - Flat Design 2.0 popup with an elevated surface search bar, accent search icon badge, and individual `rounded_2xl` result cards (`style::surface` unselected, solid `theme.accent()` selected) over a Gaussian-blurred backdrop.
+  - Modern Clean Minimalist / Integrated Command Palette: seamless top search bar with inline icon, subtle divider line, transparent unselected rows, soft surface selected row with vertical accent indicator pill on the far left edge, and Gaussian backdrop blur.
 - **Settings Bar Widget Editor (`crates/app/src/settings/views/bar.rs`)**:
   - Unified dark preview canvas containing a top horizontal row of visual mini-widget pills (dimmed when already placed in the bar, bright when available) above a live interactive Bar mockup with `Left`, `Center`, and `Right` drop/click zones.
 

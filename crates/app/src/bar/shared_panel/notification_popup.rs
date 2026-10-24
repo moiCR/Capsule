@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, IntoElement, Window, div, img, px, svg};
+use gpui::{AnyElement, ColorExt, Context, IntoElement, Window, div, img, px, svg};
 use services::NotificationStore;
 use ui::theme::Theme;
 
@@ -70,17 +70,17 @@ pub fn render(id: u32, _window: &mut Window, cx: &mut Context<Bar>) -> AnyElemen
         .child(
             div()
                 .id("popup-notif-close")
-                .size(px(24.0))
+                .size(px(22.0))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded_full()
+                .rounded(px(6.0))
                 .cursor_pointer()
                 .hover(move |s| s.bg(hover_icon))
                 .child(
                     svg()
                         .path("close.svg")
-                        .size(px(13.0))
+                        .size(px(12.0))
                         .text_color(theme.foreground_muted()),
                 )
                 .on_click(cx.listener(move |bar, _, window, cx| {
@@ -92,8 +92,8 @@ pub fn render(id: u32, _window: &mut Window, cx: &mut Context<Bar>) -> AnyElemen
     let mut content = div()
         .id("shared-panel-notification-popup")
         .size_full()
-        .px(px(24.0))
-        .py(px(14.0))
+        .px(px(18.0))
+        .py(px(12.0))
         .flex()
         .flex_col()
         .gap(px(6.0))
@@ -137,15 +137,17 @@ pub fn render(id: u32, _window: &mut Window, cx: &mut Context<Bar>) -> AnyElemen
             actions_row = actions_row.child(
                 div()
                     .id(format!("notif-popup-act-{id}-{idx}"))
-                    .h(px(28.0))
-                    .px(px(12.0))
-                    .rounded_full()
-                    .bg(style::surface(&theme))
+                    .h(px(24.0))
+                    .px(px(10.0))
+                    .rounded(px(6.0))
+                    .bg(style::surface(&theme).opacity(0.85))
+                    .border_1()
+                    .border_color(style::border(&theme).opacity(0.16))
                     .hover(move |s| s.bg(chip_hover))
                     .cursor_pointer()
                     .flex()
                     .items_center()
-                    .text_size(px(12.0))
+                    .text_size(px(11.5))
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(theme.foreground())
                     .child(label_str)

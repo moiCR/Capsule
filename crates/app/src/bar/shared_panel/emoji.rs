@@ -79,30 +79,28 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
 
     let search_bar = div()
         .w_full()
-        .h(px(38.0))
-        .px(px(8.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
-        .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .h(px(40.0))
+        .flex_shrink_0()
+        .px(px(4.0))
         .flex()
         .items_center()
+        .gap(px(10.0))
+        .child(
+            svg()
+                .path("search.svg")
+                .size(px(16.0))
+                .text_color(theme.foreground_muted()),
+        )
         .child(
             Input::from_state("bar-emoji-search", &state.search_input)
                 .placeholder(placeholder)
                 .cleanable(!state.search_input.is_empty())
                 .w_full()
-                .h_px(34.0)
-                .text_size(px(13.0))
+                .h_px(36.0)
+                .text_size(px(13.5))
                 .bg(gpui::transparent_black())
                 .border_color(gpui::transparent_black())
                 .focused_border_color(gpui::transparent_black())
-                .prefix(
-                    svg()
-                        .path("search.svg")
-                        .size(px(14.0))
-                        .text_color(theme.foreground_muted()),
-                )
                 .on_clear(cx.listener(|bar, _, _, cx| {
                     bar.shared_panel.emoji_state.search_input.clear();
                     bar.shared_panel.emoji_state.selected = 0;
@@ -111,10 +109,16 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
                 })),
         );
 
-    let hover_pill = style::hover(&theme);
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(&theme).opacity(0.16));
+
+    let cat_hover_bg = style::surface(&theme).opacity(0.35);
     let mut cat_row = div()
         .w_full()
-        .h(px(30.0))
+        .h(px(28.0))
         .flex()
         .items_center()
         .gap(px(4.0));
@@ -127,7 +131,7 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
                 .path("sparkles.svg")
                 .size(px(14.0))
                 .text_color(if is_active {
-                    theme.on_accent()
+                    theme.accent()
                 } else {
                     theme.foreground_muted()
                 })
@@ -135,8 +139,8 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
         } else {
             div()
                 .font_family("Noto Color Emoji")
-                .text_size(px(16.0))
-                .line_height(px(20.0))
+                .text_size(px(15.0))
+                .line_height(px(18.0))
                 .child(icon)
                 .into_any_element()
         };
@@ -146,17 +150,23 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
             .flex_1()
             .min_w_0()
             .h_full()
-            .rounded_lg()
+            .rounded(px(7.0))
             .cursor_pointer()
             .flex()
             .items_center()
             .justify_center()
             .bg(if is_active {
-                theme.accent()
+                style::surface(&theme).opacity(0.85)
             } else {
-                style::surface(&theme)
+                gpui::transparent_black()
             })
-            .hover(move |s| if is_active { s } else { s.bg(hover_pill) })
+            .border_1()
+            .border_color(if is_active {
+                style::border(&theme).opacity(0.18)
+            } else {
+                gpui::transparent_black()
+            })
+            .hover(move |s| if is_active { s } else { s.bg(cat_hover_bg) })
             .on_click(cx.listener(move |bar, _, _, cx| {
                 bar.shared_panel.emoji_state.category = cat;
                 bar.shared_panel.emoji_state.page = 0;
@@ -220,30 +230,30 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
                 if let Some(item) = page_items.get(item_idx) {
                     let is_selected = item_idx == state.selected;
                     let emoji_char = item.emoji.clone();
-                    let hover_cell = style::hover(&theme);
+                    let hover_cell_bg = style::surface(&theme).opacity(0.35);
 
                     let cell = div()
                         .id(("bar-emoji-cell", item_idx))
                         .w(px(66.0))
                         .h(px(56.0))
                         .flex_shrink_0()
-                        .rounded_xl()
+                        .rounded(px(10.0))
                         .cursor_pointer()
                         .flex()
                         .items_center()
                         .justify_center()
                         .bg(if is_selected {
-                            style::active(&theme)
-                        } else {
-                            style::surface(&theme)
-                        })
-                        .border_1()
-                        .border_color(if is_selected {
-                            theme.accent()
+                            style::surface(&theme).opacity(0.85)
                         } else {
                             gpui::transparent_black()
                         })
-                        .hover(move |s| s.bg(hover_cell))
+                        .border_1()
+                        .border_color(if is_selected {
+                            style::border(&theme).opacity(0.24)
+                        } else {
+                            gpui::transparent_black()
+                        })
+                        .hover(move |s| if !is_selected { s.bg(hover_cell_bg) } else { s })
                         .on_click(cx.listener(move |bar, _, window, cx| {
                             bar.copy_emoji(&emoji_char, window, cx);
                         }))
@@ -273,10 +283,10 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
     let prev_btn = div()
         .id("emoji-prev-btn")
         .size(px(26.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
+        .rounded(px(6.0))
+        .bg(style::surface(&theme).opacity(0.60))
         .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .border_color(style::border(&theme).opacity(0.16))
         .cursor_pointer()
         .flex()
         .items_center()
@@ -303,10 +313,10 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
     let next_btn = div()
         .id("emoji-next-btn")
         .size(px(26.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
+        .rounded(px(6.0))
+        .bg(style::surface(&theme).opacity(0.60))
         .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .border_color(style::border(&theme).opacity(0.16))
         .cursor_pointer()
         .flex()
         .items_center()
@@ -389,11 +399,12 @@ pub fn render(state: &EmojiState, _window: &mut Window, cx: &mut Context<Bar>) -
     div()
         .id("bar-emoji-panel")
         .size_full()
-        .p(px(20.0))
+        .p(px(14.0))
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(10.0))
         .child(search_bar)
+        .child(divider)
         .child(cat_row)
         .child(grid_container)
         .child(footer)

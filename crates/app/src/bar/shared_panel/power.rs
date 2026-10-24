@@ -41,16 +41,18 @@ pub fn render(
             .flex()
             .items_center()
             .justify_between()
-            .h(px(38.0))
-            .px(px(14.0))
-            .rounded_xl()
-            .bg(style::surface(&theme))
+            .h(px(36.0))
+            .px(px(12.0))
+            .rounded(px(10.0))
+            .bg(style::surface(&theme).opacity(0.55))
+            .border_1()
+            .border_color(style::border(&theme).opacity(0.16))
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(10.0))
-                    .child(svg().path(battery_icon).size(px(18.0)).text_color(
+                    .gap(px(8.0))
+                    .child(svg().path(battery_icon).size(px(16.0)).text_color(
                         if pct <= 15 && !is_charging {
                             theme.red()
                         } else {
@@ -59,7 +61,7 @@ pub fn render(
                     ))
                     .child(
                         div()
-                            .text_size(px(13.5))
+                            .text_size(px(13.0))
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .text_color(theme.foreground_muted())
                             .child(charge_status),
@@ -67,7 +69,7 @@ pub fn render(
             )
             .child(
                 div()
-                    .text_size(px(14.0))
+                    .text_size(px(13.5))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.foreground())
                     .child(format!("{pct}%")),
@@ -78,13 +80,15 @@ pub fn render(
             .flex()
             .items_center()
             .justify_between()
-            .h(px(38.0))
-            .px(px(14.0))
-            .rounded_xl()
-            .bg(style::surface(&theme))
+            .h(px(36.0))
+            .px(px(12.0))
+            .rounded(px(10.0))
+            .bg(style::surface(&theme).opacity(0.55))
+            .border_1()
+            .border_color(style::border(&theme).opacity(0.16))
             .child(
                 div()
-                    .text_size(px(13.5))
+                    .text_size(px(13.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(theme.foreground_muted())
                     .child("Alimentación AC"),
@@ -188,16 +192,20 @@ pub fn render(
         let mut btn = div()
             .id(btn_id)
             .flex_1()
-            .h(px(62.0))
+            .h(px(58.0))
             .relative()
             .overflow_hidden()
-            .rounded_2xl()
-            .bg(style::surface(&theme))
+            .rounded(px(12.0))
+            .bg(if is_held {
+                style::surface(&theme).opacity(0.85)
+            } else {
+                style::surface(&theme).opacity(0.50)
+            })
             .border_1()
             .border_color(if is_held {
                 bar_color
             } else {
-                style::border(&theme).opacity(0.35)
+                style::border(&theme).opacity(0.18)
             })
             .cursor_pointer()
             .hover(move |s| s.bg(hover_bg));

@@ -115,30 +115,26 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
 
     let search_bar = div()
         .flex_1()
-        .h(px(38.0))
-        .px(px(8.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
-        .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .h(px(40.0))
         .flex()
         .items_center()
+        .gap(px(10.0))
+        .child(
+            svg()
+                .path("search.svg")
+                .size(px(16.0))
+                .text_color(theme.foreground_muted()),
+        )
         .child(
             Input::from_state("bar-clipboard-search", &state.search_input)
                 .placeholder(placeholder)
                 .cleanable(!state.search_input.is_empty())
                 .w_full()
-                .h_px(34.0)
-                .text_size(px(13.0))
+                .h_px(36.0)
+                .text_size(px(13.5))
                 .bg(gpui::transparent_black())
                 .border_color(gpui::transparent_black())
                 .focused_border_color(gpui::transparent_black())
-                .prefix(
-                    svg()
-                        .path("search.svg")
-                        .size(px(14.0))
-                        .text_color(theme.foreground_muted()),
-                )
                 .on_clear(cx.listener(|bar, _, _, cx| {
                     bar.shared_panel.clipboard_state.search_input.clear();
                     bar.shared_panel.clipboard_state.selected = 0;
@@ -150,11 +146,8 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
     let clear_hover = theme.red().opacity(0.18);
     let clear_btn = div()
         .id("clip-clear-btn")
-        .size(px(38.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
-        .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .size(px(28.0))
+        .rounded(px(8.0))
         .cursor_pointer()
         .flex()
         .items_center()
@@ -173,11 +166,8 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
     let close_hover = style::hover(&theme);
     let close_btn = div()
         .id("clip-close-btn")
-        .size(px(38.0))
-        .rounded_full()
-        .bg(style::surface(&theme))
-        .border_1()
-        .border_color(style::border(&theme).opacity(0.35))
+        .size(px(28.0))
+        .rounded(px(8.0))
         .cursor_pointer()
         .flex()
         .items_center()
@@ -195,8 +185,9 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
 
     let mut top_row = div()
         .w_full()
-        .h(px(38.0))
+        .h(px(40.0))
         .flex_shrink_0()
+        .px(px(4.0))
         .flex()
         .items_center()
         .gap(px(8.0))
@@ -207,32 +198,44 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
     }
     top_row = top_row.child(close_btn);
 
+    let divider = div()
+        .w_full()
+        .h(px(1.0))
+        .flex_shrink_0()
+        .bg(style::border(&theme).opacity(0.16));
+
     let history_items = state.filtered_history();
     let snippet_items = state.filtered_snippets();
 
-    let tab_hover_1 = style::hover(&theme);
+    let tab_hover_1 = style::surface(&theme).opacity(0.40);
     let tab_history_btn = div()
         .id("clip-tab-history")
-        .h(px(28.0))
-        .px(px(12.0))
-        .rounded_full()
+        .h(px(26.0))
+        .px(px(10.0))
+        .rounded(px(6.0))
         .cursor_pointer()
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
         .font_weight(if is_history {
-            gpui::FontWeight::BOLD
+            gpui::FontWeight::SEMIBOLD
         } else {
             gpui::FontWeight::MEDIUM
         })
         .bg(if is_history {
-            theme.accent()
+            style::surface(&theme).opacity(0.85)
         } else {
-            style::surface(&theme)
+            gpui::transparent_black()
+        })
+        .border_1()
+        .border_color(if is_history {
+            style::border(&theme).opacity(0.18)
+        } else {
+            gpui::transparent_black()
         })
         .text_color(if is_history {
-            theme.on_accent()
+            theme.foreground()
         } else {
             theme.foreground_muted()
         })
@@ -245,29 +248,35 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
         }))
         .child(history_label);
 
-    let tab_hover_2 = style::hover(&theme);
+    let tab_hover_2 = style::surface(&theme).opacity(0.40);
     let tab_snippets_btn = div()
         .id("clip-tab-snippets")
-        .h(px(28.0))
-        .px(px(12.0))
-        .rounded_full()
+        .h(px(26.0))
+        .px(px(10.0))
+        .rounded(px(6.0))
         .cursor_pointer()
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
         .font_weight(if !is_history {
-            gpui::FontWeight::BOLD
+            gpui::FontWeight::SEMIBOLD
         } else {
             gpui::FontWeight::MEDIUM
         })
         .bg(if !is_history {
-            theme.accent()
+            style::surface(&theme).opacity(0.85)
         } else {
-            style::surface(&theme)
+            gpui::transparent_black()
+        })
+        .border_1()
+        .border_color(if !is_history {
+            style::border(&theme).opacity(0.18)
+        } else {
+            gpui::transparent_black()
         })
         .text_color(if !is_history {
-            theme.on_accent()
+            theme.foreground()
         } else {
             theme.foreground_muted()
         })
@@ -358,7 +367,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                     let item_id = item.id.clone();
                     let is_image = item.is_image;
                     let preview = item.preview.clone();
-                    let card_hover = style::hover(&theme);
+                    let card_hover_bg = style::surface(&theme).opacity(0.60);
                     let pin_hover = theme.accent().opacity(0.2);
                     let del_hover = theme.red().opacity(0.2);
 
@@ -413,10 +422,26 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                             .items_center()
                                             .gap(px(6.0))
                                             .child(
+                                                div()
+                                                    .w(px(3.5))
+                                                    .h(px(14.0))
+                                                    .rounded_full()
+                                                    .flex_shrink_0()
+                                                    .bg(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        gpui::transparent_black()
+                                                    }),
+                                            )
+                                            .child(
                                                 svg()
                                                     .path("wallpaper.svg")
                                                     .size(px(12.0))
-                                                    .text_color(theme.foreground_muted()),
+                                                    .text_color(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        theme.foreground_muted()
+                                                    }),
                                             )
                                             .child(
                                                 div()
@@ -424,7 +449,11 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                                     .min_w_0()
                                                     .text_size(px(11.0))
                                                     .line_clamp(1)
-                                                    .text_color(theme.foreground_muted())
+                                                    .text_color(if is_selected {
+                                                        theme.foreground()
+                                                    } else {
+                                                        theme.foreground_muted()
+                                                    })
                                                     .child(if preview.is_empty() {
                                                         "Imagen".to_string()
                                                     } else {
@@ -436,7 +465,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                         div()
                                             .id(("clip-del-hist-img", index))
                                             .size(px(22.0))
-                                            .rounded_full()
+                                            .rounded(px(6.0))
                                             .flex()
                                             .items_center()
                                             .justify_center()
@@ -475,16 +504,40 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                             .items_center()
                                             .gap(px(6.0))
                                             .child(
+                                                div()
+                                                    .w(px(3.5))
+                                                    .h(px(14.0))
+                                                    .rounded_full()
+                                                    .flex_shrink_0()
+                                                    .bg(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        gpui::transparent_black()
+                                                    }),
+                                            )
+                                            .child(
                                                 svg()
                                                     .path("file-text.svg")
                                                     .size(px(12.0))
-                                                    .text_color(theme.foreground_muted()),
+                                                    .text_color(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        theme.foreground_muted()
+                                                    }),
                                             )
                                             .child(
                                                 div()
                                                     .text_size(px(10.5))
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(theme.foreground_muted())
+                                                    .font_weight(if is_selected {
+                                                        gpui::FontWeight::SEMIBOLD
+                                                    } else {
+                                                        gpui::FontWeight::MEDIUM
+                                                    })
+                                                    .text_color(if is_selected {
+                                                        theme.foreground()
+                                                    } else {
+                                                        theme.foreground_muted()
+                                                    })
                                                     .child(format!("{:02}", index + 1)),
                                             ),
                                     )
@@ -497,7 +550,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                                 div()
                                                     .id(("clip-pin-hist", index))
                                                     .size(px(22.0))
-                                                    .rounded_full()
+                                                    .rounded(px(6.0))
                                                     .flex()
                                                     .items_center()
                                                     .justify_center()
@@ -518,7 +571,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                                 div()
                                                     .id(("clip-del-hist", index))
                                                     .size(px(22.0))
-                                                    .rounded_full()
+                                                    .rounded(px(6.0))
                                                     .flex()
                                                     .items_center()
                                                     .justify_center()
@@ -555,19 +608,19 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                         .w(px(CARD_WIDTH))
                         .h(px(CARD_HEIGHT))
                         .flex_shrink_0()
-                        .rounded_xl()
+                        .rounded(px(12.0))
                         .bg(if is_selected {
-                            style::active(&theme)
+                            style::surface(&theme).opacity(0.85)
                         } else {
-                            style::surface(&theme)
+                            style::surface(&theme).opacity(0.40)
                         })
                         .border_1()
                         .border_color(if is_selected {
-                            theme.accent()
+                            style::border(&theme).opacity(0.25)
                         } else {
-                            style::border(&theme).opacity(0.35)
+                            style::border(&theme).opacity(0.14)
                         })
-                        .hover(move |s| s.bg(card_hover))
+                        .hover(move |s| if !is_selected { s.bg(card_hover_bg) } else { s })
                         .cursor_pointer()
                         .on_click(cx.listener(move |bar, _, window, cx| {
                             bar.activate_clipboard_history(index, window, cx);
@@ -622,7 +675,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                 let snippet_id = snippet.id.clone();
                 let title = snippet.title.clone();
                 let content = snippet.content.clone();
-                let card_hover = style::hover(&theme);
+                let card_hover_bg = style::surface(&theme).opacity(0.60);
                 let del_hover = theme.red().opacity(0.2);
 
                 let card = div()
@@ -630,19 +683,19 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                     .w(px(CARD_WIDTH))
                     .h(px(CARD_HEIGHT))
                     .flex_shrink_0()
-                    .rounded_xl()
+                    .rounded(px(12.0))
                     .bg(if is_selected {
-                        style::active(&theme)
+                        style::surface(&theme).opacity(0.85)
                     } else {
-                        style::surface(&theme)
+                        style::surface(&theme).opacity(0.40)
                     })
                     .border_1()
                     .border_color(if is_selected {
-                        theme.accent()
+                        style::border(&theme).opacity(0.25)
                     } else {
-                        style::border(&theme).opacity(0.35)
+                        style::border(&theme).opacity(0.14)
                     })
-                    .hover(move |s| s.bg(card_hover))
+                    .hover(move |s| if !is_selected { s.bg(card_hover_bg) } else { s })
                     .cursor_pointer()
                     .on_click(cx.listener(move |bar, _, window, cx| {
                         bar.activate_clipboard_snippet(index, window, cx);
@@ -670,17 +723,37 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                             .items_center()
                                             .gap(px(6.0))
                                             .child(
+                                                div()
+                                                    .w(px(3.5))
+                                                    .h(px(14.0))
+                                                    .rounded_full()
+                                                    .flex_shrink_0()
+                                                    .bg(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        gpui::transparent_black()
+                                                    }),
+                                            )
+                                            .child(
                                                 svg()
                                                     .path("sparkles.svg")
                                                     .size(px(12.0))
-                                                    .text_color(theme.accent()),
+                                                    .text_color(if is_selected {
+                                                        theme.accent()
+                                                    } else {
+                                                        theme.foreground_muted()
+                                                    }),
                                             )
                                             .child(
                                                 div()
                                                     .flex_1()
                                                     .min_w_0()
                                                     .text_size(px(11.5))
-                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                    .font_weight(if is_selected {
+                                                        gpui::FontWeight::SEMIBOLD
+                                                    } else {
+                                                        gpui::FontWeight::MEDIUM
+                                                    })
                                                     .line_clamp(1)
                                                     .text_color(theme.foreground())
                                                     .child(title),
@@ -690,7 +763,7 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
                                         div()
                                             .id(("clip-del-snip", index))
                                             .size(px(22.0))
-                                            .rounded_full()
+                                            .rounded(px(6.0))
                                             .flex()
                                             .items_center()
                                             .justify_center()
@@ -749,11 +822,12 @@ pub fn render(state: &ClipboardState, _window: &mut Window, cx: &mut Context<Bar
     div()
         .id("bar-clipboard-panel")
         .size_full()
-        .p(px(18.0))
+        .p(px(14.0))
         .flex()
         .flex_col()
-        .gap(px(12.0))
+        .gap(px(10.0))
         .child(top_row)
+        .child(divider)
         .child(tabs_row)
         .child(gallery)
         .child(footer)

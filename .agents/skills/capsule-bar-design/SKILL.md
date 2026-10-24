@@ -63,11 +63,12 @@ Widgets sit directly on the Bar without dock pill backgrounds or borders:
 
 ## Popups & Spotlight Launcher (`crates/app/src/bar/popups/launcher.rs`)
 
-- **Flat Design 2.0 Architecture**:
-  - Outer shell: solid `style::background(&theme)`, `rounded(24px)`, `p(14px)`, `gap(12px)`, `1px` subtle border.
-  - Resting bubble: `500px × 78px` housing an elevated `style::surface(&theme)` search card (`h(50px)`, `rounded_2xl`) with an accent icon badge (`34px`, `rounded_xl`, `bg(theme.accent())`, `search.svg` in `theme.on_accent()`).
-  - Expanded view: `640px × up to 520px`. Each result row (application or calculator evaluation) is an individual Flat Design 2.0 card (`h(64px)`, `rounded_2xl`):
-    - **Selected card**: solid `theme.accent()` fill, `theme.on_accent()` bold typography, `gpui::white().opacity(0.18)` icon container (`42px`, `rounded_xl`) and right action pill (`rounded_full`).
-    - **Unselected card**: solid `style::surface(&theme)` fill, subtle border, `style::hover(&theme)` on hover, `style::background(&theme).opacity(0.75)` icon container.
+- **Modern Clean Minimalist / Integrated Command Palette**:
+  - Seamless integrated search header at top (no nested cards, clean naked search icon directly inline with text, `h(52px)`, `px(16px)`).
+  - Subtle `1px` horizontal divider line (`bg(style::border(theme).opacity(0.16))`) separating the header and the results list.
+  - Transparent unselected rows with subtle surface tint on hover (`style::surface(theme).opacity(0.35)`).
+  - Selected row with soft, integrated surface fill (`style::surface(theme).opacity(0.85)`), subtle border, and a **vertical accent indicator pill** on the far left edge (`3.5px × 20px`, `rounded_full`, `theme.accent()`).
+  - Icon squircle (`34px`, `rounded(8px)`, `bg(style::background(theme).opacity(0.55))`).
+  - Crisp, uncluttered layout with no right-side buttons or chevrons.
 - **Gaussian Blur Backdrop**:
-  - Uses `.backdrop_blur(px(14.0 * progress)).bg(style::background(&theme).opacity(0.08 * progress))` instead of a dark black overlay.
+  - Uses `.backdrop_blur(px(20.0 * progress)).bg(gpui::black().opacity(0.20 * progress))` for clean, immersive visual depth.
