@@ -112,11 +112,13 @@ impl WindowState {
         if self.last_keyboard != Some(desired_keyboard) {
             self.last_keyboard = Some(desired_keyboard);
             window.set_keyboard_interactivity(desired_keyboard);
-            if desired_keyboard == KeyboardInteractivity::Exclusive {
-                window.focus(focus_handle, cx);
-            } else {
+            if desired_keyboard == KeyboardInteractivity::None {
                 window.blur(cx);
             }
+        }
+
+        if desired_keyboard == KeyboardInteractivity::Exclusive {
+            window.focus(focus_handle, cx);
         }
     }
 

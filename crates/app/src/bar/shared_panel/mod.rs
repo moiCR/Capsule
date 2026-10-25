@@ -13,8 +13,8 @@ pub mod view;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyView, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Pixels, Render, Size,
-    Subscription, Window, px,
+    AnyView, App, AppContext, Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Pixels,
+    Render, Size, Subscription, Window, px,
 };
 use services::{AppState, CapsuleAnimation};
 
@@ -390,6 +390,27 @@ impl SharedPanelManager {
         });
         if let Some(ref mut anim) = self.animator {
             anim.request_close();
+        }
+    }
+
+    pub fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut App) {
+        match self.active_module {
+            Some(SharedPanelModule::Dashboard) => {
+                self.dashboard
+                    .update(cx, |m, cx| m.handle_key_down(event, cx));
+            }
+            Some(SharedPanelModule::Clipboard) => {
+                self.clipboard
+                    .update(cx, |m, cx| m.handle_key_down(event, cx));
+            }
+            Some(SharedPanelModule::Emoji) => {
+                self.emoji.update(cx, |m, cx| m.handle_key_down(event, cx));
+            }
+            _ => {
+                if event.keystroke.key == "escape" {
+                    self.request_close(cx);
+                }
+            }
         }
     }
 

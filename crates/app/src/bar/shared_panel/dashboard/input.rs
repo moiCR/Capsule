@@ -5,7 +5,7 @@ use super::{DashboardModule, DashboardSubView};
 use crate::bar::shared_panel::SharedPanelEvent;
 
 impl DashboardModule {
-    pub fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
         if key == "escape" {
             if self.view != DashboardSubView::Home {
@@ -35,5 +35,9 @@ impl DashboardModule {
             cx.notify();
             cx.stop_propagation();
         }
+    }
+
+    pub fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.handle_key_down(event, cx);
     }
 }

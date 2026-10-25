@@ -721,17 +721,23 @@ impl Render for Bar {
             .track_focus(&self.focus_handle)
             .key_context("capsule-bar")
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
-                if event.keystroke.key == "escape" {
-                    if this.polkit.read(cx).is_open() {
-                        this.close_polkit(window, cx);
-                        cx.stop_propagation();
-                    } else if this.launcher.read(cx).is_open() {
-                        this.close_launcher(window, cx);
-                        cx.stop_propagation();
-                    } else if this.shared_panel.is_open() {
-                        this.close_shared_panel(window, cx);
-                        cx.stop_propagation();
-                    }
+                if this.polkit.read(cx).is_open() {
+                    this.polkit.update(cx, |p, cx| p.handle_key_down(event, cx));
+                    this.sync_window_state(window, cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                if this.launcher.read(cx).is_open() {
+                    this.launcher
+                        .update(cx, |l, cx| l.handle_key_down(event, cx));
+                    this.sync_window_state(window, cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                if this.shared_panel.is_open() {
+                    this.shared_panel.handle_key_down(event, cx);
+                    this.sync_window_state(window, cx);
+                    cx.stop_propagation();
                 }
             }))
             .child(bar);

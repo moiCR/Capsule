@@ -234,7 +234,8 @@ impl Dispatch<wl_output::WlOutput, u32> for OutputState {
 
 async fn monitor_outputs(rates: Arc<ArcSwap<HashMap<String, f64>>>) -> anyhow::Result<()> {
     let connection = Connection::connect_to_env()?;
-    let socket = tokio::io::unix::AsyncFd::new(connection.as_fd())?;
+    let socket =
+        unsafe { tokio::io::unix::AsyncFd::register(connection.as_fd().try_clone_to_owned()?) }?;
     let mut events = connection.new_event_queue();
     let _registry = connection.display().get_registry(&events.handle(), ());
     let mut state = OutputState {

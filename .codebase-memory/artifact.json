@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "98ded91adf58b36d5cbdd8929984ae2a5487439d",
-    "indexed_at": "2026-10-25T02:09:02Z",
+    "commit": "228facb5c80fe898bf570ddd05c42cd734186133",
+    "indexed_at": "2026-10-25T02:44:18Z",
     "project": "home-moi-pro-Capsule",
-    "nodes": 5416,
-    "edges": 24229,
-    "original_size": 23789568,
-    "compressed_size": 4050188,
+    "nodes": 5423,
+    "edges": 24268,
+    "original_size": 23920640,
+    "compressed_size": 4062005,
     "compression_level": 3
 }

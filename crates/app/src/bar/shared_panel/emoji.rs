@@ -92,7 +92,7 @@ impl EmojiModule {
         cx.emit(SharedPanelEvent::Close);
     }
 
-    fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
         if key == "escape" {
             cx.emit(SharedPanelEvent::Close);
@@ -186,6 +186,10 @@ impl EmojiModule {
             cx.notify();
             cx.stop_propagation();
         }
+    }
+
+    fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.handle_key_down(event, cx);
     }
 }
 

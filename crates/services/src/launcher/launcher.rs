@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use tokio::io::unix::AsyncFd;
 
 struct InotifyFd(RawFd);
@@ -14,6 +14,12 @@ struct InotifyFd(RawFd);
 impl AsRawFd for InotifyFd {
     fn as_raw_fd(&self) -> RawFd {
         self.0
+    }
+}
+
+impl AsFd for InotifyFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.0) }
     }
 }
 
@@ -99,7 +105,7 @@ impl LauncherService {
                     }
                 }
 
-                if let Ok(mut async_fd) = AsyncFd::new(watcher) {
+                if let Ok(mut async_fd) = unsafe { AsyncFd::register(watcher) } {
                     let mut buf = [0u8; 4096];
                     let fd = async_fd.get_ref().as_raw_fd();
                     loop {
