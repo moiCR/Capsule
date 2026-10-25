@@ -2,15 +2,15 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, BoxShadow, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent, Pixels,
-    Size, Task, WeakEntity, Window, div, point, px, svg,
+    App, BoxShadow, ColorExt, Context, EventEmitter, FocusHandle, FontWeight, IntoElement,
+    KeyDownEvent, Pixels, Render, Size, Task, Window, div, point, px, svg,
 };
 use services::{AppState, CapsuleAnimation, PolkitAuthRequest};
 use ui::components::{Button, ButtonVariant, Input, InputState};
 use ui::theme::Theme;
 
-use super::animator::PolkitAnimator;
-use crate::bar::{Bar, style};
+use super::{PopupEvent, animator::PolkitAnimator};
+use crate::bar::style;
 
 pub fn compute_target_size(has_error: bool, message: &str) -> Size<Pixels> {
     let msg_len = message.len();
@@ -28,14 +28,6 @@ pub fn compute_target_size(has_error: bool, message: &str) -> Size<Pixels> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PolkitKeyAction {
-    None,
-    Handled,
-    Cancel,
-    Submit,
-}
-
 pub struct BarPolkit {
     pub request: Option<PolkitAuthRequest>,
     pub password_input: InputState,
@@ -43,30 +35,55 @@ pub struct BarPolkit {
     pub authenticating: bool,
     pub animator: Option<PolkitAnimator>,
     pub is_open: bool,
+    pub focus: FocusHandle,
     pub authentication: Option<tokio::task::JoinHandle<()>>,
     pub response: Option<Task<()>>,
     pub responder: Option<tokio::sync::oneshot::Sender<Result<(), String>>>,
+    _polkit_task: Option<Task<()>>,
 }
 
-impl Default for BarPolkit {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl EventEmitter<PopupEvent> for BarPolkit {}
 
 impl BarPolkit {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let polkit_task = if cx.has_global::<AppState>() {
+            let service = cx.global::<AppState>().polkit.clone();
+            Some(cx.spawn(async move |this, cx| {
+                loop {
+                    service.wait_for_change().await;
+                    if this
+                        .update(cx, |polkit, cx| {
+                            polkit.check_requests(cx);
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+
+        let mut polkit = Self {
             request: None,
             password_input: InputState::new("").with_focused(true).with_max_len(120),
             error: None,
             authenticating: false,
             animator: None,
             is_open: false,
+            focus: cx.focus_handle(),
             authentication: None,
             response: None,
             responder: None,
-        }
+            _polkit_task: polkit_task,
+        };
+        polkit.check_requests(cx);
+        polkit
+    }
+
+    pub fn focus_handle(&self) -> FocusHandle {
+        self.focus.clone()
     }
 
     pub fn is_open(&self) -> bool {
@@ -82,7 +99,15 @@ impl BarPolkit {
                 .unwrap_or(false)
     }
 
-    pub fn open(&mut self, window: &Window, entity: WeakEntity<Bar>, cx: &App) {
+    pub fn check_requests(&mut self, cx: &mut Context<Self>) {
+        let had_request = self.request.is_some();
+        let has_new = self.process_requests(cx);
+        if has_new || (!had_request && self.request.is_some()) {
+            self.open(cx);
+        }
+    }
+
+    pub fn open(&mut self, cx: &mut Context<Self>) {
         let (duration, animation, bounciness, squash_stretch, reduced_motion) =
             if cx.has_global::<AppState>() {
                 let cfg = cx.global::<AppState>().config.get();
@@ -125,23 +150,17 @@ impl BarPolkit {
         );
         anim.advance(Instant::now());
         self.animator = Some(anim);
-        Bar::queue_animation_frame(window, entity);
+        cx.emit(PopupEvent::Open);
+        cx.notify();
     }
 
-    pub fn request_close(&mut self) {
+    pub fn close(&mut self, cx: &mut Context<Self>) {
         if let Some(ref mut anim) = self.animator
             && !anim.is_closing()
         {
             anim.request_close();
-        }
-    }
-
-    pub fn close(&mut self, window: &Window, entity: WeakEntity<Bar>) {
-        if let Some(ref mut anim) = self.animator
-            && !anim.is_closing()
-        {
-            anim.request_close();
-            Bar::queue_animation_frame(window, entity);
+            cx.emit(PopupEvent::Close);
+            cx.notify();
         }
     }
 
@@ -192,12 +211,80 @@ impl BarPolkit {
         true
     }
 
-    pub fn cancel(&mut self, cx: &App) {
+    pub fn cancel(&mut self, cx: &mut Context<Self>) {
         self.finish(Err("Cancelled by user".into()));
         self.process_requests(cx);
         if self.request.is_none() {
-            self.request_close();
+            self.close(cx);
         }
+        cx.notify();
+    }
+
+    pub fn submit(&mut self, cx: &mut Context<Self>) {
+        if self.authenticating || self.password_input.is_empty() {
+            return;
+        }
+        let Some(request) = &self.request else {
+            return;
+        };
+        let user = request.user_name.clone();
+        let cookie = request.cookie.clone();
+        let response_cookie = cookie.clone();
+        let password = self.password_input.text();
+        self.password_input.clear();
+        let timeout_error = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().language.get("polkit.timeout")
+        } else {
+            "La autenticación ha expirado. Inténtalo de nuevo.".to_string()
+        };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.authenticating = true;
+        self.error = None;
+        self.update_target_size();
+        cx.emit(PopupEvent::RequestAnimationFrame);
+
+        self.authentication = Some(services::spawn_tokio(async move {
+            let result = tokio::time::timeout(
+                Duration::from_secs(30),
+                services::authenticate_user(&user, &cookie, &password),
+            )
+            .await
+            .unwrap_or(Err(timeout_error));
+            let _ = sender.send(result);
+        }));
+
+        self.response = Some(cx.spawn(async move |this, cx| {
+            let Ok(result) = receiver.await else {
+                return;
+            };
+            let _ = this.update(cx, |polkit, cx| {
+                if polkit
+                    .request
+                    .as_ref()
+                    .is_none_or(|r| r.cookie != response_cookie)
+                {
+                    return;
+                }
+                polkit.authenticating = false;
+                polkit.authentication = None;
+                match result {
+                    Ok(()) => {
+                        polkit.finish(Ok(()));
+                        polkit.process_requests(cx);
+                        if polkit.request.is_none() {
+                            polkit.close(cx);
+                        }
+                    }
+                    Err(error) => {
+                        polkit.error = Some(error);
+                        polkit.update_target_size();
+                        cx.emit(PopupEvent::RequestAnimationFrame);
+                    }
+                }
+                cx.notify();
+            });
+        }));
+        cx.notify();
     }
 
     pub fn finish(&mut self, result: Result<(), String>) {
@@ -214,40 +301,39 @@ impl BarPolkit {
         self.authenticating = false;
     }
 
-    pub fn handle_key_down(
-        &mut self,
-        event: &KeyDownEvent,
-        window: &mut Window,
-        entity: WeakEntity<Bar>,
-        cx: &mut Context<Bar>,
-    ) -> PolkitKeyAction {
+    fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
 
         if key == "escape" || (key == "f4" && event.keystroke.modifiers.alt) {
-            return PolkitKeyAction::Cancel;
+            self.cancel(cx);
+            cx.stop_propagation();
+            return;
         }
 
         if key == "enter" || key == "return" {
-            return PolkitKeyAction::Submit;
+            self.submit(cx);
+            cx.stop_propagation();
+            return;
         }
 
         if self.authenticating {
-            return PolkitKeyAction::Handled;
+            cx.stop_propagation();
+            return;
         }
 
         if self.password_input.handle_key_down(event, cx) {
             if self.error.take().is_some() {
                 self.update_target_size();
-                Bar::queue_animation_frame(window, entity);
+                cx.emit(PopupEvent::RequestAnimationFrame);
             }
             cx.notify();
-            return PolkitKeyAction::Handled;
+            cx.stop_propagation();
         }
-
-        PolkitKeyAction::None
     }
+}
 
-    pub fn render(&self, _window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
+impl Render for BarPolkit {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(ref anim) = self.animator else {
             return div().into_any_element();
         };
@@ -259,6 +345,9 @@ impl BarPolkit {
         let theme = cx.global::<Theme>().clone();
         let size = anim.size();
         let corner_radius = px(22.0);
+        let anim_opacity = anim.opacity;
+        let anim_offset_y = anim.offset_y;
+        let blur_progress = (anim.backdrop_opacity / 0.40).clamp(0.0, 1.0);
 
         let auth_required_text = if cx.has_global::<AppState>() {
             cx.global::<AppState>().language.get("polkit.auth_required")
@@ -351,9 +440,9 @@ impl BarPolkit {
             .justify_between()
             .p(px(18.0))
             .overflow_hidden()
-            .opacity(anim.opacity)
+            .opacity(anim_opacity)
             .relative()
-            .top(px(anim.offset_y))
+            .top(px(anim_offset_y))
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
             .on_click(|_, _, cx| cx.stop_propagation());
@@ -453,8 +542,8 @@ impl BarPolkit {
                     .label(cancel_label)
                     .variant(ButtonVariant::Secondary)
                     .padding_x(16.0)
-                    .on_click(cx.listener(|bar, _, window, cx| {
-                        bar.cancel_polkit(window, cx);
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.cancel(cx);
                     })),
             )
             .child(
@@ -463,17 +552,18 @@ impl BarPolkit {
                     .variant(ButtonVariant::Primary)
                     .disabled(!enabled)
                     .padding_x(18.0)
-                    .on_click(cx.listener(|bar, _, window, cx| {
-                        bar.submit_polkit(window, cx);
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.submit(cx);
                     })),
             );
 
         bottom_section = bottom_section.child(buttons_row);
         modal_box = modal_box.child(top_section).child(bottom_section);
 
-        let blur_progress = (anim.backdrop_opacity / 0.40).clamp(0.0, 1.0);
         div()
             .id("polkit-backdrop")
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(Self::key_down))
             .absolute()
             .inset_0()
             .overflow_hidden()

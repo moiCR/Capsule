@@ -2,15 +2,15 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, BoxShadow, ColorExt, Context, FontWeight, IntoElement, KeyDownEvent,
-    ScrollHandle, Size, Task, WeakEntity, Window, div, point, px, svg,
+    AnyElement, BoxShadow, ColorExt, Context, EventEmitter, FocusHandle, FontWeight, IntoElement,
+    KeyDownEvent, Render, ScrollHandle, Size, Task, Window, div, point, px, svg,
 };
 use services::{AppState, Application, CapsuleAnimation, LauncherService};
 use ui::components::{Input, InputState};
 use ui::theme::Theme;
 
-use super::animator::LauncherAnimator;
-use crate::bar::{Bar, style};
+use super::{PopupEvent, animator::LauncherAnimator};
+use crate::bar::style;
 
 pub struct BarLauncher {
     pub search_input: InputState,
@@ -23,11 +23,14 @@ pub struct BarLauncher {
     pub service: LauncherService,
     pub animator: Option<LauncherAnimator>,
     pub is_open: bool,
+    pub focus: FocusHandle,
     pub _watch_task: Option<Task<()>>,
 }
 
+impl EventEmitter<PopupEvent> for BarLauncher {}
+
 impl BarLauncher {
-    pub fn new(cx: &mut Context<Bar>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let service = if cx.has_global::<AppState>() {
             cx.global::<AppState>().launcher.clone()
         } else {
@@ -37,9 +40,9 @@ impl BarLauncher {
         let mut watch_receiver = service.subscribe();
         let watch_task = cx.spawn(async move |this, cx| {
             while let Ok(()) = watch_receiver.recv().await {
-                let _ = this.update(cx, |bar, cx| {
-                    if !bar.launcher.query.is_empty() || bar.launcher.show_all {
-                        bar.launcher.apps = bar.launcher.service.search(&bar.launcher.query);
+                let _ = this.update(cx, |launcher, cx| {
+                    if !launcher.query.is_empty() || launcher.show_all {
+                        launcher.apps = launcher.service.search(&launcher.query);
                         cx.notify();
                     }
                 });
@@ -57,8 +60,13 @@ impl BarLauncher {
             service,
             animator: None,
             is_open: false,
+            focus: cx.focus_handle(),
             _watch_task: Some(watch_task),
         }
+    }
+
+    pub fn focus_handle(&self) -> FocusHandle {
+        self.focus.clone()
     }
 
     pub fn is_open(&self) -> bool {
@@ -74,7 +82,7 @@ impl BarLauncher {
                 .unwrap_or(false)
     }
 
-    pub fn open(&mut self, window: &Window, entity: WeakEntity<Bar>, cx: &App) {
+    pub fn open(&mut self, cx: &mut Context<Self>) {
         let (duration, animation, bounciness, squash_stretch, reduced_motion) =
             if cx.has_global::<AppState>() {
                 let cfg = cx.global::<AppState>().config.get();
@@ -118,23 +126,25 @@ impl BarLauncher {
         anim.transition_to(target_size, Instant::now());
         anim.advance(Instant::now());
         self.animator = Some(anim);
-        Bar::queue_animation_frame(window, entity);
+        cx.emit(PopupEvent::Open);
+        cx.notify();
     }
 
-    pub fn close(&mut self, window: &Window, entity: WeakEntity<Bar>) {
+    pub fn close(&mut self, cx: &mut Context<Self>) {
         if let Some(ref mut anim) = self.animator
             && !anim.is_closing()
         {
             anim.request_close();
-            Bar::queue_animation_frame(window, entity);
+            cx.emit(PopupEvent::Close);
+            cx.notify();
         }
     }
 
-    pub fn toggle(&mut self, window: &Window, entity: WeakEntity<Bar>, cx: &App) {
+    pub fn toggle(&mut self, cx: &mut Context<Self>) {
         if self.is_open {
-            self.close(window, entity);
+            self.close(cx);
         } else {
-            self.open(window, entity, cx);
+            self.open(cx);
         }
     }
 
@@ -155,13 +165,7 @@ impl BarLauncher {
         self.apps.len() + usize::from(self.calculator.is_some())
     }
 
-    pub fn update_search(
-        &mut self,
-        query: String,
-        window: &Window,
-        entity: WeakEntity<Bar>,
-        _cx: &App,
-    ) {
+    pub fn update_search(&mut self, query: String, cx: &mut Context<Self>) {
         if self.search_input.text() != query {
             self.search_input.set_text(&query);
         }
@@ -198,23 +202,18 @@ impl BarLauncher {
         };
         if let Some(ref mut anim) = self.animator {
             anim.transition_to(target_size, Instant::now());
-            Bar::queue_animation_frame(window, entity);
+            cx.emit(PopupEvent::RequestAnimationFrame);
         }
+        cx.notify();
     }
 
-    pub fn reset_search(&mut self, window: &Window, entity: WeakEntity<Bar>, cx: &App) {
+    pub fn reset_search(&mut self, cx: &mut Context<Self>) {
         self.search_input.clear();
         self.show_all = false;
-        self.update_search(String::new(), window, entity, cx);
+        self.update_search(String::new(), cx);
     }
 
-    pub fn navigate(
-        &mut self,
-        delta: i32,
-        window: &Window,
-        entity: WeakEntity<Bar>,
-        cx: &mut Context<Bar>,
-    ) {
+    pub fn navigate(&mut self, delta: i32, cx: &mut Context<Self>) {
         if self.query.is_empty() && !self.show_all {
             self.show_all = true;
             self.apps = self.service.search("");
@@ -230,7 +229,7 @@ impl BarLauncher {
             };
             if let Some(ref mut anim) = self.animator {
                 anim.transition_to(target_size, Instant::now());
-                Bar::queue_animation_frame(window, entity);
+                cx.emit(PopupEvent::RequestAnimationFrame);
             }
             cx.notify();
             return;
@@ -246,17 +245,12 @@ impl BarLauncher {
         cx.notify();
     }
 
-    pub fn activate_selected(
-        &mut self,
-        window: &Window,
-        entity: WeakEntity<Bar>,
-        cx: &mut Context<Bar>,
-    ) {
+    pub fn activate_selected(&mut self, cx: &mut Context<Self>) {
         if self.selected == 0 && self.calculator.is_some() {
             if let Some(res) = &self.calculator {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(res.clone()));
             }
-            self.close(window, entity);
+            self.close(cx);
             return;
         }
 
@@ -266,229 +260,47 @@ impl BarLauncher {
 
         if let Some(app) = self.apps.get(index).cloned() {
             let _ = app.launch();
-            self.close(window, entity);
+            self.close(cx);
         }
     }
 
-    pub fn handle_key_down(
-        &mut self,
-        event: &KeyDownEvent,
-        window: &mut Window,
-        entity: WeakEntity<Bar>,
-        cx: &mut Context<Bar>,
-    ) {
+    pub fn activate_item(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.selected = index;
+        self.activate_selected(cx);
+    }
+
+    fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
 
-        if key == "escape" {
-            self.close(window, entity);
+        if key == "escape" || (key == "f4" && event.keystroke.modifiers.alt) {
+            self.close(cx);
+            cx.stop_propagation();
             return;
         }
 
         if key == "enter" || key == "return" {
-            self.activate_selected(window, entity, cx);
-            return;
-        }
-
-        if key == "f4" && event.keystroke.modifiers.alt {
-            self.close(window, entity);
+            self.activate_selected(cx);
+            cx.stop_propagation();
             return;
         }
 
         if key == "down" {
-            self.navigate(1, window, entity, cx);
+            self.navigate(1, cx);
+            cx.stop_propagation();
             return;
         }
 
         if key == "up" {
-            self.navigate(-1, window, entity, cx);
+            self.navigate(-1, cx);
+            cx.stop_propagation();
             return;
         }
 
         if self.search_input.handle_key_down(event, cx) {
             let text = self.search_input.text();
-            self.update_search(text, window, entity, cx);
-            cx.notify();
+            self.update_search(text, cx);
+            cx.stop_propagation();
         }
-    }
-
-    pub fn render(&self, _window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
-        let Some(ref anim) = self.animator else {
-            return div().into_any_element();
-        };
-
-        let theme = cx.global::<Theme>().clone();
-        let placeholder = if cx.has_global::<AppState>() {
-            cx.global::<AppState>()
-                .language
-                .get("launcher.spotlight_placeholder")
-        } else {
-            "Buscar aplicaciones o calcular...".to_string()
-        };
-
-        let size = anim.size();
-        let corner_radius = anim.corner_radius();
-        let cascade_opacity = anim.cascade_opacity();
-
-        let mut spotlight_box = div()
-            .id("spotlight-container")
-            .w(size.width)
-            .h(size.height)
-            .rounded(corner_radius)
-            .bg(style::background(&theme).opacity(0.92))
-            .border_1()
-            .border_color(style::border(&theme).opacity(0.18))
-            .shadow(vec![BoxShadow {
-                color: gpui::black().opacity(0.40).into(),
-                offset: point(px(0.0), px(16.0)),
-                blur_radius: px(36.0),
-                spread_radius: px(0.0),
-                inset: false,
-            }])
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .opacity(anim.opacity)
-            .relative()
-            .top(px(anim.offset_y))
-            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
-            .on_click(|_, _, cx| cx.stop_propagation());
-
-        let input_component = div()
-            .id("spotlight-search-header")
-            .w_full()
-            .h(px(54.0))
-            .flex_shrink_0()
-            .px(px(16.0))
-            .flex()
-            .items_center()
-            .child(
-                Input::from_state("spotlight-input", &self.search_input)
-                    .placeholder(placeholder)
-                    .prefix(
-                        svg()
-                            .path("search.svg")
-                            .size(px(18.0))
-                            .text_color(theme.foreground_muted())
-                            .into_any_element(),
-                    )
-                    .padding_x(px(0.0))
-                    .gap(px(10.0))
-                    .flex_1(true)
-                    .h_px(44.0)
-                    .text_size(px(15.5))
-                    .bg(gpui::transparent_black())
-                    .border_color(gpui::transparent_black())
-                    .focused_border_color(gpui::transparent_black()),
-            );
-
-        spotlight_box = spotlight_box.child(input_component);
-
-        if anim.expand_progress() > 0.05 {
-            let divider = div()
-                .id("spotlight-divider")
-                .w_full()
-                .h(px(1.0))
-                .flex_shrink_0()
-                .bg(style::border(&theme).opacity(0.16));
-
-            spotlight_box = spotlight_box.child(divider);
-
-            let mut cascade_list = div()
-                .id("spotlight-cascade-list")
-                .flex_1()
-                .min_h_0()
-                .w_full()
-                .p(px(8.0))
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .overflow_y_scroll()
-                .track_scroll(&self.scroll)
-                .opacity(cascade_opacity);
-
-            if let Some(calc_res) = &self.calculator {
-                let is_selected = self.selected == 0;
-                let calc_row = self.render_calc_row(calc_res, is_selected, &theme, cx);
-                cascade_list = cascade_list.child(calc_row);
-            }
-
-            let calc_offset = usize::from(self.calculator.is_some());
-
-            if self.apps.is_empty() && self.calculator.is_none() {
-                let empty_text = if cx.has_global::<AppState>() {
-                    cx.global::<AppState>().language.get("launcher.no_apps")
-                } else {
-                    "No se encontraron aplicaciones".to_string()
-                };
-
-                cascade_list = cascade_list.child(
-                    div()
-                        .w_full()
-                        .flex_1()
-                        .h_full()
-                        .py(px(24.0))
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(10.0))
-                        .child(
-                            svg()
-                                .path("search.svg")
-                                .size(px(28.0))
-                                .text_color(theme.foreground_muted().opacity(0.35)),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(13.5))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(theme.foreground_muted())
-                                .child(empty_text),
-                        ),
-                );
-            } else {
-                for (index, app) in self.apps.iter().enumerate() {
-                    let global_index = index + calc_offset;
-                    let is_selected = self.selected == global_index;
-                    cascade_list = cascade_list.child(self.render_app_row(
-                        app,
-                        global_index,
-                        is_selected,
-                        &theme,
-                        cx,
-                    ));
-                }
-            }
-
-            spotlight_box = spotlight_box.child(cascade_list);
-        }
-
-        let blur_progress = (anim.backdrop_opacity / 0.40).clamp(0.0, 1.0);
-        div()
-            .id("spotlight-backdrop")
-            .absolute()
-            .inset_0()
-            .overflow_hidden()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .id("spotlight-backdrop-click")
-                    .absolute()
-                    .inset_0()
-                    .backdrop_blur(px(20.0 * blur_progress))
-                    .bg(gpui::black().opacity(0.20 * blur_progress))
-                    .on_mouse_down(
-                        gpui::MouseButton::Left,
-                        cx.listener(|bar, _, window, cx| {
-                            bar.close_launcher(window, cx);
-                        }),
-                    ),
-            )
-            .child(spotlight_box)
-            .into_any_element()
     }
 
     fn render_calc_row(
@@ -496,7 +308,7 @@ impl BarLauncher {
         result: &str,
         is_selected: bool,
         theme: &Theme,
-        cx: &mut Context<Bar>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
         let (row_bg, border_color) = if is_selected {
             (
@@ -534,8 +346,8 @@ impl BarLauncher {
             .items_center()
             .gap(px(10.0))
             .cursor_pointer()
-            .on_click(cx.listener(|bar, _, window, cx| {
-                bar.activate_launcher_item(0, window, cx);
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.activate_item(0, cx);
             }))
             .child(
                 div()
@@ -598,7 +410,7 @@ impl BarLauncher {
         index: usize,
         is_selected: bool,
         theme: &Theme,
-        cx: &mut Context<Bar>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
         let (row_bg, border_color) = if is_selected {
             (
@@ -662,8 +474,8 @@ impl BarLauncher {
             .items_center()
             .gap(px(10.0))
             .cursor_pointer()
-            .on_click(cx.listener(move |bar, _, window, cx| {
-                bar.activate_launcher_item(index, window, cx);
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.activate_item(index, cx);
             }))
             .child(
                 div()
@@ -704,6 +516,194 @@ impl BarLauncher {
                         )
                     }),
             )
+            .into_any_element()
+    }
+}
+
+impl Render for BarLauncher {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(ref anim) = self.animator else {
+            return div().into_any_element();
+        };
+
+        let theme = cx.global::<Theme>().clone();
+        let placeholder = if cx.has_global::<AppState>() {
+            cx.global::<AppState>()
+                .language
+                .get("launcher.spotlight_placeholder")
+        } else {
+            "Buscar aplicaciones o calcular...".to_string()
+        };
+
+        let size = anim.size();
+        let corner_radius = anim.corner_radius();
+        let cascade_opacity = anim.cascade_opacity();
+        let anim_opacity = anim.opacity;
+        let anim_offset_y = anim.offset_y;
+        let expand_progress = anim.expand_progress();
+        let blur_progress = (anim.backdrop_opacity / 0.40).clamp(0.0, 1.0);
+
+        let mut spotlight_box = div()
+            .id("spotlight-container")
+            .w(size.width)
+            .h(size.height)
+            .rounded(corner_radius)
+            .bg(style::background(&theme).opacity(0.92))
+            .border_1()
+            .border_color(style::border(&theme).opacity(0.18))
+            .shadow(vec![BoxShadow {
+                color: gpui::black().opacity(0.40).into(),
+                offset: point(px(0.0), px(16.0)),
+                blur_radius: px(36.0),
+                spread_radius: px(0.0),
+                inset: false,
+            }])
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .opacity(anim_opacity)
+            .relative()
+            .top(px(anim_offset_y))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
+            .on_click(|_, _, cx| cx.stop_propagation());
+
+        let input_component = div()
+            .id("spotlight-search-header")
+            .w_full()
+            .h(px(54.0))
+            .flex_shrink_0()
+            .px(px(16.0))
+            .flex()
+            .items_center()
+            .child(
+                Input::from_state("spotlight-input", &self.search_input)
+                    .placeholder(placeholder)
+                    .prefix(
+                        svg()
+                            .path("search.svg")
+                            .size(px(18.0))
+                            .text_color(theme.foreground_muted())
+                            .into_any_element(),
+                    )
+                    .padding_x(px(0.0))
+                    .gap(px(10.0))
+                    .flex_1(true)
+                    .h_px(44.0)
+                    .text_size(px(15.5))
+                    .bg(gpui::transparent_black())
+                    .border_color(gpui::transparent_black())
+                    .focused_border_color(gpui::transparent_black()),
+            );
+
+        spotlight_box = spotlight_box.child(input_component);
+
+        if expand_progress > 0.05 {
+            let divider = div()
+                .id("spotlight-divider")
+                .w_full()
+                .h(px(1.0))
+                .flex_shrink_0()
+                .bg(style::border(&theme).opacity(0.16));
+
+            spotlight_box = spotlight_box.child(divider);
+
+            let mut cascade_list = div()
+                .id("spotlight-cascade-list")
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .p(px(8.0))
+                .flex()
+                .flex_col()
+                .gap(px(2.0))
+                .overflow_y_scroll()
+                .track_scroll(&self.scroll)
+                .opacity(cascade_opacity);
+
+            if let Some(calc_res) = self.calculator.clone() {
+                let is_selected = self.selected == 0;
+                let calc_row = self.render_calc_row(&calc_res, is_selected, &theme, cx);
+                cascade_list = cascade_list.child(calc_row);
+            }
+
+            let calc_offset = usize::from(self.calculator.is_some());
+
+            if self.apps.is_empty() && self.calculator.is_none() {
+                let empty_text = if cx.has_global::<AppState>() {
+                    cx.global::<AppState>().language.get("launcher.no_apps")
+                } else {
+                    "No se encontraron aplicaciones".to_string()
+                };
+
+                cascade_list = cascade_list.child(
+                    div()
+                        .w_full()
+                        .flex_1()
+                        .h_full()
+                        .py(px(24.0))
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(10.0))
+                        .child(
+                            svg()
+                                .path("search.svg")
+                                .size(px(28.0))
+                                .text_color(theme.foreground_muted().opacity(0.35)),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(theme.foreground_muted())
+                                .child(empty_text),
+                        ),
+                );
+            } else {
+                let apps = self.apps.clone();
+                for (index, app) in apps.iter().enumerate() {
+                    let global_index = index + calc_offset;
+                    let is_selected = self.selected == global_index;
+                    cascade_list = cascade_list.child(self.render_app_row(
+                        app,
+                        global_index,
+                        is_selected,
+                        &theme,
+                        cx,
+                    ));
+                }
+            }
+
+            spotlight_box = spotlight_box.child(cascade_list);
+        }
+
+        div()
+            .id("spotlight-backdrop")
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(Self::key_down))
+            .absolute()
+            .inset_0()
+            .overflow_hidden()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .id("spotlight-backdrop-click")
+                    .absolute()
+                    .inset_0()
+                    .backdrop_blur(px(20.0 * blur_progress))
+                    .bg(gpui::black().opacity(0.20 * blur_progress))
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            this.close(cx);
+                        }),
+                    ),
+            )
+            .child(spotlight_box)
             .into_any_element()
     }
 }

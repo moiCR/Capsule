@@ -1,0 +1,27 @@
+Capsule - Dynamic Island & Dashboard for Wayland
+
+USAGE:
+    Capsule [COMMAND]
+
+COMMANDS:
+    (no args)           Start Capsule daemon process
+    launcher            Toggle application launcher (alias: launcher)
+    dashboard           Toggle main dashboard panel (alias: dashboard)
+    themes              Toggle theme selector (aliases: themes, select-theme)
+    themes              Show theme selector
+    notification        Toggle notification panel (alias: notifications)
+    clipboard           Toggle clipboard history manager (alias: clip)
+    launcher            Show application launcher
+    dashboard           Show main dashboard panel
+    notification        Show notification panel
+    clipboard           Show clipboard history manager
+    lock                Lock screen (alias: lockscreen)
+    terminal            Launch default terminal (alias: term)
+    browser             Launch default browser (alias: web)
+    editor              Launch default editor (alias: edit)
+    settings            Open settings application (alias: config, preferences)
+    toggle-record       Toggle screen recording module (alias: record)
+    hide                Hide panels and return to compact pill (alias: close)
+    quit                Stop running Capsule daemon (alias: exit)
+    ping                Check if Capsule daemon is running
+    help, --help, -h    Print this help message

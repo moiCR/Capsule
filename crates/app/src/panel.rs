@@ -316,73 +316,6 @@ impl CapsulePanel {
                 }
             }
             services::IpcCommand::Ping => {}
-            services::IpcCommand::ToggleLauncher => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule
-                                    .handle_ipc_command(services::IpcCommand::ToggleLauncher, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.toggle_launcher(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ShowLauncher => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(services::IpcCommand::ShowLauncher, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.open_launcher(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
             services::IpcCommand::Hide => {
                 if crate::panel::SettingsPanel::is_open() {
                     crate::panel::SettingsPanel::close(cx);
@@ -390,8 +323,7 @@ impl CapsulePanel {
                 for window in cx.windows() {
                     if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
                         let _ = bar_window.update(cx, |bar, window, cx| {
-                            bar.close_shared_panel(window, cx);
-                            bar.close_launcher(window, cx);
+                            bar.handle_ipc_command(services::IpcCommand::Hide, window, cx);
                         });
                     }
                 }
@@ -409,7 +341,20 @@ impl CapsulePanel {
                     });
                 }
             }
-            services::IpcCommand::ToggleClipboard => {
+            command @ (services::IpcCommand::ToggleLauncher
+            | services::IpcCommand::ShowLauncher
+            | services::IpcCommand::ToggleClipboard
+            | services::IpcCommand::ShowClipboard
+            | services::IpcCommand::ToggleEmoji
+            | services::IpcCommand::ShowEmoji
+            | services::IpcCommand::ToggleNotification
+            | services::IpcCommand::ShowNotification
+            | services::IpcCommand::ToggleDashboard
+            | services::IpcCommand::ShowDashboard
+            | services::IpcCommand::ToggleRecord
+            | services::IpcCommand::ShowRecord
+            | services::IpcCommand::ToggleShelf
+            | services::IpcCommand::ShowShelf) => {
                 let mode = if cx.has_global::<services::AppState>() {
                     cx.global::<services::AppState>().config.get().ui.shell_mode
                 } else {
@@ -426,8 +371,7 @@ impl CapsulePanel {
                             .flatten()
                         {
                             let _ = capsule.update(cx, |capsule, cx| {
-                                capsule
-                                    .handle_ipc_command(services::IpcCommand::ToggleClipboard, cx);
+                                capsule.handle_ipc_command(command, cx);
                                 capsule.sync_window(cx);
                             });
                         }
@@ -435,244 +379,9 @@ impl CapsulePanel {
                     services::ShellMode::Bar => {
                         for window in cx.windows() {
                             if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.toggle_clipboard(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ShowClipboard => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(services::IpcCommand::ShowClipboard, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.show_clipboard(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ToggleEmoji => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(services::IpcCommand::ToggleEmoji, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.toggle_emoji(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ShowEmoji => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(services::IpcCommand::ShowEmoji, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.show_emoji(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ToggleNotification => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(
-                                    services::IpcCommand::ToggleNotification,
-                                    cx,
-                                );
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.toggle_notifications(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ShowNotification => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule
-                                    .handle_ipc_command(services::IpcCommand::ShowNotification, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.show_notifications(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ToggleDashboard => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule
-                                    .handle_ipc_command(services::IpcCommand::ToggleDashboard, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.toggle_dashboard(window, cx);
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            services::IpcCommand::ShowDashboard => {
-                let mode = if cx.has_global::<services::AppState>() {
-                    cx.global::<services::AppState>().config.get().ui.shell_mode
-                } else {
-                    services::ShellMode::Island
-                };
-                match mode {
-                    services::ShellMode::Island => {
-                        if crate::panel::SettingsPanel::is_open() {
-                            crate::panel::SettingsPanel::close(cx);
-                        }
-                        if let Some(capsule) = cx
-                            .has_global::<ShellState>()
-                            .then(|| cx.global::<ShellState>().capsule.clone())
-                            .flatten()
-                        {
-                            let _ = capsule.update(cx, |capsule, cx| {
-                                capsule.handle_ipc_command(services::IpcCommand::ShowDashboard, cx);
-                                capsule.sync_window(cx);
-                            });
-                        }
-                    }
-                    services::ShellMode::Bar => {
-                        for window in cx.windows() {
-                            if let Some(bar_window) = window.downcast::<crate::bar::Bar>() {
-                                let _ = bar_window.update(cx, |bar, window, cx| {
-                                    bar.show_dashboard(window, cx);
+                                let cmd = command.clone();
+                                let _ = bar_window.update(cx, move |bar, window, cx| {
+                                    bar.handle_ipc_command(cmd, window, cx);
                                 });
                             }
                         }

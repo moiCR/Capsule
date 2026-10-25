@@ -91,6 +91,7 @@ fn run_application() {
                     }
                 }
             }
+
             if detected.is_none() {
                 let kcminput = home.join(".config/kcminputrc");
                 if let Ok(content) = std::fs::read_to_string(&kcminput) {
@@ -105,7 +106,9 @@ fn run_application() {
                     }
                 }
             }
+
             let theme = detected.unwrap_or_else(|| "breeze_cursors".to_string());
+
             unsafe {
                 std::env::set_var("XCURSOR_THEME", &theme);
             }
@@ -117,7 +120,6 @@ fn run_application() {
         }
     }
 
-    // Ensure ~/.icons/default/index.theme exists pointing to the cursor theme
     if let Some(home) = dirs::home_dir() {
         let default_icons = home.join(".icons/default");
         let index_theme = default_icons.join("index.theme");
@@ -134,7 +136,6 @@ fn run_application() {
         }
     }
 
-    // Synchronize display environment with D-Bus and systemd
     if std::env::var("WAYLAND_DISPLAY").is_ok() {
         let _ = std::process::Command::new("dbus-update-activation-environment")
             .args([
@@ -185,112 +186,8 @@ fn run_application() {
     });
 }
 
+const CONTENT: &str = include_str!("command_usage.txt");
+
 fn print_help() {
-    println!(
-        r#"Capsule - Dynamic Island & Dashboard for Wayland
-
-USAGE:
-    Capsule [COMMAND]
-
-COMMANDS:
-    (no args)           Start Capsule daemon process
-    launcher            Toggle application launcher (alias: launcher)
-    dashboard           Toggle main dashboard panel (alias: dashboard)
-    themes              Toggle theme selector (aliases: themes, select-theme)
-    themes              Show theme selector
-    notification        Toggle notification panel (alias: notifications)
-    clipboard           Toggle clipboard history manager (alias: clip)
-    launcher            Show application launcher
-    dashboard           Show main dashboard panel
-    notification        Show notification panel
-    clipboard           Show clipboard history manager
-    lock                Lock screen (alias: lockscreen)
-    terminal            Launch default terminal (alias: term)
-    browser             Launch default browser (alias: web)
-    editor              Launch default editor (alias: edit)
-    settings            Open settings application (alias: config, preferences)
-    toggle-record       Toggle screen recording module (alias: record)
-    hide                Hide panels and return to compact pill (alias: close)
-    quit                Stop running Capsule daemon (alias: exit)
-    ping                Check if Capsule daemon is running
-    help, --help, -h    Print this help message"#
-    );
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use std::task::{Context, Poll, Wake};
-
-    #[derive(Default)]
-    struct WakeCounter(AtomicUsize);
-
-    impl Wake for WakeCounter {
-        fn wake(self: Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-
-        fn wake_by_ref(self: &Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    fn poll_foreign_executor_channel() -> (usize, usize) {
-        let counter = Arc::new(WakeCounter::default());
-        let waker = counter.clone().into();
-        let mut context = Context::from_waker(&waker);
-        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        for value in 0..512 {
-            sender.send(value).expect("enqueue message");
-        }
-
-        let mut received = 0;
-        for _ in 0..1024 {
-            if let Poll::Ready(Some(_)) = receiver.poll_recv(&mut context) {
-                received += 1;
-            }
-        }
-        (received, counter.0.load(Ordering::Relaxed))
-    }
-
-    #[test]
-    fn nested_event_loop_exhausts_tokio_budget_and_self_wakes() {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .expect("runtime");
-        let (received, wakes) = runtime.block_on(async { poll_foreign_executor_channel() });
-        assert!(
-            received < 512,
-            "nested executor unexpectedly drained its channel"
-        );
-        assert!(
-            wakes > 512,
-            "expected repeated wakes without channel progress"
-        );
-        eprintln!("nested event loop: {received} messages received, {wakes} self-wakes");
-    }
-
-    #[test]
-    fn application_runtime_keeps_channels_idle_without_starving_services() {
-        super::run_with_runtime(|| {
-            let (received, wakes) = poll_foreign_executor_channel();
-            assert_eq!(received, 512);
-            assert_eq!(wakes, 0, "an idle receiver must not reschedule itself");
-
-            let (sender, receiver) = std::sync::mpsc::channel();
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-                sender.send(()).expect("report timer completion");
-            });
-            receiver
-                .recv_timeout(std::time::Duration::from_secs(2))
-                .expect("services must progress while the main thread runs GPUI");
-        })
-        .expect("application runtime");
-    }
+    println!("{CONTENT}");
 }

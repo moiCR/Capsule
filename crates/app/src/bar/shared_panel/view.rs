@@ -1,7 +1,11 @@
 use gpui::prelude::*;
-use gpui::{Hsla, IntoElement, PathBuilder, Pixels, Size, point, px};
+use gpui::{
+    AnyElement, AnyView, ColorExt, Hsla, IntoElement, PathBuilder, Pixels, Size, div, point, px,
+};
+use ui::theme::Theme;
 
-use super::DockEdge;
+use super::{DockEdge, animator::SharedPanelAnimator};
+use crate::bar::style;
 
 pub fn concave_panel_canvas(
     size: Size<Pixels>,
@@ -195,4 +199,257 @@ pub fn convex_bar_ear_canvas(
         },
     )
     .size(px(r))
+}
+
+pub fn render_bottom_border(
+    anim: Option<&SharedPanelAnimator>,
+    border_start: Pixels,
+    border_end: Pixels,
+    border_color: Hsla,
+) -> AnyElement {
+    let mut border_bar = div()
+        .id("bar-bottom-border")
+        .absolute()
+        .bottom_0()
+        .left_0()
+        .right_0()
+        .h(px(1.0));
+
+    if let Some(anim) = anim {
+        let width = f32::from(anim.current_size.width).max(0.0);
+        let height = f32::from(anim.current_size.height).max(0.0);
+        let shoulder_val = 14.0_f32.min(height / 4.0).min(width / 4.0);
+        let (sl, sr) = match anim.dock_edge {
+            DockEdge::Center => (shoulder_val, shoulder_val),
+            DockEdge::Left => (0.0, shoulder_val),
+            DockEdge::Right => (shoulder_val, 0.0),
+        };
+        let neck_left = anim.current_x - px(sl);
+        let neck_right = anim.current_x + anim.current_size.width + px(sr);
+
+        let left_end = neck_left.min(border_end);
+        if left_end > border_start {
+            border_bar = border_bar.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(border_start)
+                    .w(left_end - border_start)
+                    .bg(border_color),
+            );
+        }
+        if anim.opacity < 1.0 {
+            let mid_start = neck_left.max(border_start);
+            let mid_end = neck_right.min(border_end);
+            if mid_end > mid_start {
+                border_bar = border_bar.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(mid_start)
+                        .w(mid_end - mid_start)
+                        .bg(border_color)
+                        .opacity(1.0 - anim.opacity),
+                );
+            }
+        }
+        let right_start = neck_right.max(border_start);
+        if border_end > right_start {
+            border_bar = border_bar.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(right_start)
+                    .w(border_end - right_start)
+                    .bg(border_color),
+            );
+        }
+    } else if border_end > border_start {
+        border_bar = border_bar.child(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left(border_start)
+                .w(border_end - border_start)
+                .bg(border_color),
+        );
+    }
+
+    border_bar.into_any_element()
+}
+
+pub fn render_convex_ears(
+    anim: Option<&SharedPanelAnimator>,
+    viewport_width: Pixels,
+    bar_height: Pixels,
+    is_bottom: bool,
+    theme: &Theme,
+) -> (AnyElement, AnyElement) {
+    let ear_radius = px(CONVEX_EAR_RADIUS);
+    let bg_color = style::background(theme);
+    let (left_stroke_opacity, right_stroke_opacity) = if let Some(anim) = anim {
+        let width = f32::from(anim.current_size.width).max(0.0);
+        let height = f32::from(anim.current_size.height).max(0.0);
+        let shoulder_val = 14.0_f32.min(height / 4.0).min(width / 4.0);
+        let (sl, sr) = match anim.dock_edge {
+            DockEdge::Center => (shoulder_val, shoulder_val),
+            DockEdge::Left => (0.0, shoulder_val),
+            DockEdge::Right => (shoulder_val, 0.0),
+        };
+        let neck_left = anim.current_x - px(sl);
+        let neck_right = anim.current_x + anim.current_size.width + px(sr);
+        let l_op = if neck_left < ear_radius {
+            (1.0 - anim.opacity).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let r_op = if neck_right > viewport_width - ear_radius {
+            (1.0 - anim.opacity).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        (l_op, r_op)
+    } else {
+        (1.0, 1.0)
+    };
+
+    let left_ear_border = style::border(theme).opacity(0.35 * left_stroke_opacity);
+    let right_ear_border = style::border(theme).opacity(0.35 * right_stroke_opacity);
+    let r = CONVEX_EAR_RADIUS;
+
+    let mut left_ear = div()
+        .id("bar-convex-ear-left")
+        .absolute()
+        .left_0()
+        .size(px(r))
+        .child(convex_bar_ear_canvas(
+            r,
+            false,
+            is_bottom,
+            bg_color,
+            left_ear_border,
+        ));
+    let mut right_ear = div()
+        .id("bar-convex-ear-right")
+        .absolute()
+        .right_0()
+        .size(px(r))
+        .child(convex_bar_ear_canvas(
+            r,
+            true,
+            is_bottom,
+            bg_color,
+            right_ear_border,
+        ));
+
+    if is_bottom {
+        left_ear = left_ear.bottom(bar_height - px(1.0));
+        right_ear = right_ear.bottom(bar_height - px(1.0));
+    } else {
+        left_ear = left_ear.top(bar_height - px(1.0));
+        right_ear = right_ear.top(bar_height - px(1.0));
+    }
+
+    (left_ear.into_any_element(), right_ear.into_any_element())
+}
+
+pub fn render_panel_container(
+    anim: &SharedPanelAnimator,
+    bar_height: Pixels,
+    content: AnyView,
+    theme: &Theme,
+    on_backdrop_down: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> (AnyElement, AnyElement) {
+    let bg_color = style::background(theme);
+    let border_color = style::border(theme).opacity(0.35);
+    let current_x = anim.current_x;
+    let current_size = anim.current_size;
+    let target_size = anim.target_size;
+    let opacity = anim.opacity;
+    let dock_edge = anim.dock_edge;
+
+    let content_prog = anim.content_progress;
+    let content_opacity = if anim.is_closing() {
+        content_prog
+    } else {
+        (content_prog * 1.35).clamp(0.0, 1.0)
+    };
+    let blur_val = if content_prog < 1.0 {
+        (1.0 - content_prog) * 6.0
+    } else {
+        0.0
+    };
+    let slide_y = if anim.is_closing() {
+        (1.0 - content_prog) * -6.0
+    } else {
+        (1.0 - content_prog).powi(2) * -10.0
+    };
+    let content_offset_x = match dock_edge {
+        DockEdge::Center => (current_size.width - target_size.width) / 2.0,
+        DockEdge::Left => px(0.0),
+        DockEdge::Right => current_size.width - target_size.width,
+    };
+
+    let backdrop = div()
+        .id("shared-panel-backdrop")
+        .absolute()
+        .top(bar_height)
+        .left_0()
+        .right_0()
+        .bottom_0()
+        .on_mouse_down(gpui::MouseButton::Left, on_backdrop_down);
+
+    let panel = div()
+        .id("shared-panel-container")
+        .key_context("shared-panel")
+        .absolute()
+        .top(bar_height - px(1.0))
+        .left(current_x)
+        .w(current_size.width)
+        .h(current_size.height + px(1.0))
+        .opacity(opacity)
+        .overflow_hidden()
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+        })
+        .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| {
+            cx.stop_propagation();
+        })
+        .on_click(|_, _, cx| {
+            cx.stop_propagation();
+        })
+        .child(concave_panel_canvas(
+            Size {
+                width: current_size.width,
+                height: current_size.height + px(1.0),
+            },
+            dock_edge,
+            20.0,
+            bg_color,
+            border_color,
+        ))
+        .child(
+            div()
+                .relative()
+                .left(content_offset_x)
+                .w(target_size.width)
+                .h(target_size.height + px(1.0))
+                .pt(px(13.0))
+                .overflow_hidden()
+                .child(
+                    div()
+                        .size_full()
+                        .relative()
+                        .top(px(slide_y))
+                        .opacity(content_opacity)
+                        .when(blur_val > 0.05, |d| d.blur(px(blur_val)))
+                        .child(content),
+                ),
+        );
+
+    (backdrop.into_any_element(), panel.into_any_element())
 }

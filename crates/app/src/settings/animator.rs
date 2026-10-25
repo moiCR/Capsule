@@ -55,7 +55,6 @@ impl SettingsAnimator {
         self.section_progress
     }
 
-    /// Advances the animations. Returns `(running, is_closed)`.
     pub fn advance(&mut self, now: Instant) -> (bool, bool) {
         let mut running = false;
         let mut closed = false;

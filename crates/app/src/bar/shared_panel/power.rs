@@ -1,334 +1,341 @@
+use std::time::{Duration, Instant};
+
 use gpui::prelude::*;
-use gpui::{AnyElement, ColorExt, Context, IntoElement, Window, div, px, svg};
+use gpui::{
+    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render,
+    Size, Task, Window, div, px, svg,
+};
 use services::AppState;
 use ui::theme::Theme;
 
-use super::{PowerAction, PowerHold};
-use crate::bar::{Bar, style};
+use super::{PowerAction, PowerHold, SharedPanelEvent, SharedPanelItem};
+use crate::bar::style;
 
-pub fn render(
-    power_hold: Option<&PowerHold>,
-    _window: &mut Window,
-    cx: &mut Context<Bar>,
-) -> AnyElement {
-    let theme = cx.global::<Theme>().clone();
-    let current_hold = power_hold.cloned();
+pub struct PowerModule {
+    pub power_hold: Option<PowerHold>,
+    hold_task: Option<Task<()>>,
+    focus: FocusHandle,
+}
 
-    let (battery_pct, is_charging, battery_icon) = if let Some(state) = cx.try_global::<AppState>()
-    {
-        match state.power.get_battery() {
-            Some(b) => {
-                let icon = if b.is_charging {
-                    "battery-charging.svg"
-                } else if b.percentage <= 15 {
-                    "battery-low.svg"
-                } else if b.percentage <= 40 {
-                    "battery-medium.svg"
-                } else {
-                    "battery-full.svg"
-                };
-                (Some(b.percentage), b.is_charging, icon)
+impl PowerModule {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        Self {
+            power_hold: None,
+            hold_task: None,
+            focus: cx.focus_handle(),
+        }
+    }
+
+    pub fn start_hold(&mut self, action: PowerAction, cx: &mut Context<Self>) {
+        let start = Instant::now();
+        let duration = Duration::from_millis(750);
+        self.power_hold = Some(PowerHold {
+            action,
+            start,
+            duration,
+            progress: 0.0,
+        });
+        self.hold_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                let mut done = false;
+                let updated = this.update(cx, |module, cx| {
+                    if let Some(ref mut hold) = module.power_hold {
+                        let elapsed = Instant::now().duration_since(hold.start);
+                        let t =
+                            (elapsed.as_secs_f32() / hold.duration.as_secs_f32()).clamp(0.0, 1.0);
+                        hold.progress = t;
+                        if t >= 1.0 {
+                            let act = hold.action;
+                            module.power_hold = None;
+                            Self::execute_action(act);
+                            cx.emit(SharedPanelEvent::Close);
+                            done = true;
+                        }
+                        cx.notify();
+                    } else {
+                        done = true;
+                    }
+                });
+                if updated.is_err() || done {
+                    break;
+                }
             }
-            None => (None, false, "battery-full.svg"),
-        }
-    } else {
-        (None, false, "battery-full.svg")
-    };
+        }));
+    }
 
-    let battery_header = if let Some(pct) = battery_pct {
-        let charge_status = if is_charging { "Cargando" } else { "Batería" };
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .h(px(36.0))
-            .px(px(12.0))
-            .rounded(px(10.0))
-            .bg(style::surface(&theme).opacity(0.55))
-            .border_1()
-            .border_color(style::border(&theme).opacity(0.16))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0))
-                    .child(svg().path(battery_icon).size(px(16.0)).text_color(
-                        if pct <= 15 && !is_charging {
-                            theme.red()
-                        } else {
-                            theme.foreground()
-                        },
-                    ))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(theme.foreground_muted())
-                            .child(charge_status),
-                    ),
-            )
-            .child(
-                div()
-                    .text_size(px(13.5))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.foreground())
-                    .child(format!("{pct}%")),
-            )
-            .into_any_element()
-    } else {
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .h(px(36.0))
-            .px(px(12.0))
-            .rounded(px(10.0))
-            .bg(style::surface(&theme).opacity(0.55))
-            .border_1()
-            .border_color(style::border(&theme).opacity(0.16))
-            .child(
-                div()
-                    .text_size(px(13.0))
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .text_color(theme.foreground_muted())
-                    .child("Alimentación AC"),
-            )
-            .into_any_element()
-    };
+    pub fn cancel_hold(&mut self) {
+        self.power_hold = None;
+        self.hold_task = None;
+    }
 
-    let (lang_lock, lang_suspend, lang_logout, lang_reboot, lang_poweroff, idle_hint) =
-        if let Some(state) = cx.try_global::<AppState>() {
-            let l = &state.language;
-            let hint = if l.current_target() == "es" {
-                "Mantén presionado para ejecutar"
-            } else {
-                "Hold to execute"
+    pub fn execute_action(action: PowerAction) {
+        services::spawn_tokio(async move {
+            let _ = match action {
+                PowerAction::Lock => services::system::power::lock().await,
+                PowerAction::Suspend => services::system::power::suspend().await,
+                PowerAction::Logout => services::system::power::logout().await,
+                PowerAction::Reboot => services::system::power::reboot().await,
+                PowerAction::Poweroff => services::system::power::poweroff().await,
             };
-            (
-                l.get("orbit.lock"),
-                l.get("orbit.suspend"),
-                l.get("orbit.logout"),
-                l.get("orbit.reboot"),
-                l.get("orbit.poweroff"),
-                hint.to_string(),
-            )
-        } else {
-            (
-                "Bloquear".to_string(),
-                "Suspender".to_string(),
-                "Cerrar sesión".to_string(),
-                "Reiniciar".to_string(),
-                "Apagar".to_string(),
-                "Mantén presionado para ejecutar".to_string(),
-            )
-        };
+        });
+    }
+}
 
-    let buttons = [
-        (PowerAction::Lock, "shared-power-lock", "lock.svg", false),
-        (
-            PowerAction::Suspend,
-            "shared-power-suspend",
-            "moon.svg",
-            false,
-        ),
-        (
-            PowerAction::Logout,
-            "shared-power-logout",
-            "log-out.svg",
-            false,
-        ),
-        (
-            PowerAction::Reboot,
-            "shared-power-reboot",
-            "rotate-ccw.svg",
-            false,
-        ),
-        (
-            PowerAction::Poweroff,
-            "shared-power-poweroff",
-            "power.svg",
-            true,
-        ),
-    ];
+impl EventEmitter<SharedPanelEvent> for PowerModule {}
 
-    let mut grid = div()
-        .id("power-buttons-grid")
-        .flex()
-        .items_center()
-        .gap(px(8.0))
-        .w_full();
-
-    let hover_bg = style::hover(&theme);
-
-    for (action, btn_id, icon, is_danger) in buttons {
-        let is_held = current_hold
-            .as_ref()
-            .map(|h| h.action == action)
-            .unwrap_or(false);
-        let progress = if is_held {
-            current_hold.as_ref().map(|h| h.progress).unwrap_or(0.0)
-        } else {
-            0.0
-        };
-
-        let bar_color = if is_danger {
-            theme.red()
-        } else {
-            theme.accent()
-        };
-        let sweep_color = if is_danger {
-            theme.red().opacity(0.22)
-        } else {
-            theme.accent().opacity(0.22)
-        };
-        let icon_color = if is_danger {
-            theme.red()
-        } else if is_held {
-            theme.accent()
-        } else {
-            theme.foreground()
-        };
-
-        let mut btn = div()
-            .id(btn_id)
-            .flex_1()
-            .h(px(58.0))
-            .relative()
-            .overflow_hidden()
-            .rounded(px(12.0))
-            .bg(if is_held {
-                style::surface(&theme).opacity(0.85)
-            } else {
-                style::surface(&theme).opacity(0.50)
-            })
-            .border_1()
-            .border_color(if is_held {
-                bar_color
-            } else {
-                style::border(&theme).opacity(0.18)
-            })
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover_bg));
-
-        if progress > 0.0 {
-            btn = btn.child(
-                div()
-                    .id(format!("{btn_id}-sweep"))
-                    .absolute()
-                    .top_0()
-                    .bottom_0()
-                    .left_0()
-                    .w(gpui::relative(progress))
-                    .bg(sweep_color),
-            );
+impl SharedPanelItem for PowerModule {
+    fn size(&self, _cx: &App) -> Size<Pixels> {
+        Size {
+            width: px(380.0),
+            height: px(172.0),
         }
+    }
 
-        btn = btn.child(
-            div()
-                .id(format!("{btn_id}-track"))
-                .absolute()
-                .bottom_0()
-                .left_0()
-                .right_0()
-                .h(px(4.0))
-                .bg(if is_held {
-                    theme.foreground_muted().opacity(0.15)
+    fn focus_handle(&self) -> Option<FocusHandle> {
+        Some(self.focus.clone())
+    }
+}
+
+impl Render for PowerModule {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<Theme>().clone();
+        let current_hold = self.power_hold.clone();
+
+        let (lang_lock, lang_suspend, lang_logout, lang_reboot, lang_poweroff, idle_hint) =
+            if let Some(state) = cx.try_global::<AppState>() {
+                let l = &state.language;
+                let hint = if l.current_target() == "es" {
+                    "Mantén presionado para ejecutar"
                 } else {
-                    gpui::transparent_black()
+                    "Hold to execute"
+                };
+                (
+                    l.get("orbit.lock"),
+                    l.get("orbit.suspend"),
+                    l.get("orbit.logout"),
+                    l.get("orbit.reboot"),
+                    l.get("orbit.poweroff"),
+                    hint.to_string(),
+                )
+            } else {
+                (
+                    "Bloquear".to_string(),
+                    "Suspender".to_string(),
+                    "Cerrar sesión".to_string(),
+                    "Reiniciar".to_string(),
+                    "Apagar".to_string(),
+                    "Mantén presionado para ejecutar".to_string(),
+                )
+            };
+
+        let buttons = [
+            (PowerAction::Lock, "shared-power-lock", "lock.svg", false),
+            (
+                PowerAction::Suspend,
+                "shared-power-suspend",
+                "moon.svg",
+                false,
+            ),
+            (
+                PowerAction::Logout,
+                "shared-power-logout",
+                "log-out.svg",
+                false,
+            ),
+            (
+                PowerAction::Reboot,
+                "shared-power-reboot",
+                "rotate-ccw.svg",
+                false,
+            ),
+            (
+                PowerAction::Poweroff,
+                "shared-power-poweroff",
+                "power.svg",
+                true,
+            ),
+        ];
+
+        let mut grid = div()
+            .id("power-buttons-grid")
+            .flex()
+            .items_center()
+            .gap(px(8.0))
+            .w_full();
+
+        let hover_bg = style::hover(&theme);
+
+        for (action, btn_id, icon, is_danger) in buttons {
+            let is_held = current_hold
+                .as_ref()
+                .map(|h| h.action == action)
+                .unwrap_or(false);
+            let progress = if is_held {
+                current_hold.as_ref().map(|h| h.progress).unwrap_or(0.0)
+            } else {
+                0.0
+            };
+
+            let bar_color = if is_danger {
+                theme.red()
+            } else {
+                theme.accent()
+            };
+            let sweep_color = if is_danger {
+                theme.red().opacity(0.22)
+            } else {
+                theme.accent().opacity(0.22)
+            };
+            let icon_color = if is_danger {
+                theme.red()
+            } else if is_held {
+                theme.accent()
+            } else {
+                theme.foreground()
+            };
+
+            let mut btn = div()
+                .id(btn_id)
+                .flex_1()
+                .h(px(58.0))
+                .relative()
+                .overflow_hidden()
+                .rounded(px(12.0))
+                .bg(if is_held {
+                    style::surface(&theme).opacity(0.85)
+                } else {
+                    style::surface(&theme).opacity(0.50)
                 })
-                .child(
+                .border_1()
+                .border_color(if is_held {
+                    bar_color
+                } else {
+                    style::border(&theme).opacity(0.18)
+                })
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover_bg));
+
+            if progress > 0.0 {
+                btn = btn.child(
                     div()
-                        .id(format!("{btn_id}-prog"))
+                        .id(format!("{btn_id}-sweep"))
                         .absolute()
                         .top_0()
                         .bottom_0()
                         .left_0()
                         .w(gpui::relative(progress))
-                        .bg(bar_color)
-                        .rounded_full(),
-                ),
-        );
+                        .bg(sweep_color),
+                );
+            }
 
-        btn = btn.child(
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(svg().path(icon).size(px(22.0)).text_color(icon_color)),
-        );
+            btn = btn.child(
+                div()
+                    .id(format!("{btn_id}-track"))
+                    .absolute()
+                    .bottom_0()
+                    .left_0()
+                    .right_0()
+                    .h(px(4.0))
+                    .bg(if is_held {
+                        theme.foreground_muted().opacity(0.15)
+                    } else {
+                        gpui::transparent_black()
+                    }),
+            );
 
-        btn = btn
-            .on_mouse_down(
+            btn = btn.child(
+                div()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg().path(icon).size(px(22.0)).text_color(icon_color)),
+            );
+
+            btn = btn
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(move |this, _, _, cx| {
+                        this.start_hold(action, cx);
+                        cx.notify();
+                    }),
+                )
+                .on_mouse_up(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.cancel_hold();
+                        cx.notify();
+                    }),
+                );
+
+            grid = grid.child(btn);
+        }
+
+        let (hint_text, hint_color) = if let Some(ref hold) = current_hold {
+            let text = match hold.action {
+                PowerAction::Lock => format!("{lang_lock}..."),
+                PowerAction::Suspend => format!("{lang_suspend}..."),
+                PowerAction::Logout => format!("{lang_logout}..."),
+                PowerAction::Reboot => format!("{lang_reboot}..."),
+                PowerAction::Poweroff => format!("{lang_poweroff}..."),
+            };
+            let color = if hold.action == PowerAction::Poweroff {
+                theme.red()
+            } else {
+                theme.accent()
+            };
+            (text, color)
+        } else {
+            (idle_hint, theme.foreground_muted().opacity(0.75))
+        };
+
+        let hint_row = div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .h(px(20.0))
+            .text_size(px(12.5))
+            .font_weight(if current_hold.is_some() {
+                gpui::FontWeight::SEMIBOLD
+            } else {
+                gpui::FontWeight::NORMAL
+            })
+            .text_color(hint_color)
+            .child(hint_text);
+
+        div()
+            .id("shared-panel-power")
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(|_, event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    cx.emit(SharedPanelEvent::Close);
+                }
+            }))
+            .size_full()
+            .flex()
+            .flex_col()
+            .justify_between()
+            .px(px(16.0))
+            .py(px(14.0))
+            .gap(px(10.0))
+            .font_family(theme.font_family())
+            .on_mouse_up(
                 gpui::MouseButton::Left,
-                cx.listener(move |bar, _, window, cx| {
-                    let entity = cx.entity().downgrade();
-                    bar.shared_panel.start_power_hold(action, window, entity);
+                cx.listener(|this, _, _, cx| {
+                    this.cancel_hold();
                     cx.notify();
                 }),
             )
-            .on_mouse_up(
-                gpui::MouseButton::Left,
-                cx.listener(|bar, _, _, cx| {
-                    bar.shared_panel.cancel_power_hold();
+            .on_mouse_exit(cx.listener(|this, _, _, cx| {
+                if this.power_hold.is_some() {
+                    this.cancel_hold();
                     cx.notify();
-                }),
-            );
-
-        grid = grid.child(btn);
+                }
+            }))
+            .child(grid)
+            .child(hint_row)
     }
-
-    let (hint_text, hint_color) = if let Some(ref hold) = current_hold {
-        let text = match hold.action {
-            PowerAction::Lock => format!("{lang_lock}..."),
-            PowerAction::Suspend => format!("{lang_suspend}..."),
-            PowerAction::Logout => format!("{lang_logout}..."),
-            PowerAction::Reboot => format!("{lang_reboot}..."),
-            PowerAction::Poweroff => format!("{lang_poweroff}..."),
-        };
-        let color = if hold.action == PowerAction::Poweroff {
-            theme.red()
-        } else {
-            theme.accent()
-        };
-        (text, color)
-    } else {
-        (idle_hint, theme.foreground_muted().opacity(0.75))
-    };
-
-    let hint_row = div()
-        .flex()
-        .items_center()
-        .justify_center()
-        .h(px(20.0))
-        .text_size(px(12.5))
-        .font_weight(if current_hold.is_some() {
-            gpui::FontWeight::SEMIBOLD
-        } else {
-            gpui::FontWeight::NORMAL
-        })
-        .text_color(hint_color)
-        .child(hint_text);
-
-    div()
-        .id("shared-panel-power")
-        .size_full()
-        .flex()
-        .flex_col()
-        .justify_between()
-        .px(px(16.0))
-        .py(px(14.0))
-        .gap(px(10.0))
-        .font_family(theme.font_family())
-        .on_mouse_up(
-            gpui::MouseButton::Left,
-            cx.listener(|bar, _, _, cx| {
-                bar.shared_panel.cancel_power_hold();
-                cx.notify();
-            }),
-        )
-        .child(battery_header)
-        .child(grid)
-        .child(hint_row)
-        .into_any_element()
 }

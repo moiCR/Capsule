@@ -12,13 +12,16 @@ pub mod view;
 
 use std::time::{Duration, Instant};
 
-use gpui::{AnyElement, App, Context, IntoElement, Pixels, Size, Window, div, px};
+use gpui::{
+    AnyView, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Pixels, Render, Size,
+    Subscription, Window, px,
+};
 use services::{AppState, CapsuleAnimation};
 
 use self::animator::SharedPanelAnimator;
 use crate::bar::Bar;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SharedPanelModule {
     Calendar,
     Dashboard,
@@ -31,87 +34,27 @@ pub enum SharedPanelModule {
     Record,
 }
 
-impl SharedPanelModule {
-    pub fn default_size(&self, cx: &App) -> Size<Pixels> {
-        match self {
-            Self::Calendar => Size {
-                width: px(720.0),
-                height: px(450.0),
-            },
-            Self::Dashboard => {
-                let has_battery = cx
-                    .try_global::<AppState>()
-                    .and_then(|s| s.power.get_battery())
-                    .is_some();
-                Size {
-                    width: px(440.0),
-                    height: if has_battery { px(414.0) } else { px(346.0) },
-                }
-            }
-            Self::Tray(idx) => {
-                let items_count = if let Some(state) = cx.try_global::<AppState>() {
-                    let items = state.sni_host.items_arc();
-                    items.get(*idx).map(|i| i.menu_items.len()).unwrap_or(0)
-                } else {
-                    0
-                };
-                let h = (52.0 + items_count as f32 * 38.0).clamp(150.0, 440.0);
-                Size {
-                    width: px(310.0),
-                    height: px(h),
-                }
-            }
-            Self::Media => Size {
-                width: px(430.0),
-                height: px(250.0),
-            },
-            Self::Power => Size {
-                width: px(380.0),
-                height: px(172.0),
-            },
-            Self::NotificationPopup(id) => {
-                let notif_opt = services::NotificationStore::global()
-                    .get_latest_active_notification()
-                    .filter(|n| n.id == *id)
-                    .or_else(|| {
-                        services::NotificationStore::global()
-                            .get_all_notifications()
-                            .into_iter()
-                            .find(|n| n.id == *id)
-                    });
+pub type SharedPanelModuleId = SharedPanelModule;
 
-                let (has_body, has_actions) = if let Some(ref item) = notif_opt {
-                    (!item.body.trim().is_empty(), !item.actions.is_empty())
-                } else {
-                    (false, false)
-                };
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharedPanelEvent {
+    Close,
+    Open {
+        id: SharedPanelModule,
+        anchor_x: Option<Pixels>,
+    },
+    SizeChanged(SharedPanelModule),
+    NotificationChanged,
+    SyncWindow,
+}
 
-                let mut h = 108.0;
-                if has_body {
-                    h += 46.0;
-                }
-                if has_actions {
-                    h += 38.0;
-                }
-
-                Size {
-                    width: px(440.0),
-                    height: px(h),
-                }
-            }
-            Self::Clipboard => Size {
-                width: px(580.0),
-                height: px(540.0),
-            },
-            Self::Emoji => Size {
-                width: px(540.0),
-                height: px(500.0),
-            },
-            Self::Record => Size {
-                width: px(280.0),
-                height: px(68.0),
-            },
-        }
+pub trait SharedPanelItem: Render + EventEmitter<SharedPanelEvent> {
+    fn size(&self, cx: &App) -> Size<Pixels>;
+    fn focus_handle(&self) -> Option<FocusHandle> {
+        None
+    }
+    fn needs_exclusive_keyboard(&self) -> bool {
+        false
     }
 }
 
@@ -163,30 +106,28 @@ pub fn compute_target_position(
     }
 }
 
-pub struct SharedPanel {
+pub struct SharedPanelManager {
     pub active_module: Option<SharedPanelModule>,
     pub old_module: Option<SharedPanelModule>,
     pub animator: Option<SharedPanelAnimator>,
     pub is_open: bool,
     pub screen_width: Pixels,
     pub screen_height: Pixels,
-    pub power_hold: Option<PowerHold>,
-    pub dashboard_state: dashboard::DashboardState,
-    pub clipboard_state: clipboard::ClipboardState,
-    pub emoji_state: emoji::EmojiState,
-    pub record_state: record::RecordPanelState,
-    pub focus_handle: Option<gpui::FocusHandle>,
-    pub animation_frame_pending: std::rc::Rc<std::cell::Cell<bool>>,
+    pub calendar: Entity<calendar::CalendarModule>,
+    pub dashboard: Entity<dashboard::DashboardModule>,
+    pub tray: Entity<tray_menu::TrayModule>,
+    pub media: Entity<media::MediaModule>,
+    pub power: Entity<power::PowerModule>,
+    pub notification_popup: Entity<notification_popup::NotificationPopupModule>,
+    pub clipboard: Entity<clipboard::ClipboardModule>,
+    pub emoji: Entity<emoji::EmojiModule>,
+    pub record: Entity<record::RecordModule>,
 }
 
-impl Default for SharedPanel {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub type SharedPanel = SharedPanelManager;
 
-impl SharedPanel {
-    pub fn new() -> Self {
+impl SharedPanelManager {
+    pub fn new(cx: &mut impl AppContext) -> Self {
         Self {
             active_module: None,
             old_module: None,
@@ -194,14 +135,48 @@ impl SharedPanel {
             is_open: false,
             screen_width: px(1920.0),
             screen_height: px(1080.0),
-            power_hold: None,
-            dashboard_state: dashboard::DashboardState::default(),
-            clipboard_state: clipboard::ClipboardState::default(),
-            emoji_state: emoji::EmojiState::default(),
-            record_state: record::RecordPanelState::default(),
-            focus_handle: None,
-            animation_frame_pending: std::rc::Rc::new(std::cell::Cell::new(false)),
+            calendar: cx.new(calendar::CalendarModule::new),
+            dashboard: cx.new(dashboard::DashboardModule::new),
+            tray: cx.new(tray_menu::TrayModule::new),
+            media: cx.new(media::MediaModule::new),
+            power: cx.new(power::PowerModule::new),
+            notification_popup: cx.new(notification_popup::NotificationPopupModule::new),
+            clipboard: cx.new(clipboard::ClipboardModule::new),
+            emoji: cx.new(emoji::EmojiModule::new),
+            record: cx.new(record::RecordModule::new),
         }
+    }
+
+    pub fn subscribe(&self, cx: &mut Context<Bar>) -> Vec<Subscription> {
+        vec![
+            cx.subscribe(&self.calendar, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.dashboard, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.tray, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.media, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.power, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.notification_popup, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.clipboard, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.emoji, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+            cx.subscribe(&self.record, |bar, _, event, cx| {
+                bar.handle_shared_panel_event(*event, cx);
+            }),
+        ]
     }
 
     pub fn is_open(&self) -> bool {
@@ -225,43 +200,144 @@ impl SharedPanel {
         }
     }
 
+    pub fn current(&self) -> Option<AnyView> {
+        Some(match self.active_module? {
+            SharedPanelModule::Calendar => self.calendar.clone().into(),
+            SharedPanelModule::Dashboard => self.dashboard.clone().into(),
+            SharedPanelModule::Tray(_) => self.tray.clone().into(),
+            SharedPanelModule::Media => self.media.clone().into(),
+            SharedPanelModule::Power => self.power.clone().into(),
+            SharedPanelModule::NotificationPopup(_) => self.notification_popup.clone().into(),
+            SharedPanelModule::Clipboard => self.clipboard.clone().into(),
+            SharedPanelModule::Emoji => self.emoji.clone().into(),
+            SharedPanelModule::Record => self.record.clone().into(),
+        })
+    }
+
+    pub fn module_size(&self, module: SharedPanelModule, cx: &App) -> Size<Pixels> {
+        match module {
+            SharedPanelModule::Calendar => self.calendar.read(cx).size(cx),
+            SharedPanelModule::Dashboard => self.dashboard.read(cx).size(cx),
+            SharedPanelModule::Tray(_) => self.tray.read(cx).size(cx),
+            SharedPanelModule::Media => self.media.read(cx).size(cx),
+            SharedPanelModule::Power => self.power.read(cx).size(cx),
+            SharedPanelModule::NotificationPopup(_) => self.notification_popup.read(cx).size(cx),
+            SharedPanelModule::Clipboard => self.clipboard.read(cx).size(cx),
+            SharedPanelModule::Emoji => self.emoji.read(cx).size(cx),
+            SharedPanelModule::Record => self.record.read(cx).size(cx),
+        }
+    }
+
+    pub fn current_size(&self, cx: &App) -> Size<Pixels> {
+        if let Some(module) = self.active_module {
+            self.module_size(module, cx)
+        } else {
+            Size {
+                width: px(0.0),
+                height: px(0.0),
+            }
+        }
+    }
+
+    pub fn current_focus_handle(&self, cx: &App) -> Option<FocusHandle> {
+        match self.active_module? {
+            SharedPanelModule::Calendar => self.calendar.read(cx).focus_handle(),
+            SharedPanelModule::Dashboard => self.dashboard.read(cx).focus_handle(),
+            SharedPanelModule::Tray(_) => self.tray.read(cx).focus_handle(),
+            SharedPanelModule::Media => self.media.read(cx).focus_handle(),
+            SharedPanelModule::Power => self.power.read(cx).focus_handle(),
+            SharedPanelModule::NotificationPopup(_) => {
+                self.notification_popup.read(cx).focus_handle()
+            }
+            SharedPanelModule::Clipboard => self.clipboard.read(cx).focus_handle(),
+            SharedPanelModule::Emoji => self.emoji.read(cx).focus_handle(),
+            SharedPanelModule::Record => self.record.read(cx).focus_handle(),
+        }
+    }
+
+    pub fn needs_exclusive_keyboard(&self, cx: &App) -> bool {
+        if !self.is_open {
+            return false;
+        }
+        match self.active_module {
+            Some(SharedPanelModule::Calendar) => self.calendar.read(cx).needs_exclusive_keyboard(),
+            Some(SharedPanelModule::Dashboard) => {
+                self.dashboard.read(cx).needs_exclusive_keyboard()
+            }
+            Some(SharedPanelModule::Tray(_)) => self.tray.read(cx).needs_exclusive_keyboard(),
+            Some(SharedPanelModule::Media) => self.media.read(cx).needs_exclusive_keyboard(),
+            Some(SharedPanelModule::Power) => self.power.read(cx).needs_exclusive_keyboard(),
+            Some(SharedPanelModule::NotificationPopup(_)) => {
+                self.notification_popup.read(cx).needs_exclusive_keyboard()
+            }
+            Some(SharedPanelModule::Clipboard) => {
+                self.clipboard.read(cx).needs_exclusive_keyboard()
+            }
+            Some(SharedPanelModule::Emoji) => self.emoji.read(cx).needs_exclusive_keyboard(),
+            Some(SharedPanelModule::Record) => self.record.read(cx).needs_exclusive_keyboard(),
+            None => false,
+        }
+    }
+
+    pub fn prepare_module(&mut self, module: SharedPanelModule, cx: &mut App) {
+        match module {
+            SharedPanelModule::Dashboard => {
+                self.dashboard.update(cx, |m, cx| m.reset(cx));
+            }
+            SharedPanelModule::Tray(idx) => {
+                self.tray.update(cx, |m, _| m.index = idx);
+            }
+            SharedPanelModule::Clipboard => {
+                self.clipboard.update(cx, |m, cx| m.open(cx));
+            }
+            SharedPanelModule::Emoji => {
+                self.emoji.update(cx, |m, cx| m.open(cx));
+            }
+            SharedPanelModule::Record => {
+                self.record.update(cx, |m, cx| m.open(cx));
+            }
+            SharedPanelModule::Power => {
+                self.power.update(cx, |m, _| m.cancel_hold());
+            }
+            SharedPanelModule::NotificationPopup(id) => {
+                let timeout = services::NotificationStore::global()
+                    .get_latest_active_notification()
+                    .filter(|n| n.id == id)
+                    .map(|n| n.timeout)
+                    .unwrap_or(Duration::from_secs(5));
+                self.notification_popup
+                    .update(cx, |m, cx| m.open(id, timeout, cx));
+            }
+            SharedPanelModule::Calendar | SharedPanelModule::Media => {}
+        }
+    }
+
     pub fn open(
         &mut self,
         module: SharedPanelModule,
         anchor_x: Pixels,
         window: &mut Window,
-        entity: gpui::WeakEntity<Bar>,
-        cx: &App,
+        cx: &mut Context<Bar>,
     ) {
         self.sync_display_bounds(window, cx);
 
-        if self.is_open && self.active_module.as_ref() == Some(&module) {
+        if self.is_open && self.active_module == Some(module) {
             return;
         }
 
-        if module == SharedPanelModule::Dashboard {
-            self.dashboard_state.reset();
-        }
-
-        if module == SharedPanelModule::Record {
-            if let Some(state) = cx.try_global::<AppState>() {
-                self.record_state.status = state.record.get_status();
-                self.record_state.seconds = state.record.get_duration_secs();
-                self.record_state.transition = None;
-            }
-        }
+        self.prepare_module(module, cx);
 
         let is_notif = matches!(module, SharedPanelModule::NotificationPopup(_));
+        let target_size = self.module_size(module, cx);
+        let (target_x, dock_edge) =
+            compute_target_position(anchor_x, target_size.width, self.screen_width, is_notif);
+
         if self.is_open {
-            self.old_module = self.active_module.clone();
-            self.active_module = Some(module.clone());
-            let target_size = module.default_size(cx);
-            let (target_x, dock_edge) =
-                compute_target_position(anchor_x, target_size.width, self.screen_width, is_notif);
+            self.old_module = self.active_module;
+            self.active_module = Some(module);
             if let Some(ref mut anim) = self.animator {
                 anim.switch_to(target_x, target_size, dock_edge, anchor_x, Instant::now());
             }
-            Bar::queue_animation_frame_checked(window, entity, &self.animation_frame_pending);
             return;
         }
 
@@ -285,10 +361,6 @@ impl SharedPanel {
                 )
             };
 
-        let target_size = module.default_size(cx);
-        let (target_x, dock_edge) =
-            compute_target_position(anchor_x, target_size.width, self.screen_width, is_notif);
-
         self.animator = Some(SharedPanelAnimator::new(
             anchor_x,
             target_x,
@@ -303,133 +375,40 @@ impl SharedPanel {
         self.is_open = true;
         self.active_module = Some(module);
         self.old_module = None;
-
-        Bar::queue_animation_frame_checked(window, entity, &self.animation_frame_pending);
     }
 
-    pub fn toggle(
-        &mut self,
-        module: SharedPanelModule,
-        anchor_x: Pixels,
-        window: &mut Window,
-        cx: &mut Context<Bar>,
-    ) {
-        if self.is_open && self.active_module.as_ref() == Some(&module) {
-            self.close(window, cx);
-            return;
-        }
-        self.open(module, anchor_x, window, cx.entity().downgrade(), cx);
-        cx.notify();
-    }
-
-    pub fn request_close(&mut self, window: &mut Window, entity: gpui::WeakEntity<Bar>) {
+    pub fn request_close(&mut self, cx: &mut App) {
         if !self.is_open && self.animator.is_none() {
             return;
         }
         self.is_open = false;
-        self.power_hold = None;
-        self.dashboard_state.dragging_volume = false;
-        self.dashboard_state.dragging_input_volume = false;
-        self.dashboard_state.dragging_brightness = false;
+        self.power.update(cx, |m, _| m.cancel_hold());
+        self.dashboard.update(cx, |m, _| {
+            m.dragging_volume = false;
+            m.dragging_input_volume = false;
+            m.dragging_brightness = false;
+        });
         if let Some(ref mut anim) = self.animator {
             anim.request_close();
-            Bar::queue_animation_frame_checked(window, entity, &self.animation_frame_pending);
         }
-    }
-
-    pub fn close(&mut self, window: &mut Window, cx: &mut Context<Bar>) {
-        self.request_close(window, cx.entity().downgrade());
-        cx.notify();
-    }
-
-    pub fn start_power_hold(
-        &mut self,
-        action: PowerAction,
-        window: &Window,
-        entity: gpui::WeakEntity<Bar>,
-    ) {
-        self.power_hold = Some(PowerHold {
-            action,
-            start: Instant::now(),
-            duration: Duration::from_millis(750),
-            progress: 0.0,
-        });
-        Bar::queue_animation_frame_checked(window, entity, &self.animation_frame_pending);
-    }
-
-    pub fn cancel_power_hold(&mut self) {
-        self.power_hold = None;
-    }
-
-    pub fn execute_power_action(action: PowerAction) {
-        services::spawn_tokio(async move {
-            let _ = match action {
-                PowerAction::Lock => services::system::power::lock().await,
-                PowerAction::Suspend => services::system::power::suspend().await,
-                PowerAction::Logout => services::system::power::logout().await,
-                PowerAction::Reboot => services::system::power::reboot().await,
-                PowerAction::Poweroff => services::system::power::poweroff().await,
-            };
-        });
     }
 
     pub fn advance(&mut self, now: Instant) -> (bool, bool) {
-        let mut triggered = None;
-        let mut holding = false;
-        if let Some(ref mut hold) = self.power_hold {
-            let elapsed = now.duration_since(hold.start);
-            let t = (elapsed.as_secs_f32() / hold.duration.as_secs_f32()).clamp(0.0, 1.0);
-            hold.progress = t;
-            if t >= 1.0 {
-                triggered = Some(hold.action);
-            } else {
-                holding = true;
-            }
-        }
-        if let Some(action) = triggered {
-            self.power_hold = None;
-            Self::execute_power_action(action);
-            return (true, true);
-        }
-
         if let Some(ref mut anim) = self.animator {
             let (running, closed) = anim.advance(now);
-            let sub_running = self.dashboard_state.advance(now);
             if closed {
                 self.animator = None;
                 self.active_module = None;
                 self.old_module = None;
                 self.is_open = false;
-                self.power_hold = None;
                 return (false, true);
             }
             if anim.content_progress >= 1.0 {
                 self.old_module = None;
             }
-            return (
-                running || anim.is_closing() || holding || sub_running,
-                false,
-            );
+            return (running || anim.is_closing(), false);
         }
-        (holding, false)
-    }
-
-    pub fn render_content(&self, window: &mut Window, cx: &mut Context<Bar>) -> AnyElement {
-        let Some(ref module) = self.active_module else {
-            return div().into_any_element();
-        };
-
-        match module {
-            SharedPanelModule::Calendar => calendar::render(window, cx),
-            SharedPanelModule::Dashboard => dashboard::render(&self.dashboard_state, window, cx),
-            SharedPanelModule::Tray(idx) => tray_menu::render(*idx, window, cx),
-            SharedPanelModule::Media => media::render(window, cx),
-            SharedPanelModule::Power => power::render(self.power_hold.as_ref(), window, cx),
-            SharedPanelModule::NotificationPopup(id) => notification_popup::render(*id, window, cx),
-            SharedPanelModule::Clipboard => clipboard::render(&self.clipboard_state, window, cx),
-            SharedPanelModule::Emoji => emoji::render(&self.emoji_state, window, cx),
-            SharedPanelModule::Record => record::render(&self.record_state, window, cx),
-        }
+        (false, false)
     }
 }
 
