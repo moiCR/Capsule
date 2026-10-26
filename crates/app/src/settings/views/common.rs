@@ -2,11 +2,11 @@ use gpui::{
     AnyElement, App, Bounds, ColorExt, Div, DurationWithEasing, ElementId, FontWeight, IntoElement,
     ParentElement, Pixels, Styled, Window, div, prelude::*, px, svg,
 };
-use ui::components::{Button, ButtonSize, ButtonVariant, Slider, Switch};
+use ui::components::{Button, ButtonSize, ButtonVariant, Slider, SliderVariant, Switch};
 use ui::theme::Theme;
 use ui::tracker::DimensionTracker;
 
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 
 pub fn hero_header(icon: &'static str, title: &str, subtitle: &str, theme: &Theme) -> AnyElement {
     div()
@@ -20,11 +20,11 @@ pub fn hero_header(icon: &'static str, title: &str, subtitle: &str, theme: &Them
             div()
                 .size(px(38.0))
                 .rounded_full()
-                .bg(style::surface(theme))
+                .bg(theme.primary_container())
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(svg().path(icon).size(px(18.0)).text_color(theme.accent())),
+                .child(svg().path(icon).size(px(18.0)).text_color(theme.primary())),
         )
         .child(
             div()
@@ -50,7 +50,11 @@ pub fn hero_header(icon: &'static str, title: &str, subtitle: &str, theme: &Them
 }
 
 pub fn card(theme: &Theme) -> Div {
-    style::card(theme, style::CARD_RADIUS)
+    div()
+        .rounded(px(16.0))
+        .bg(theme.surface_container())
+        .border_1()
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .flex_col()
         .w_full()
@@ -76,7 +80,7 @@ pub fn row_divider(theme: &Theme) -> AnyElement {
         .w_full()
         .h(px(1.0))
         .flex_shrink_0()
-        .bg(style::border(theme))
+        .bg(theme.outline_variant().opacity(0.25))
         .into_any_element()
 }
 
@@ -228,7 +232,10 @@ pub fn slider_row(
         .child(
             Slider::new(id)
                 .fraction(pct)
-                .height(28.0)
+                .height(24.0)
+                .thumb_size(18.0)
+                .track_height(6.0)
+                .variant(SliderVariant::Thumb)
                 .track_bounds(tracker)
                 .on_mouse_down(on_mouse_down)
                 .on_mouse_up(on_mouse_up),
@@ -280,9 +287,9 @@ pub fn segmented_selector<T: PartialEq + Clone + 'static>(
         .p(px(3.0))
         .gap(px(4.0))
         .rounded_full()
-        .bg(theme.surface().opacity(0.35))
+        .bg(theme.surface_container_high())
         .border_1()
-        .border_color(theme.surface().opacity(0.25));
+        .border_color(theme.outline_variant().opacity(0.35));
 
     for (val, id, label) in options {
         let is_active = selected == val;
@@ -293,18 +300,18 @@ pub fn segmented_selector<T: PartialEq + Clone + 'static>(
                 .flex()
                 .flex_row()
                 .items_center()
-                .px(px(12.0))
+                .px(px(14.0))
                 .py(px(5.0))
                 .rounded_full()
                 .bg(if is_active {
-                    theme.accent()
+                    theme.primary_container()
                 } else {
                     gpui::transparent_black()
                 })
                 .transitions(|t| t.bg(gpui::millis(160).with_easing(gpui::ease_in_out)))
                 .hover(|s| {
                     if !is_active {
-                        s.bg(theme.surface().opacity(0.4))
+                        s.bg(theme.surface_container_highest())
                     } else {
                         s
                     }
@@ -322,9 +329,9 @@ pub fn segmented_selector<T: PartialEq + Clone + 'static>(
                             FontWeight::MEDIUM
                         })
                         .text_color(if is_active {
-                            theme.background()
+                            theme.on_primary_container()
                         } else {
-                            theme.foreground()
+                            theme.on_surface_variant()
                         })
                         .transitions(|t| {
                             t.text_color(gpui::millis(160).with_easing(gpui::ease_in_out))

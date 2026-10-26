@@ -1,6 +1,9 @@
 use crate::app::InstallerApp;
 use crate::style;
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Styled, Window, div, prelude::*, px, svg,
+};
 use ui::components::Input;
 use ui::theme::Theme;
 
@@ -26,14 +29,14 @@ pub fn render_auth_modal(
                 .occlude()
                 .w(px(420.0))
                 .p(px(24.0))
-                .rounded(px(20.0))
-                .bg(style::background(&theme))
+                .rounded(px(16.0))
+                .bg(theme.surface_container_high())
                 .border_1()
-                .border_color(style::border(&theme))
+                .border_color(theme.outline_variant().opacity(0.40))
                 .shadow_xl()
                 .flex()
                 .flex_col()
-                .gap(px(16.0))
+                .gap(px(18.0))
                 .child(
                     div()
                         .flex()
@@ -43,21 +46,17 @@ pub fn render_auth_modal(
                             div()
                                 .size(px(40.0))
                                 .rounded_full()
-                                .bg(style::tint(style::surface(&theme), theme.accent(), 0.15))
+                                .bg(theme.primary().opacity(0.15))
                                 .border_1()
-                                .border_color(style::tint(
-                                    style::border(&theme),
-                                    theme.accent(),
-                                    0.3,
-                                ))
+                                .border_color(theme.primary().opacity(0.35))
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .child(
-                                    gpui::svg()
+                                    svg()
                                         .path("lock.svg")
                                         .size(px(20.0))
-                                        .text_color(theme.accent()),
+                                        .text_color(theme.primary()),
                                 ),
                         )
                         .child(
@@ -76,7 +75,7 @@ pub fn render_auth_modal(
                                     div()
                                         .text_size(px(12.0))
                                         .text_color(theme.foreground_muted())
-                                        .child("Administrative privileges are needed to proceed."),
+                                        .child("Administrator privileges are needed to proceed."),
                                 ),
                         ),
                 )
@@ -91,14 +90,31 @@ pub fn render_auth_modal(
                                 .masked(true)
                                 .focused(true)
                                 .error(has_error)
-                                .h_px(38.0)
+                                .h_px(40.0)
                                 .rounded_full()
-                                .bg(style::surface(&theme))
+                                .bg(theme.surface_container())
                                 .border_color(if has_error {
                                     theme.red()
                                 } else {
-                                    style::border(&theme)
-                                }),
+                                    theme.outline_variant().opacity(0.40)
+                                })
+                                .focused_border_color(theme.primary())
+                                .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                    let theme = cx.global::<Theme>().clone();
+                                    this.password_input.handle_mouse_down(event, window, &theme);
+                                    cx.notify();
+                                }))
+                                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                                    if this.password_input.is_dragging {
+                                        let theme = cx.global::<Theme>().clone();
+                                        this.password_input.handle_mouse_move(event, window, &theme);
+                                        cx.notify();
+                                    }
+                                }))
+                                .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                                    this.password_input.handle_mouse_up(event);
+                                    cx.notify();
+                                })),
                         )
                         .when_some(app.password_error.as_ref(), |this, err| {
                             this.child(

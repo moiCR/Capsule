@@ -40,19 +40,19 @@ pub fn render_auth_form(
         .cursor_visible(false)
         .error(auth_failed)
         .centered(true)
-        .w_px(200.0)
-        .max_w_px(200.0)
-        .h_px(34.0)
+        .w_px(240.0)
+        .max_w_px(240.0)
+        .h_px(40.0)
         .rounded_full()
-        .bg(theme.surface().opacity(0.35))
+        .bg(theme.surface_container_high().opacity(0.75))
         .border_color(if auth_failed {
             theme.red()
         } else {
-            theme.surface().opacity(0.35)
+            theme.outline_variant().opacity(0.4)
         })
         .focused_border_color(if auth_failed {
             theme.red()
         } else {
-            theme.accent()
+            theme.primary()
         })
 }

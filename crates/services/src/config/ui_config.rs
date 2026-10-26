@@ -10,6 +10,215 @@ pub enum CapsuleStyle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
+pub enum ShellMode {
+    #[default]
+    Island,
+    Bar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BarWidgetId {
+    Workspaces,
+    Clock,
+    Media,
+    Status,
+    Tray,
+    Power,
+    Resources,
+    Record,
+    Clipboard,
+    Caffeine,
+    #[serde(alias = "active_window")]
+    ActiveWindow,
+    Keyboard,
+    Notifications,
+    Weather,
+}
+
+impl BarWidgetId {
+    pub const ALL: [BarWidgetId; 14] = [
+        BarWidgetId::Workspaces,
+        BarWidgetId::Clock,
+        BarWidgetId::Media,
+        BarWidgetId::Status,
+        BarWidgetId::Tray,
+        BarWidgetId::Power,
+        BarWidgetId::Resources,
+        BarWidgetId::Record,
+        BarWidgetId::Clipboard,
+        BarWidgetId::Caffeine,
+        BarWidgetId::ActiveWindow,
+        BarWidgetId::Keyboard,
+        BarWidgetId::Notifications,
+        BarWidgetId::Weather,
+    ];
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Workspaces => "grid-dots.svg",
+            Self::Clock => "clock.svg",
+            Self::Media => "music.svg",
+            Self::Status => "wifi.svg",
+            Self::Tray => "package.svg",
+            Self::Power => "power.svg",
+            Self::Resources => "cpu.svg",
+            Self::Record => "camera.svg",
+            Self::Clipboard => "clipboard-list.svg",
+            Self::Caffeine => "coffee.svg",
+            Self::ActiveWindow => "monitor.svg",
+            Self::Keyboard => "languages.svg",
+            Self::Notifications => "bell.svg",
+            Self::Weather => "cloud-sun.svg",
+        }
+    }
+
+    pub fn translation_key(&self) -> &'static str {
+        match self {
+            Self::Workspaces => "settings.widget_workspaces",
+            Self::Clock => "settings.widget_clock",
+            Self::Media => "settings.widget_media",
+            Self::Status => "settings.widget_status",
+            Self::Tray => "settings.widget_tray",
+            Self::Power => "settings.widget_power",
+            Self::Resources => "settings.widget_resources",
+            Self::Record => "settings.widget_record",
+            Self::Clipboard => "settings.widget_clipboard",
+            Self::Caffeine => "settings.widget_caffeine",
+            Self::ActiveWindow => "settings.widget_active_window",
+            Self::Keyboard => "settings.widget_keyboard",
+            Self::Notifications => "settings.widget_notifications",
+            Self::Weather => "settings.widget_weather",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BarZone {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BarConfig {
+    #[serde(default = "default_bar_left")]
+    pub left: Vec<BarWidgetId>,
+    #[serde(default = "default_bar_center")]
+    pub center: Vec<BarWidgetId>,
+    #[serde(default = "default_bar_right")]
+    pub right: Vec<BarWidgetId>,
+    #[serde(default)]
+    pub convex: bool,
+    #[serde(default = "default_bar_animation", alias = "animation")]
+    pub animation: CapsuleAnimation,
+    #[serde(default = "default_bar_duration_ms", alias = "animation_duration_ms")]
+    pub animation_duration_ms: u32,
+    #[serde(default = "default_spring_bounciness")]
+    pub spring_bounciness: f32,
+    #[serde(default)]
+    pub squash_stretch: bool,
+    #[serde(default)]
+    pub reduced_motion: bool,
+}
+
+fn default_bar_animation() -> CapsuleAnimation {
+    CapsuleAnimation::Fluid
+}
+
+fn default_bar_duration_ms() -> u32 {
+    220
+}
+
+fn default_bar_left() -> Vec<BarWidgetId> {
+    vec![BarWidgetId::Workspaces]
+}
+
+fn default_bar_center() -> Vec<BarWidgetId> {
+    vec![BarWidgetId::Clock]
+}
+
+fn default_bar_right() -> Vec<BarWidgetId> {
+    vec![
+        BarWidgetId::Media,
+        BarWidgetId::Tray,
+        BarWidgetId::Status,
+        BarWidgetId::Power,
+    ]
+}
+
+impl Default for BarConfig {
+    fn default() -> Self {
+        Self {
+            left: default_bar_left(),
+            center: default_bar_center(),
+            right: default_bar_right(),
+            convex: false,
+            animation: default_bar_animation(),
+            animation_duration_ms: default_bar_duration_ms(),
+            spring_bounciness: default_spring_bounciness(),
+            squash_stretch: false,
+            reduced_motion: false,
+        }
+    }
+}
+
+impl BarConfig {
+    pub fn is_widget_present(&self, widget: BarWidgetId) -> bool {
+        self.left.contains(&widget) || self.center.contains(&widget) || self.right.contains(&widget)
+    }
+
+    pub fn zone_of(&self, widget: BarWidgetId) -> Option<BarZone> {
+        if self.left.contains(&widget) {
+            Some(BarZone::Left)
+        } else if self.center.contains(&widget) {
+            Some(BarZone::Center)
+        } else if self.right.contains(&widget) {
+            Some(BarZone::Right)
+        } else {
+            None
+        }
+    }
+
+    pub fn remove_widget(&mut self, widget: BarWidgetId) {
+        self.left.retain(|w| *w != widget);
+        self.center.retain(|w| *w != widget);
+        self.right.retain(|w| *w != widget);
+    }
+
+    pub fn add_widget_to_zone(&mut self, widget: BarWidgetId, zone: BarZone) {
+        self.remove_widget(widget);
+        match zone {
+            BarZone::Left => self.left.push(widget),
+            BarZone::Center => self.center.push(widget),
+            BarZone::Right => self.right.push(widget),
+        }
+    }
+
+    pub fn move_widget(
+        &mut self,
+        widget: BarWidgetId,
+        target_zone: BarZone,
+        target_index: Option<usize>,
+    ) {
+        self.remove_widget(widget);
+        let list = match target_zone {
+            BarZone::Left => &mut self.left,
+            BarZone::Center => &mut self.center,
+            BarZone::Right => &mut self.right,
+        };
+        if let Some(idx) = target_index {
+            let clamped = idx.min(list.len());
+            list.insert(clamped, widget);
+        } else {
+            list.push(widget);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum CapsuleLocation {
     #[default]
     Top,
@@ -73,6 +282,12 @@ pub struct UIConfig {
     pub orbits: OrbitConfig,
     #[serde(default = "default_enabled")]
     pub use_new_capsule: bool,
+
+    #[serde(default, alias = "mode")]
+    pub shell_mode: ShellMode,
+
+    #[serde(default)]
+    pub bar: BarConfig,
 
     #[serde(default)]
     pub dynamic_colors: bool,
@@ -156,6 +371,8 @@ impl Default for UIConfig {
         Self {
             orbits: OrbitConfig::default(),
             use_new_capsule: true,
+            shell_mode: ShellMode::default(),
+            bar: BarConfig::default(),
             dynamic_colors: false,
             dark_mode: true,
             clock_24_hour: true,
@@ -192,6 +409,9 @@ impl UIConfig {
     }
 
     pub fn exclusive_zone(&self) -> f32 {
+        if self.shell_mode == ShellMode::Bar {
+            return 40.0;
+        }
         if self.capsule_style == CapsuleStyle::Concave {
             self.idle_height
         } else {
@@ -348,5 +568,50 @@ mod tests {
                 toml::from_str(&format!("wallpaper_transition = '{str_val}'")).expect(str_val);
             assert_eq!(config.wallpaper_transition, expected);
         }
+    }
+
+    #[test]
+    fn bar_config_enforces_widget_uniqueness() {
+        let mut bar = BarConfig::default();
+        assert_eq!(bar.zone_of(BarWidgetId::Workspaces), Some(BarZone::Left));
+
+        bar.add_widget_to_zone(BarWidgetId::Workspaces, BarZone::Center);
+        assert_eq!(bar.zone_of(BarWidgetId::Workspaces), Some(BarZone::Center));
+        assert!(!bar.left.contains(&BarWidgetId::Workspaces));
+        assert!(bar.center.contains(&BarWidgetId::Workspaces));
+
+        bar.move_widget(BarWidgetId::Workspaces, BarZone::Right, Some(0));
+        assert_eq!(bar.zone_of(BarWidgetId::Workspaces), Some(BarZone::Right));
+        assert_eq!(bar.right.first(), Some(&BarWidgetId::Workspaces));
+        assert!(!bar.center.contains(&BarWidgetId::Workspaces));
+
+        bar.remove_widget(BarWidgetId::Workspaces);
+        assert_eq!(bar.zone_of(BarWidgetId::Workspaces), None);
+        assert!(!bar.is_widget_present(BarWidgetId::Workspaces));
+    }
+
+    #[test]
+    fn bar_config_serializes_and_deserializes() {
+        let default_config = UIConfig::default();
+        let encoded = toml::to_string(&default_config).expect("serialize");
+        let decoded: UIConfig = toml::from_str(&encoded).expect("deserialize");
+        assert_eq!(decoded.bar, default_config.bar);
+    }
+
+    #[test]
+    fn bar_config_animation_is_independent() {
+        let mut cfg = UIConfig::default();
+        cfg.capsule_animation = CapsuleAnimation::Expo;
+        cfg.animation_duration_ms = 400;
+
+        cfg.bar.animation = CapsuleAnimation::Spring;
+        cfg.bar.animation_duration_ms = 180;
+        cfg.bar.squash_stretch = false;
+
+        assert_eq!(cfg.capsule_animation, CapsuleAnimation::Expo);
+        assert_eq!(cfg.bar.animation, CapsuleAnimation::Spring);
+        assert_ne!(cfg.animation_duration_ms, cfg.bar.animation_duration_ms);
+        assert!(cfg.squash_stretch);
+        assert!(!cfg.bar.squash_stretch);
     }
 }

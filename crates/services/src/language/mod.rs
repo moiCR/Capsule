@@ -542,6 +542,11 @@ mod tests {
                 "settings.speed_snappy",
                 "settings.speed_balanced",
                 "settings.speed_smooth",
+                "launcher.copy_hint",
+                "launcher.open_action",
+                "settings.bar_widgets_count",
+                "settings.bar_widgets_count_one",
+                "datetime.bar_date_format",
             ] {
                 assert!(bundle.strings.contains_key(key), "missing {key}");
             }

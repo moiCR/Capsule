@@ -18,6 +18,12 @@ pub struct WorkspaceInfo {
     pub special_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveWindowInfo {
+    pub title: String,
+    pub class: String,
+}
+
 impl Default for WorkspaceInfo {
     fn default() -> Self {
         Self {
@@ -81,6 +87,8 @@ pub struct CompositorService {
     refresh_rate: Arc<ArcSwap<f64>>,
     current_workspace: Arc<ArcSwap<WorkspaceInfo>>,
     workspace_tx: broadcast::Sender<WorkspaceInfo>,
+    active_window: Arc<ArcSwap<ActiveWindowInfo>>,
+    keyboard_layout: Arc<ArcSwap<String>>,
     compositor: Arc<dyn Compositor>,
     backend: CompositorBackend,
     kwin: Option<kwin::KWin>,
@@ -121,11 +129,15 @@ impl CompositorService {
         let initial_ws = compositor.get_workspace().unwrap_or_default();
         let current_workspace = Arc::new(ArcSwap::from_pointee(initial_ws));
         let (workspace_tx, _) = broadcast::channel(32);
+        let active_window = Arc::new(ArcSwap::from_pointee(ActiveWindowInfo::default()));
+        let keyboard_layout = Arc::new(ArcSwap::from_pointee("ES".to_string()));
 
         let service = Self {
             refresh_rate,
             current_workspace,
             workspace_tx,
+            active_window,
+            keyboard_layout,
             compositor,
             backend,
             kwin,
@@ -145,7 +157,143 @@ impl CompositorService {
             service_workspace.run_workspace_events_loop().await;
         });
 
+        let service_window = service.clone();
+        crate::spawn_tokio(async move {
+            loop {
+                if let Some(info) = service_window.fetch_active_window().await {
+                    service_window.active_window.store(Arc::new(info));
+                }
+                tokio::time::sleep(Duration::from_millis(600)).await;
+            }
+        });
+
+        let service_kb = service.clone();
+        crate::spawn_tokio(async move {
+            loop {
+                if let Some(layout) = service_kb.fetch_keyboard_layout().await {
+                    service_kb.keyboard_layout.store(Arc::new(layout));
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        });
+
         service
+    }
+
+    pub fn get_active_window(&self) -> ActiveWindowInfo {
+        (**self.active_window.load()).clone()
+    }
+
+    pub fn get_keyboard_layout(&self) -> String {
+        (**self.keyboard_layout.load()).clone()
+    }
+
+    pub async fn fetch_active_window(&self) -> Option<ActiveWindowInfo> {
+        match self.backend {
+            CompositorBackend::Hyprland => {
+                let mut cmd = tokio::process::Command::new("hyprctl");
+                cmd.args(["-j", "activewindow"]);
+                cmd.kill_on_drop(true);
+                let out = tokio::time::timeout(Duration::from_millis(500), cmd.output())
+                    .await
+                    .ok()?
+                    .ok()?;
+                if !out.status.success() {
+                    return None;
+                }
+                let val: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+                let title = val
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let class = val
+                    .get("class")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Some(ActiveWindowInfo { title, class })
+            }
+            CompositorBackend::Niri => {
+                let mut cmd = tokio::process::Command::new("niri");
+                cmd.args(["msg", "-j", "focused-window"]);
+                cmd.kill_on_drop(true);
+                let out = tokio::time::timeout(Duration::from_millis(500), cmd.output())
+                    .await
+                    .ok()?
+                    .ok()?;
+                if !out.status.success() {
+                    return None;
+                }
+                let val: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+                let title = val
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let class = val
+                    .get("app_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Some(ActiveWindowInfo { title, class })
+            }
+            _ => None,
+        }
+    }
+
+    pub async fn fetch_keyboard_layout(&self) -> Option<String> {
+        match self.backend {
+            CompositorBackend::Hyprland => {
+                let mut cmd = tokio::process::Command::new("hyprctl");
+                cmd.args(["-j", "devices"]);
+                cmd.kill_on_drop(true);
+                let out = tokio::time::timeout(Duration::from_millis(500), cmd.output())
+                    .await
+                    .ok()?
+                    .ok()?;
+                if !out.status.success() {
+                    return None;
+                }
+                let val: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+                let keyboards = val.get("keyboards")?.as_array()?;
+                for kb in keyboards {
+                    if let Some(keymap) = kb.get("active_keymap").and_then(|k| k.as_str()) {
+                        if !keymap.is_empty() {
+                            let lower = keymap.to_lowercase();
+                            let short = if lower.contains("spanish") || lower.contains("español") {
+                                "ES"
+                            } else if lower.contains("english") || lower.contains("us") {
+                                "US"
+                            } else if lower.contains("latam") || lower.contains("latin") {
+                                "LAT"
+                            } else {
+                                &keymap[..keymap.len().min(3)]
+                            };
+                            return Some(short.to_uppercase());
+                        }
+                    }
+                    if let Some(layout) = kb.get("layout").and_then(|l| l.as_str()) {
+                        if !layout.is_empty() {
+                            return Some(layout.to_uppercase());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    pub async fn switch_keyboard_layout(&self) {
+        if self.backend == CompositorBackend::Hyprland {
+            let mut cmd = tokio::process::Command::new("hyprctl");
+            cmd.args(["switchxkblayout", "all", "next"]);
+            let _ = cmd.output().await;
+            if let Some(l) = self.fetch_keyboard_layout().await {
+                self.keyboard_layout.store(Arc::new(l));
+            }
+        }
     }
 
     pub async fn focused_application(&self) -> Option<String> {

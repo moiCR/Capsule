@@ -30,11 +30,13 @@ pub fn render_lockscreen_media_player(
 
     let art_thumb = if let Some(ref art_path) = active_track.local_art_path {
         div()
-            .w(px(32.0))
-            .h(px(32.0))
-            .rounded(px(8.0))
+            .w(px(46.0))
+            .h(px(46.0))
+            .rounded(px(12.0))
             .overflow_hidden()
             .flex_shrink_0()
+            .border_1()
+            .border_color(theme.outline_variant().opacity(0.3))
             .child(
                 img(PathBuf::from(art_path))
                     .size_full()
@@ -43,10 +45,10 @@ pub fn render_lockscreen_media_player(
             .into_any_element()
     } else {
         div()
-            .w(px(32.0))
-            .h(px(32.0))
-            .rounded(px(8.0))
-            .bg(theme.accent().opacity(0.15))
+            .w(px(46.0))
+            .h(px(46.0))
+            .rounded(px(12.0))
+            .bg(theme.primary_container())
             .flex()
             .items_center()
             .justify_center()
@@ -54,11 +56,15 @@ pub fn render_lockscreen_media_player(
             .child(
                 svg()
                     .path("music.svg")
-                    .size(px(16.0))
-                    .text_color(theme.accent()),
+                    .size(px(20.0))
+                    .text_color(theme.on_primary_container()),
             )
             .into_any_element()
     };
+
+    let btn_hover_prev = theme.surface_container_highest();
+    let play_hover = theme.primary();
+    let btn_hover_next = theme.surface_container_highest();
 
     div()
         .id("lockscreen-media-player")
@@ -66,13 +72,13 @@ pub fn render_lockscreen_media_player(
         .flex_row()
         .items_center()
         .w_full()
-        .h(px(46.0))
-        .px(px(8.0))
-        .gap(px(8.0))
+        .px(px(12.0))
+        .py(px(8.0))
+        .gap(px(12.0))
         .rounded(px(24.0))
-        .bg(theme.surface().opacity(0.35))
+        .bg(theme.surface_container_high().opacity(0.85))
         .border_1()
-        .border_color(theme.surface().opacity(0.2))
+        .border_color(theme.outline_variant().opacity(0.4))
         .child(art_thumb)
         .child(
             div()
@@ -85,7 +91,7 @@ pub fn render_lockscreen_media_player(
                     div()
                         .font_family(theme.font_family())
                         .font_weight(FontWeight::BOLD)
-                        .text_size(px(11.5))
+                        .text_size(px(13.0))
                         .text_color(theme.foreground())
                         .truncate()
                         .child(active_track.title),
@@ -93,8 +99,8 @@ pub fn render_lockscreen_media_player(
                 .child(
                     div()
                         .font_family(theme.font_family())
-                        .text_size(px(10.0))
-                        .text_color(theme.foreground_muted())
+                        .text_size(px(11.0))
+                        .text_color(theme.on_surface_variant())
                         .truncate()
                         .child(active_track.artist),
                 ),
@@ -104,18 +110,18 @@ pub fn render_lockscreen_media_player(
                 .flex()
                 .flex_row()
                 .items_center()
-                .gap(px(3.0))
+                .gap(px(6.0))
                 .flex_shrink_0()
                 .child(
                     div()
                         .id("ls-mpris-prev")
-                        .w(px(24.0))
-                        .h(px(24.0))
+                        .w(px(32.0))
+                        .h(px(32.0))
                         .rounded_full()
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                        .hover(move |s| s.bg(btn_hover_prev))
                         .active(|s| s.opacity(0.6))
                         .cursor_pointer()
                         .on_click(cx.listener(move |_, _, _, cx| {
@@ -128,19 +134,19 @@ pub fn render_lockscreen_media_player(
                         .child(
                             svg()
                                 .path("skip-back.svg")
-                                .size(px(12.0))
-                                .text_color(theme.foreground_muted()),
+                                .size(px(14.0))
+                                .text_color(theme.foreground()),
                         ),
                 )
                 .child(
                     div()
                         .id("ls-mpris-play-pause")
-                        .w(px(26.0))
-                        .h(px(26.0))
+                        .w(px(38.0))
+                        .h(px(38.0))
                         .rounded_full()
-                        .bg(theme.accent().opacity(0.2))
-                        .hover(|s| s.bg(theme.accent().opacity(0.35)))
-                        .active(|s| s.opacity(0.6))
+                        .bg(theme.primary_container())
+                        .hover(move |s| s.bg(play_hover))
+                        .active(|s| s.opacity(0.7))
                         .cursor_pointer()
                         .flex()
                         .items_center()
@@ -155,20 +161,20 @@ pub fn render_lockscreen_media_player(
                         .child(
                             svg()
                                 .path(if is_playing { "pause.svg" } else { "play.svg" })
-                                .size(px(12.0))
-                                .text_color(theme.accent()),
+                                .size(px(16.0))
+                                .text_color(theme.on_primary_container()),
                         ),
                 )
                 .child(
                     div()
                         .id("ls-mpris-next")
-                        .w(px(24.0))
-                        .h(px(24.0))
+                        .w(px(32.0))
+                        .h(px(32.0))
                         .rounded_full()
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(theme.surface().opacity(0.5)))
+                        .hover(move |s| s.bg(btn_hover_next))
                         .active(|s| s.opacity(0.6))
                         .cursor_pointer()
                         .on_click(cx.listener(move |_, _, _, cx| {
@@ -181,8 +187,8 @@ pub fn render_lockscreen_media_player(
                         .child(
                             svg()
                                 .path("skip-forward.svg")
-                                .size(px(12.0))
-                                .text_color(theme.foreground_muted()),
+                                .size(px(14.0))
+                                .text_color(theme.foreground()),
                         ),
                 ),
         )

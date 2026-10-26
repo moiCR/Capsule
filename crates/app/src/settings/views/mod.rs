@@ -2,7 +2,9 @@ use gpui::{AnyElement, Context, KeyDownEvent, MouseMoveEvent, MouseUpEvent, Wind
 
 pub mod appearance;
 pub mod apps;
+pub mod bar;
 pub mod common;
+pub mod island;
 pub mod lockscreen;
 pub mod media;
 pub mod record;

@@ -334,10 +334,7 @@ impl AppTheme for QtApps {
             let dolphinrc_path = config_dir.join("dolphinrc");
             upsert_ini_sections(
                 &dolphinrc_path,
-                &[(
-                    "[UiSettings]",
-                    vec![("ColorScheme", "Capsule".to_string())],
-                )],
+                &[("[UiSettings]", vec![("ColorScheme", "Capsule".to_string())])],
             );
         }
 
@@ -465,10 +462,7 @@ mod tests {
 
         upsert_ini_sections(
             &dolphinrc,
-            &[(
-                "[UiSettings]",
-                vec![("ColorScheme", "Capsule".to_string())],
-            )],
+            &[("[UiSettings]", vec![("ColorScheme", "Capsule".to_string())])],
         );
 
         let updated = fs::read_to_string(&dolphinrc).unwrap_or_default();
@@ -482,10 +476,7 @@ mod tests {
         // Second pass updates existing UiSettings without duplicating the section
         upsert_ini_sections(
             &dolphinrc,
-            &[(
-                "[UiSettings]",
-                vec![("ColorScheme", "Capsule".to_string())],
-            )],
+            &[("[UiSettings]", vec![("ColorScheme", "Capsule".to_string())])],
         );
         let updated_twice = fs::read_to_string(&dolphinrc).unwrap_or_default();
         assert_eq!(updated_twice.matches("[UiSettings]").count(), 1);

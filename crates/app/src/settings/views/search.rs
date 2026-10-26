@@ -6,7 +6,7 @@ use services::{AppState, CapsuleStyle};
 use ui::theme::Theme;
 
 use super::common::{card, control_row, hero_header, row_divider, toggle_row};
-use crate::capsule::widgets::style;
+use crate::island::widgets::style;
 use crate::settings::Settings;
 use crate::settings::sidebar::SettingsTab;
 
@@ -21,6 +21,8 @@ fn text(key: &str, cx: &App) -> String {
 fn tab_name(tab: SettingsTab, cx: &App) -> String {
     match tab {
         SettingsTab::Appearance => text("settings.tab_appearance", cx),
+        SettingsTab::Island => text("settings.tab_island", cx),
+        SettingsTab::Bar => text("settings.tab_bar", cx),
         SettingsTab::Apps => text("settings.tab_apps", cx),
         SettingsTab::Media => text("settings.tab_media", cx),
         SettingsTab::LockScreen => text("settings.tab_lockscreen", cx),
@@ -34,6 +36,7 @@ pub enum SearchControl {
     ToggleDynamicColors,
     ToggleDarkMode,
     ToggleConcaveStyle,
+    ToggleConvexBar,
     ToggleClock24,
     ToggleLegacyCapsule,
     ToggleLockscreenClock,
@@ -84,7 +87,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         id: "concave-style",
         title_key: "settings.concave_style",
         desc_key: "settings.style_description",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "concavo",
             "modo concavo",
@@ -99,10 +102,27 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         control: SearchControl::ToggleConcaveStyle,
     },
     SearchDefinition {
+        id: "convex-bar",
+        title_key: "settings.convex_bar",
+        desc_key: "settings.convex_bar_desc",
+        tab: SettingsTab::Bar,
+        keywords: &[
+            "convexo",
+            "modo convexo",
+            "convex",
+            "curvo",
+            "esquinas",
+            "corners",
+            "barra",
+            "bar",
+        ],
+        control: SearchControl::ToggleConvexBar,
+    },
+    SearchDefinition {
         id: "clock-24",
         title_key: "settings.clock_24",
         desc_key: "settings.clock_format_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "reloj", "clock", "24", "12", "hora", "time", "formato", "format",
         ],
@@ -112,7 +132,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         id: "capsule-location",
         title_key: "settings.location_title",
         desc_key: "settings.location_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "ubicacion",
             "posicion",
@@ -124,13 +144,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "position",
             "capsula",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "dimensions-radii",
         title_key: "settings.radii_heading",
         desc_key: "settings.appearance_subtitle",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "radio",
             "radius",
@@ -146,13 +166,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "gap",
             "separacion",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "motion-duration",
         title_key: "settings.anim_duration_title",
         desc_key: "settings.motion_heading",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "animacion",
             "animaciones",
@@ -175,13 +195,30 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "snappy",
             "suave",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
+    },
+    SearchDefinition {
+        id: "bar-motion",
+        title_key: "settings.motion_heading",
+        desc_key: "settings.animation_style_hint",
+        tab: SettingsTab::Bar,
+        keywords: &[
+            "barra",
+            "bar",
+            "animacion",
+            "velocidad",
+            "curva",
+            "motion",
+            "duracion",
+            "popup",
+        ],
+        control: SearchControl::Navigate(SettingsTab::Bar),
     },
     SearchDefinition {
         id: "content-transition",
         title_key: "settings.content_transition_title",
         desc_key: "settings.content_transition_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "transicion",
             "contenido",
@@ -192,13 +229,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "scale",
             "crossfade",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "spring-bounciness",
         title_key: "settings.spring_bounciness_title",
         desc_key: "settings.spring_bounciness_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "rebote",
             "bounciness",
@@ -207,13 +244,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "spring",
             "resorte",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "squash-stretch",
         title_key: "settings.squash_stretch_title",
         desc_key: "settings.squash_stretch_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "squash",
             "stretch",
@@ -224,7 +261,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "compresion",
             "inercial",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "stagger-animation",
@@ -580,6 +617,24 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                     }),
                 )
             }
+            SearchControl::ToggleConvexBar => {
+                let is_on = config.ui.bar.convex;
+                toggle_row(
+                    ElementId::Name(format!("search-toggle-{}", def.id).into()),
+                    &title,
+                    Some(&subtitle),
+                    is_on,
+                    theme,
+                    cx.listener(|_this, _, _, cx| {
+                        if cx.has_global::<AppState>() {
+                            let _ = cx.global::<AppState>().config.update(|cfg| {
+                                cfg.ui.bar.convex = !cfg.ui.bar.convex;
+                            });
+                        }
+                        cx.notify();
+                    }),
+                )
+            }
             SearchControl::ToggleClock24 => {
                 let is_on = config.ui.clock_24_hour;
                 toggle_row(
@@ -681,7 +736,7 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                     .h(px(28.0))
                     .px(px(12.0))
                     .rounded_full()
-                    .bg(style::surface(theme))
+                    .bg(theme.surface_container_high())
                     .border_1()
                     .border_color(style::border(theme))
                     .hover(|s| s.bg(style::hover(theme)).border_color(theme.accent()))
@@ -733,7 +788,7 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                 div()
                     .size(px(52.0))
                     .rounded_full()
-                    .bg(style::surface(theme))
+                    .bg(theme.surface_container_high())
                     .flex()
                     .items_center()
                     .justify_center()

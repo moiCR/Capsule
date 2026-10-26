@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use tokio::io::unix::AsyncFd;
 
 struct InotifyFd(RawFd);
@@ -14,6 +14,12 @@ struct InotifyFd(RawFd);
 impl AsRawFd for InotifyFd {
     fn as_raw_fd(&self) -> RawFd {
         self.0
+    }
+}
+
+impl AsFd for InotifyFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.0) }
     }
 }
 
@@ -99,7 +105,7 @@ impl LauncherService {
                     }
                 }
 
-                if let Ok(mut async_fd) = AsyncFd::new(watcher) {
+                if let Ok(mut async_fd) = unsafe { AsyncFd::register(watcher) } {
                     let mut buf = [0u8; 4096];
                     let fd = async_fd.get_ref().as_raw_fd();
                     loop {
@@ -298,6 +304,8 @@ impl LauncherService {
         let mut map = HashMap::new();
         let subdirs = [
             "hicolor/scalable/apps",
+            "hicolor/scalable/categories",
+            "hicolor/scalable/preferences",
             "hicolor/512x512/apps",
             "hicolor/256x256/apps",
             "hicolor/128x128/apps",
@@ -307,6 +315,10 @@ impl LauncherService {
             "hicolor/32x32/apps",
             "hicolor/24x24/apps",
             "hicolor/16x16/apps",
+            "breeze/apps/48",
+            "breeze/apps/32",
+            "breeze-dark/apps/48",
+            "breeze-dark/apps/32",
             "pixmaps",
         ];
         for base in base_dirs {
@@ -318,7 +330,12 @@ impl LauncherService {
                         if path.is_file()
                             && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
                         {
-                            map.entry(stem.to_string()).or_insert(path);
+                            map.entry(stem.to_string()).or_insert_with(|| path.clone());
+                            if let Some(short) = stem.rsplit('.').next() {
+                                if short != stem {
+                                    map.entry(short.to_string()).or_insert_with(|| path.clone());
+                                }
+                            }
                         }
                     }
                 }
@@ -397,7 +414,21 @@ impl LauncherService {
             if p.is_absolute() && p.exists() {
                 Some(p.to_path_buf())
             } else {
-                icon_map.get(ic).cloned()
+                let clean = ic
+                    .strip_suffix(".png")
+                    .or_else(|| ic.strip_suffix(".svg"))
+                    .or_else(|| ic.strip_suffix(".xpm"))
+                    .unwrap_or(ic);
+                icon_map
+                    .get(clean)
+                    .or_else(|| icon_map.get(ic))
+                    .or_else(|| {
+                        clean
+                            .rsplit('.')
+                            .next()
+                            .and_then(|short| icon_map.get(short))
+                    })
+                    .cloned()
             }
         });
 

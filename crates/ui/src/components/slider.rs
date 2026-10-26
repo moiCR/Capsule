@@ -1,19 +1,29 @@
 use crate::theme::Theme;
 use crate::tracker::DimensionTracker;
 use gpui::{
-    App, Bounds, ColorExt, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseUpEvent, ParentElement, RenderOnce, SharedString,
-    Styled, Window, canvas, div, fill, px, size, svg, white,
+    App, Bounds, ElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement, RenderOnce, SharedString, Styled, Window, canvas, div, fill, point,
+    px, size, svg,
 };
 
 pub type MouseDownListener = Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>;
 pub type MouseUpListener = Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App) + 'static>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SliderVariant {
+    #[default]
+    Thumb,
+    Filled,
+}
 
 #[derive(IntoElement)]
 pub struct Slider {
     id: ElementId,
     fraction: f32,
     height: f32,
+    variant: SliderVariant,
+    thumb_size: f32,
+    track_height: f32,
     icon: Option<SharedString>,
     icon_size: f32,
     label: Option<SharedString>,
@@ -21,6 +31,8 @@ pub struct Slider {
     disabled: bool,
     active_color: Option<gpui::Hsla>,
     track_color: Option<gpui::Hsla>,
+    thumb_color: Option<gpui::Hsla>,
+    halo_color: Option<gpui::Hsla>,
     flex_1: bool,
     on_mouse_down: Option<MouseDownListener>,
     on_mouse_up: Option<MouseUpListener>,
@@ -31,7 +43,10 @@ impl Slider {
         Self {
             id: id.into(),
             fraction: 0.0,
-            height: 32.0,
+            height: 24.0,
+            variant: SliderVariant::Thumb,
+            thumb_size: 18.0,
+            track_height: 6.0,
             icon: None,
             icon_size: 18.0,
             label: None,
@@ -39,6 +54,8 @@ impl Slider {
             disabled: false,
             active_color: None,
             track_color: None,
+            thumb_color: None,
+            halo_color: None,
             flex_1: false,
             on_mouse_down: None,
             on_mouse_up: None,
@@ -55,8 +72,40 @@ impl Slider {
         self
     }
 
+    pub fn variant(mut self, variant: SliderVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn thumb(mut self) -> Self {
+        self.variant = SliderVariant::Thumb;
+        self
+    }
+
+    pub fn filled(mut self) -> Self {
+        self.variant = SliderVariant::Filled;
+        if self.height < 32.0 {
+            self.height = 32.0;
+        }
+        self
+    }
+
+    pub fn thumb_size(mut self, size: f32) -> Self {
+        self.thumb_size = size;
+        self
+    }
+
+    pub fn track_height(mut self, height: f32) -> Self {
+        self.track_height = height;
+        self
+    }
+
     pub fn icon(mut self, icon: impl Into<SharedString>) -> Self {
         self.icon = Some(icon.into());
+        self.variant = SliderVariant::Filled;
+        if self.height < 32.0 {
+            self.height = 32.0;
+        }
         self
     }
 
@@ -67,6 +116,10 @@ impl Slider {
 
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
+        self.variant = SliderVariant::Filled;
+        if self.height < 32.0 {
+            self.height = 32.0;
+        }
         self
     }
 
@@ -87,6 +140,16 @@ impl Slider {
 
     pub fn track_color(mut self, color: gpui::Hsla) -> Self {
         self.track_color = Some(color);
+        self
+    }
+
+    pub fn thumb_color(mut self, color: gpui::Hsla) -> Self {
+        self.thumb_color = Some(color);
+        self
+    }
+
+    pub fn halo_color(mut self, color: gpui::Hsla) -> Self {
+        self.halo_color = Some(color);
         self
     }
 
@@ -115,20 +178,30 @@ impl Slider {
 impl RenderOnce for Slider {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.global::<Theme>();
-        let track_color = self.track_color.unwrap_or_else(|| theme.surface().opacity(0.35));
-        let active_color = self.active_color.unwrap_or_else(|| theme.accent());
-        let corner_radius = self.height / 2.0;
+        let track_color = self
+            .track_color
+            .unwrap_or_else(|| theme.surface_container_highest());
+        let active_color = self.active_color.unwrap_or_else(|| theme.primary());
+        let thumb_color = self.thumb_color.unwrap_or(active_color);
+        let halo_color = self
+            .halo_color
+            .unwrap_or_else(|| theme.surface_container());
         let fraction = self.fraction;
         let tracker = self.tracker.clone();
+        let variant = self.variant;
+        let track_h_val = self.track_height;
+        let thumb_s_val = self.thumb_size;
 
         let mut el = div()
             .id(self.id)
             .relative()
             .w_full()
             .min_w_0()
-            .h(px(self.height))
-            .rounded_full()
-            .overflow_hidden();
+            .h(px(self.height));
+
+        if variant == SliderVariant::Filled {
+            el = el.rounded_full().overflow_hidden();
+        }
 
         if self.flex_1 {
             el = el.flex_1();
@@ -166,28 +239,77 @@ impl RenderOnce for Slider {
                 }
                 bounds
             },
-            move |bounds, inner, window, _| {
-                // Background track
-                window.paint_quad(fill(bounds, track_color).corner_radii(px(corner_radius)));
+            move |bounds, inner, window, _| match variant {
+                SliderVariant::Thumb => {
+                    let center_y = bounds.origin.y + bounds.size.height / 2.0;
+                    let track_h = px(track_h_val.clamp(2.0, bounds.size.height.into()));
+                    let track_r = track_h / 2.0;
+                    let track_y = center_y - track_h / 2.0;
 
-                // Active filled portion
-                let width = inner.size.width * fraction;
-                if width > px(0.0) {
-                    let visible = Bounds {
-                        origin: inner.origin,
-                        size: size(width, inner.size.height),
+                    let thumb_d = px(thumb_s_val.clamp(6.0, 36.0));
+                    let thumb_r = thumb_d / 2.0;
+
+                    let travel_width = (bounds.size.width - thumb_d).max(px(0.0));
+                    let center_x = bounds.origin.x + thumb_r + travel_width * fraction;
+
+                    // Inactive track (spans full width)
+                    let track_bounds = Bounds {
+                        origin: point(bounds.origin.x, track_y),
+                        size: size(bounds.size.width, track_h),
                     };
-                    window.with_content_mask(
-                        Some(gpui::ContentMask {
-                            bounds: visible,
-                            fade_out: Default::default(),
-                        }),
-                        |window| {
-                            window.paint_quad(
-                                fill(inner, active_color).corner_radii(px(corner_radius)),
-                            );
-                        },
-                    );
+                    window.paint_quad(fill(track_bounds, track_color).corner_radii(track_r));
+
+                    // Active track (from left to center_x)
+                    let active_w = (center_x - bounds.origin.x).max(px(0.0));
+                    if active_w > px(0.0) {
+                        let active_bounds = Bounds {
+                            origin: point(bounds.origin.x, track_y),
+                            size: size(active_w, track_h),
+                        };
+                        window.paint_quad(fill(active_bounds, active_color).corner_radii(track_r));
+                    }
+
+                    // Halo cutout ring around thumb
+                    let halo_d = thumb_d + px(3.0);
+                    let halo_r = halo_d / 2.0;
+                    let halo_bounds = Bounds {
+                        origin: point(center_x - halo_r, center_y - halo_r),
+                        size: size(halo_d, halo_d),
+                    };
+                    window.paint_quad(fill(halo_bounds, halo_color).corner_radii(halo_r));
+
+                    // Thumb knob ("la bolita")
+                    let thumb_bounds = Bounds {
+                        origin: point(center_x - thumb_r, center_y - thumb_r),
+                        size: size(thumb_d, thumb_d),
+                    };
+                    window.paint_quad(fill(thumb_bounds, thumb_color).corner_radii(thumb_r));
+                }
+                SliderVariant::Filled => {
+                    let corner_radius = inner.size.height / 2.0;
+
+                    // Background track
+                    window.paint_quad(fill(bounds, track_color).corner_radii(corner_radius));
+
+                    // Active filled portion
+                    let width = inner.size.width * fraction;
+                    if width > px(0.0) {
+                        let visible = Bounds {
+                            origin: inner.origin,
+                            size: size(width, inner.size.height),
+                        };
+                        window.with_content_mask(
+                            Some(gpui::ContentMask {
+                                bounds: visible,
+                                fade_out: Default::default(),
+                            }),
+                            |window| {
+                                window.paint_quad(
+                                    fill(inner, active_color).corner_radii(corner_radius),
+                                );
+                            },
+                        );
+                    }
                 }
             },
         )
@@ -195,34 +317,30 @@ impl RenderOnce for Slider {
 
         el = el.child(canvas_el);
 
-        // Optional inside icon on the left
+        // Optional inside icon on the left (for Filled variant)
         if let Some(icon_path) = self.icon {
             let icon_top = (self.height - self.icon_size) / 2.0;
             let icon_color = if fraction >= 0.09 {
-                white()
+                theme.on_primary()
             } else {
                 theme.foreground_muted()
             };
 
             el = el.child(
-                div()
-                    .absolute()
-                    .left(px(10.0))
-                    .top(px(icon_top))
-                    .child(
-                        svg()
-                            .path(icon_path)
-                            .size(px(self.icon_size))
-                            .text_color(icon_color),
-                    ),
+                div().absolute().left(px(10.0)).top(px(icon_top)).child(
+                    svg()
+                        .path(icon_path)
+                        .size(px(self.icon_size))
+                        .text_color(icon_color),
+                ),
             );
         }
 
-        // Optional inside label on the right
+        // Optional inside label on the right (for Filled variant)
         if let Some(label_text) = self.label {
             let label_top = (self.height - 18.0) / 2.0;
             let text_color = if fraction >= 0.93 {
-                white()
+                theme.on_primary()
             } else {
                 theme.foreground_muted()
             };
@@ -257,11 +375,12 @@ mod tests {
 
         assert_eq!(s.fraction, 1.0);
         assert_eq!(s.height, 36.0);
+        assert_eq!(s.variant, SliderVariant::Filled);
         assert_eq!(s.label.as_deref(), Some("100%"));
         assert_eq!(s.icon.as_deref(), Some("volume-2.svg"));
 
         let s_negative = Slider::new("neg").fraction(-0.5);
         assert_eq!(s_negative.fraction, 0.0);
+        assert_eq!(s_negative.variant, SliderVariant::Thumb);
     }
 }
-

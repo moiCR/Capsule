@@ -259,7 +259,10 @@ pub fn configure_kwin_rules() -> Result<()> {
             if !updated_kcminput.contains("[Mouse]") {
                 updated_kcminput.push_str("\n[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n");
             } else {
-                updated_kcminput = updated_kcminput.replace("[Mouse]", "[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24");
+                updated_kcminput = updated_kcminput.replace(
+                    "[Mouse]",
+                    "[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24",
+                );
             }
             let _ = fs::write(&kcminput_path, updated_kcminput);
         }

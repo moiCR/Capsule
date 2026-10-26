@@ -68,16 +68,16 @@ impl RenderOnce for SelectItem {
             .py_1p5()
             .rounded(px(8.0))
             .bg(if self.selected {
-                theme.accent().opacity(0.12)
+                theme.primary_container()
             } else {
                 gpui::transparent_black()
             })
             .text_color(if self.selected {
-                theme.accent()
+                theme.on_primary_container()
             } else {
                 theme.foreground()
             })
-            .hover(|s| s.bg(theme.surface().opacity(0.6)))
+            .hover(|s| s.bg(theme.surface_container_highest()))
             .transitions(|t| {
                 t.bg(millis(120).with_easing(ease_in_out))
                     .text_color(millis(120).with_easing(ease_in_out))
@@ -275,17 +275,17 @@ impl RenderOnce for Select {
             .w(px(self.width))
             .h(px(36.0))
             .px_3()
-            .rounded(px(10.0))
+            .rounded(px(12.0))
             .bg(if self.is_open {
-                theme.accent().opacity(0.12)
+                theme.primary_container().opacity(0.35)
             } else {
-                theme.surface().opacity(0.3)
+                theme.surface_container_high()
             })
             .border_1()
             .border_color(if self.is_open {
-                theme.accent()
+                theme.primary()
             } else {
-                theme.surface().opacity(0.4)
+                theme.outline_variant()
             })
             .transitions(|t| {
                 t.bg(millis(160).with_easing(ease_in_out))
@@ -299,8 +299,8 @@ impl RenderOnce for Select {
             trigger = trigger
                 .hover(|s| {
                     if !self.is_open {
-                        s.border_color(theme.accent().opacity(0.7))
-                            .bg(theme.surface().opacity(0.5))
+                        s.border_color(theme.outline())
+                            .bg(theme.surface_container_highest())
                     } else {
                         s
                     }
@@ -355,7 +355,11 @@ impl RenderOnce for Select {
             );
 
         let chevron = svg()
-            .path(if self.is_open { "chevron-up.svg" } else { "chevron-down.svg" })
+            .path(if self.is_open {
+                "chevron-up.svg"
+            } else {
+                "chevron-down.svg"
+            })
             .size(px(14.0))
             .flex_shrink_0()
             .text_color(if self.is_open {
@@ -363,9 +367,7 @@ impl RenderOnce for Select {
             } else {
                 theme.foreground_muted()
             })
-            .transitions(|t| {
-                t.text_color(millis(160).with_easing(ease_in_out))
-            });
+            .transitions(|t| t.text_color(millis(160).with_easing(ease_in_out)));
 
         let trigger_element = trigger.child(trigger_content).child(chevron);
 
@@ -383,10 +385,10 @@ impl RenderOnce for Select {
                 .w(px(self.width))
                 .max_h(px(menu_h))
                 .opacity(p)
-                .bg(theme.background())
+                .bg(theme.surface_container_high())
                 .border_1()
-                .border_color(theme.surface().opacity(0.5))
-                .rounded(px(12.0))
+                .border_color(theme.outline_variant())
+                .rounded(px(16.0))
                 .shadow_lg()
                 .p_1p5()
                 .gap(px(2.0))

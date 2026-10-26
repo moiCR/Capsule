@@ -6,6 +6,7 @@ pub mod input;
 pub mod select;
 pub mod slider;
 pub mod switch;
+pub mod textarea;
 pub mod tooltip;
 
 pub use badge::{Badge, BadgeSize, BadgeVariant};
@@ -14,6 +15,7 @@ pub use card::Card;
 pub use chip::{Chip, ChipSize};
 pub use input::{Input, InputState};
 pub use select::{Select, SelectItem};
-pub use slider::Slider;
+pub use slider::{Slider, SliderVariant};
 pub use switch::Switch;
+pub use textarea::{TextArea, TextAreaState};
 pub use tooltip::{TooltipView, tooltip, tooltip_with_shortcut};

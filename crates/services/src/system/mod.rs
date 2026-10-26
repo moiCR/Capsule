@@ -2,6 +2,7 @@ use anyhow::Result;
 use arc_swap::ArcSwap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::time::Duration;
 
 pub mod audio;
 pub mod brightness;
@@ -36,6 +37,7 @@ pub struct SystemService {
     input_volume_notify: Arc<tokio::sync::Notify>,
     audio_changed: Arc<tokio::sync::Notify>,
     usage_sample: Arc<tokio::sync::Mutex<Option<(u64, u64)>>>,
+    current_usage: Arc<ArcSwap<UsageStatus>>,
 }
 
 impl SystemService {
@@ -52,9 +54,19 @@ impl SystemService {
             input_volume_notify: Arc::new(tokio::sync::Notify::new()),
             audio_changed: Arc::new(tokio::sync::Notify::new()),
             usage_sample: Arc::new(tokio::sync::Mutex::new(None)),
+            current_usage: Arc::new(ArcSwap::from_pointee(UsageStatus::default())),
         };
 
         crate::spawn_tokio(capture::monitor(service.capture_status.clone()));
+
+        let usage_service = service.clone();
+        crate::spawn_tokio(async move {
+            loop {
+                let u = usage_service.sample_usage().await;
+                usage_service.current_usage.store(Arc::new(u));
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        });
 
         let service_clone = service.clone();
         crate::spawn_tokio(async move {
@@ -102,6 +114,10 @@ impl SystemService {
 
     pub fn get_status(&self) -> SystemStatus {
         (**self.status.load()).clone()
+    }
+
+    pub fn get_usage_status(&self) -> UsageStatus {
+        **self.current_usage.load()
     }
 
     pub fn get_capture_status(&self) -> CaptureStatus {
@@ -349,6 +365,7 @@ mod tests {
                         input_volume_notify: Arc::new(tokio::sync::Notify::new()),
                         audio_changed: Arc::new(tokio::sync::Notify::new()),
                         usage_sample: Arc::new(tokio::sync::Mutex::new(None)),
+                        current_usage: Arc::new(ArcSwap::from_pointee(UsageStatus::default())),
                     };
                     assert!(SystemService::fetch_audio_status().await.is_err());
                     assert!(SystemService::fetch_input_audio_status().await.is_err());

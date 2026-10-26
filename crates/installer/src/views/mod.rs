@@ -2,15 +2,13 @@ pub mod auth_modal;
 pub mod compositor;
 pub mod dependencies;
 pub mod finished;
-pub mod header;
 pub mod installing;
+pub mod sidebar;
 pub mod welcome;
 
 use crate::app::{InstallerApp, Step};
-use crate::style;
 use gpui::{
     AnyElement, Context, IntoElement, KeyDownEvent, ParentElement, Styled, Window, div, prelude::*,
-    px,
 };
 use ui::theme::Theme;
 
@@ -30,21 +28,25 @@ pub fn render_installer(
         Step::Finished => finished::render_finished(app, window, cx),
     };
 
-    let header_element = header::render_header(app, cx);
+    let sidebar_element = sidebar::render_sidebar(app, cx);
 
-    let main_card = div()
-        .id("installer-modal-card")
+    let main_layout = div()
+        .id("installer-layout")
         .size_full()
-        .bg(style::background(&theme))
-        .p(px(24.0))
         .flex()
-        .flex_col()
-        .justify_between()
-        .overflow_hidden()
+        .flex_row()
+        .bg(theme.background())
         .font_family(theme.font_family())
         .text_color(theme.foreground())
-        .child(header_element)
-        .child(div().flex_1().min_h_0().pt(px(16.0)).child(content));
+        .child(sidebar_element)
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .overflow_hidden()
+                .child(content),
+        );
 
     let modal_overlay = if app.show_password_modal {
         Some(auth_modal::render_auth_modal(app, window, cx))
@@ -78,8 +80,8 @@ pub fn render_installer(
         .relative()
         .size_full()
         .overflow_hidden()
-        .bg(style::background(&theme))
-        .child(main_card)
+        .bg(theme.background())
+        .child(main_layout)
         .children(modal_overlay)
         .into_any_element()
 }

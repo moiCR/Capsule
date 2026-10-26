@@ -1,7 +1,10 @@
 use crate::app::{InstallerApp, PendingAction, Step};
 use crate::compositor::Compositor;
 use crate::style;
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px,
+    svg,
+};
 use ui::theme::Theme;
 
 pub fn render_compositor(
@@ -24,15 +27,15 @@ pub fn render_compositor(
             let is_selected = comp == selected;
 
             let border_color = if is_selected {
-                theme.accent()
+                theme.primary()
             } else {
-                style::border(&theme)
+                theme.outline_variant().opacity(0.35)
             };
 
             let card_bg = if is_selected {
-                style::tint(style::raised(&theme), theme.accent(), 0.10)
+                theme.surface_container_high()
             } else {
-                style::raised(&theme)
+                theme.surface_container()
             };
 
             let icon_path = match comp {
@@ -59,8 +62,8 @@ pub fn render_compositor(
             div()
                 .id(("comp-card", idx as u32))
                 .cursor_pointer()
-                .p(px(12.0))
-                .rounded(px(style::INNER_RADIUS))
+                .p(px(14.0))
+                .rounded(px(12.0))
                 .bg(card_bg)
                 .border_1()
                 .border_color(border_color)
@@ -68,6 +71,8 @@ pub fn render_compositor(
                 .items_center()
                 .justify_between()
                 .gap(px(12.0))
+                .transitions(|t| t.bg(gpui::millis(150)))
+                .hover(|s| s.bg(theme.surface_container_highest()))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.selected_compositor = comp;
                     this.error_message = None;
@@ -81,27 +86,25 @@ pub fn render_compositor(
                         .flex_1()
                         .child(
                             div()
-                                .size(px(36.0))
+                                .size(px(38.0))
                                 .rounded(px(10.0))
-                                .bg(style::tint(
-                                    style::surface(&theme),
-                                    if is_selected {
-                                        theme.accent()
-                                    } else {
-                                        theme.foreground_muted()
-                                    },
-                                    0.15,
-                                ))
+                                .bg(if is_selected {
+                                    theme.primary().opacity(0.15)
+                                } else {
+                                    theme.surface_container_highest()
+                                })
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(gpui::svg().path(icon_path).size(px(18.0)).text_color(
-                                    if is_selected {
-                                        theme.accent()
-                                    } else {
-                                        theme.foreground()
-                                    },
-                                )),
+                                .child(
+                                    svg().path(icon_path).size(px(20.0)).text_color(
+                                        if is_selected {
+                                            theme.primary()
+                                        } else {
+                                            theme.foreground_muted()
+                                        },
+                                    ),
+                                ),
                         )
                         .child(
                             div()
@@ -127,21 +130,17 @@ pub fn render_compositor(
                                                     .px(px(6.0))
                                                     .py(px(1.0))
                                                     .rounded_full()
-                                                    .bg(style::tint(
-                                                        style::surface(&theme),
-                                                        theme.accent(),
-                                                        0.25,
-                                                    ))
+                                                    .bg(theme.primary().opacity(0.18))
                                                     .text_size(px(10.0))
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .text_color(theme.accent())
+                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                    .text_color(theme.primary())
                                                     .child("Selected"),
                                             )
                                         }),
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(px(11.5))
                                         .text_color(theme.foreground_muted())
                                         .child(comp.subtitle()),
                                 ),
@@ -150,11 +149,11 @@ pub fn render_compositor(
                 .child(
                     div()
                         .px(px(10.0))
-                        .py(px(4.0))
+                        .py(px(3.0))
                         .rounded_full()
-                        .bg(style::tint(style::surface(&theme), status_color, 0.14))
+                        .bg(status_color.opacity(0.12))
                         .text_size(px(11.0))
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(status_color)
                         .child(status_label),
                 )
@@ -165,22 +164,24 @@ pub fn render_compositor(
         .flex_col()
         .size_full()
         .justify_between()
+        .p(px(26.0))
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(12.0))
+                .gap(px(14.0))
                 .flex_1()
                 .min_h_0()
+                // View Header
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(2.0))
+                        .gap(px(4.0))
                         .child(
                             div()
-                                .text_size(px(18.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_size(px(22.0))
+                                .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme.foreground())
                                 .child("Wayland Compositor"),
                         )
@@ -188,18 +189,24 @@ pub fn render_compositor(
                             div()
                                 .text_size(px(13.0))
                                 .text_color(theme.foreground_muted())
-                                .child("Choose your preferred Wayland compositor for Capsule"),
+                                .child("Choose your preferred Wayland desktop environment for Capsule integration."),
                         ),
                 )
-                .child(div().flex().flex_col().gap(px(8.0)).children(cards))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.0))
+                        .children(cards),
+                )
                 .when_some(app.error_message.as_ref(), |this, err| {
                     this.child(
                         div()
-                            .p(px(10.0))
-                            .rounded(px(style::INNER_RADIUS))
-                            .bg(style::tint(style::background(&theme), theme.red(), 0.15))
+                            .p(px(12.0))
+                            .rounded(px(10.0))
+                            .bg(theme.red().opacity(0.12))
                             .border_1()
-                            .border_color(theme.red())
+                            .border_color(theme.red().opacity(0.40))
                             .text_size(px(12.0))
                             .text_color(theme.red())
                             .child(format!("Error: {}", err)),
@@ -208,10 +215,10 @@ pub fn render_compositor(
                 .child(if !selected_installed {
                     div()
                         .p(px(12.0))
-                        .rounded(px(style::INNER_RADIUS))
-                        .bg(style::tint(style::surface(&theme), theme.accent(), 0.12))
+                        .rounded(px(12.0))
+                        .bg(theme.primary().opacity(0.10))
                         .border_1()
-                        .border_color(style::tint(style::border(&theme), theme.accent(), 0.3))
+                        .border_color(theme.primary().opacity(0.30))
                         .flex()
                         .items_center()
                         .justify_between()
@@ -241,16 +248,16 @@ pub fn render_compositor(
                         )
                 } else {
                     div()
-                        .p(px(10.0))
-                        .rounded(px(style::INNER_RADIUS))
-                        .bg(style::tint(style::surface(&theme), theme.green(), 0.1))
+                        .p(px(12.0))
+                        .rounded(px(12.0))
+                        .bg(theme.green().opacity(0.10))
                         .border_1()
-                        .border_color(style::tint(style::border(&theme), theme.green(), 0.3))
+                        .border_color(theme.green().opacity(0.30))
                         .flex()
                         .items_center()
                         .gap(px(8.0))
                         .child(
-                            gpui::svg()
+                            svg()
                                 .path("check.svg")
                                 .size(px(16.0))
                                 .text_color(theme.green()),
@@ -275,7 +282,7 @@ pub fn render_compositor(
                 .justify_between()
                 .pt(px(16.0))
                 .border_t_1()
-                .border_color(style::border(&theme))
+                .border_color(theme.outline_variant().opacity(0.30))
                 .child(
                     style::secondary_button("comp-back-btn", "Back".to_string(), &theme).on_click(
                         cx.listener(|this, _, _, cx| {

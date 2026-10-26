@@ -157,6 +157,10 @@ impl Theme {
         self.green_color.to_hsla()
     }
 
+    pub fn yellow(&self) -> Hsla {
+        parse_hex_to_hsla("#E5A93C")
+    }
+
     pub fn on_accent(&self) -> Hsla {
         fn luminance(color: Hsla) -> f32 {
             let color = hsla_to_rgba(color);
@@ -184,6 +188,130 @@ impl Theme {
         text.alpha = 1.0;
         text
     }
+
+    pub fn primary(&self) -> Hsla {
+        self.accent()
+    }
+
+    pub fn on_primary(&self) -> Hsla {
+        self.on_accent()
+    }
+
+    pub fn primary_container(&self) -> Hsla {
+        tint(
+            self.surface(),
+            self.primary(),
+            if self.mode == ThemeMode::Light { 0.28 } else { 0.22 },
+        )
+    }
+
+    pub fn on_primary_container(&self) -> Hsla {
+        if self.mode == ThemeMode::Light {
+            tint(self.primary(), parse_hex_to_hsla("#000000"), 0.35)
+        } else {
+            tint(self.primary(), parse_hex_to_hsla("#FFFFFF"), 0.35)
+        }
+    }
+
+    pub fn secondary(&self) -> Hsla {
+        tint(self.primary(), self.foreground_muted(), 0.5)
+    }
+
+    pub fn secondary_container(&self) -> Hsla {
+        tint(self.surface(), self.secondary(), 0.2)
+    }
+
+    pub fn on_secondary_container(&self) -> Hsla {
+        self.foreground()
+    }
+
+    pub fn surface_container_lowest(&self) -> Hsla {
+        tint(self.surface(), self.background(), 0.6)
+    }
+
+    pub fn surface_container_low(&self) -> Hsla {
+        tint(self.surface(), self.background(), 0.3)
+    }
+
+    pub fn surface_container(&self) -> Hsla {
+        self.surface()
+    }
+
+    pub fn surface_container_high(&self) -> Hsla {
+        tint(
+            self.surface(),
+            self.foreground(),
+            if self.mode == ThemeMode::Light { 0.04 } else { 0.07 },
+        )
+    }
+
+    pub fn surface_container_highest(&self) -> Hsla {
+        tint(
+            self.surface(),
+            self.foreground(),
+            if self.mode == ThemeMode::Light { 0.08 } else { 0.14 },
+        )
+    }
+
+    pub fn outline(&self) -> Hsla {
+        tint(
+            self.surface(),
+            self.foreground_muted(),
+            if self.mode == ThemeMode::Light { 0.45 } else { 0.35 },
+        )
+    }
+
+    pub fn outline_variant(&self) -> Hsla {
+        tint(
+            self.surface(),
+            self.foreground_muted(),
+            if self.mode == ThemeMode::Light { 0.20 } else { 0.15 },
+        )
+    }
+
+    pub fn on_surface_variant(&self) -> Hsla {
+        self.foreground_muted()
+    }
+
+    pub fn hover_layer(&self, base: Hsla) -> Hsla {
+        tint(base, self.foreground(), 0.08)
+    }
+
+    pub fn pressed_layer(&self, base: Hsla) -> Hsla {
+        tint(base, self.foreground(), 0.14)
+    }
+
+    pub fn primary_hover(&self) -> Hsla {
+        tint(self.primary(), self.on_primary(), 0.08)
+    }
+
+    pub fn primary_pressed(&self) -> Hsla {
+        tint(self.primary(), self.on_primary(), 0.14)
+    }
+}
+
+pub const SHAPE_XS: f32 = 4.0;
+pub const SHAPE_SM: f32 = 8.0;
+pub const SHAPE_MD: f32 = 12.0;
+pub const SHAPE_LG: f32 = 16.0;
+pub const SHAPE_XL: f32 = 28.0;
+pub const SHAPE_FULL: f32 = 9999.0;
+
+pub fn opaque(mut color: Hsla) -> Hsla {
+    color.alpha = 1.0;
+    color
+}
+
+pub fn tint(base: Hsla, color: Hsla, amount: f32) -> Hsla {
+    let base = gpui::hsla_to_rgba(base);
+    let color = gpui::hsla_to_rgba(color);
+    let amount = (amount * color.alpha).clamp(0.0, 1.0);
+    gpui::rgb_to_hsla(gpui::Rgba::new(
+        base.red + (color.red - base.red) * amount,
+        base.green + (color.green - base.green) * amount,
+        base.blue + (color.blue - base.blue) * amount,
+        1.0,
+    ))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

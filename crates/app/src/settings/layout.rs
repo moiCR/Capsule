@@ -1,6 +1,7 @@
 use super::{HEIGHT, Settings, WIDTH, header, views};
-use crate::capsule::widgets::style;
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px,
+};
 use ui::theme::Theme;
 
 pub(crate) fn render_settings(
@@ -62,9 +63,9 @@ pub(crate) fn render_settings(
         .p(px(24.0))
         .flex_shrink_0()
         .rounded(px(capsule_radius))
-        .bg(style::background(&theme))
+        .bg(theme.surface_container_lowest())
         .border_1()
-        .border_color(style::border(&theme))
+        .border_color(theme.outline_variant().opacity(0.35))
         .shadow_xl()
         .font_family(theme.font_family())
         .text_color(theme.foreground())
