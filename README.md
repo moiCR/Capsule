@@ -4,7 +4,7 @@
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-supported-1793d1?logo=archlinux&logoColor=white)](https://archlinux.org/)
 [![NixOS](https://img.shields.io/badge/NixOS-supported-5277c3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Debian](https://img.shields.io/badge/Debian-supported-5277c3?logo=debian&logoColor=white)](https://debian.org/)
-[![ubuntu](https://img.shields.io/badge/Ubuntu-supported-5277c3?logo=ubuntu&logoColor=white)](https://ubuntu.org/)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-supported-5277c3?logo=ubuntu&logoColor=white)](https://ubuntu.org/)
 [![Fedora](https://img.shields.io/badge/Fedora-supported-5277c3?logo=fedora&logoColor=white)](https://ubuntu.org/)
 
 
@@ -32,7 +32,7 @@ In a typical tiling Wayland setup, you end up gluing together 5 or 6 separate da
 Because it is written in Rust and powered by GPUI, it renders directly through the GPU at 60+ FPS with minimal RAM consumption, avoiding the runtime overhead of WebViews, Electron, or QML/JS engines.
 
 ## Showcase
-https://github.com/user-attachments/assets/baf17a29-27d1-4f04-a97b-43b860c84d84
+https://github.com/user-attachments/assets/6344429e-1668-4c74-987d-df56255ec8c7
 
 ## Features
 ### Dynamic Island & Shell

@@ -1,6 +1,7 @@
 use crate::app::InstallerApp;
-use crate::style;
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px,
+};
 use ui::theme::Theme;
 
 pub fn render_installing(
@@ -14,10 +15,11 @@ pub fn render_installing(
     let log_lines = app.logs.iter().enumerate().map(|(idx, line)| {
         div()
             .id(("log-line", idx as u32))
-            .text_size(px(11.0))
-            .line_height(px(16.0))
+            .text_size(px(11.5))
+            .line_height(px(17.0))
+            .font_family(theme.font_family())
             .text_color(if line.starts_with("==>") || line.starts_with('[') {
-                theme.accent()
+                theme.primary()
             } else if line.contains("Error") || line.contains("error") {
                 theme.red()
             } else {
@@ -31,6 +33,7 @@ pub fn render_installing(
         .flex_col()
         .size_full()
         .justify_between()
+        .p(px(26.0))
         .child(
             div()
                 .flex()
@@ -38,6 +41,7 @@ pub fn render_installing(
                 .gap(px(16.0))
                 .flex_1()
                 .min_h_0()
+                // View Header
                 .child(
                     div()
                         .flex()
@@ -50,16 +54,16 @@ pub fn render_installing(
                                 .justify_between()
                                 .child(
                                     div()
-                                        .text_size(px(18.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_size(px(22.0))
+                                        .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(theme.foreground())
                                         .child("Installing Capsule"),
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(14.0))
+                                        .text_size(px(18.0))
                                         .font_weight(gpui::FontWeight::BOLD)
-                                        .text_color(theme.accent())
+                                        .text_color(theme.primary())
                                         .child(format!("{}%", pct)),
                                 ),
                         )
@@ -76,14 +80,14 @@ pub fn render_installing(
                         .h(px(8.0))
                         .w_full()
                         .rounded_full()
-                        .bg(style::raised(&theme))
+                        .bg(theme.surface_container_highest())
                         .overflow_hidden()
                         .child(
                             div()
                                 .h_full()
                                 .w(gpui::relative(app.progress.clamp(0.0, 1.0)))
                                 .rounded_full()
-                                .bg(theme.accent()),
+                                .bg(theme.primary()),
                         ),
                 )
                 // Terminal Activity Log
@@ -93,11 +97,41 @@ pub fn render_installing(
                         .min_h_0()
                         .flex()
                         .flex_col()
-                        .p(px(12.0))
-                        .rounded(px(style::INNER_RADIUS))
-                        .bg(gpui::Rgba::new(0.05, 0.05, 0.07, 1.0))
+                        .rounded(px(12.0))
+                        .bg(theme.surface_container_lowest())
                         .border_1()
-                        .border_color(style::border(&theme))
+                        .border_color(theme.outline_variant().opacity(0.35))
+                        .overflow_hidden()
+                        // Terminal titlebar
+                        .child(
+                            div()
+                                .px(px(12.0))
+                                .py(px(8.0))
+                                .bg(theme.surface_container_low())
+                                .border_b_1()
+                                .border_color(theme.outline_variant().opacity(0.25))
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .child(div().size(px(8.0)).rounded_full().bg(theme.red().opacity(0.70)))
+                                        .child(div().size(px(8.0)).rounded_full().bg(theme.yellow().opacity(0.70)))
+                                        .child(div().size(px(8.0)).rounded_full().bg(theme.green().opacity(0.70))),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(10.5))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(theme.foreground_muted())
+                                        .child("Terminal Output"),
+                                )
+                                .child(div().w(px(24.0))),
+                        )
+                        // Terminal body
                         .child(
                             div()
                                 .id("logs-scroll-view")
@@ -105,18 +139,20 @@ pub fn render_installing(
                                 .flex_1()
                                 .min_h_0()
                                 .overflow_y_scroll()
+                                .p(px(12.0))
                                 .flex()
                                 .flex_col()
-                                .gap(px(2.0))
+                                .gap(px(3.0))
                                 .children(log_lines),
                         ),
                 ),
         )
+        // Footer message
         .child(
             div()
-                .pt(px(14.0))
+                .pt(px(16.0))
                 .border_t_1()
-                .border_color(style::border(&theme))
+                .border_color(theme.outline_variant().opacity(0.30))
                 .flex()
                 .items_center()
                 .justify_between()

@@ -1,6 +1,9 @@
 use crate::app::{InstallerApp, Step};
 use crate::style;
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, ColorExt, Context, IntoElement, ParentElement, Styled, Window, div, prelude::*, px,
+    svg,
+};
 use ui::theme::Theme;
 
 pub fn render_welcome(
@@ -33,10 +36,10 @@ pub fn render_welcome(
 
     let card_target_ver = div()
         .p(px(14.0))
-        .rounded(px(style::INNER_RADIUS))
-        .bg(style::raised(&theme))
+        .rounded(px(12.0))
+        .bg(theme.surface_container())
         .border_1()
-        .border_color(style::border(&theme))
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .flex_col()
         .gap(px(4.0))
@@ -47,8 +50,8 @@ pub fn render_welcome(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_size(px(10.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.foreground_muted())
                         .child("TARGET VERSION"),
                 )
@@ -66,7 +69,7 @@ pub fn render_welcome(
         )
         .child(
             div()
-                .text_size(px(16.0))
+                .text_size(px(17.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .child(target_ver),
@@ -80,23 +83,23 @@ pub fn render_welcome(
 
     let card_architecture = div()
         .p(px(14.0))
-        .rounded(px(style::INNER_RADIUS))
-        .bg(style::raised(&theme))
+        .rounded(px(12.0))
+        .bg(theme.surface_container())
         .border_1()
-        .border_color(style::border(&theme))
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .flex_col()
         .gap(px(4.0))
         .child(
             div()
-                .text_size(px(11.0))
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_size(px(10.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.foreground_muted())
                 .child("SYSTEM ARCHITECTURE"),
         )
         .child(
             div()
-                .text_size(px(16.0))
+                .text_size(px(15.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.foreground())
                 .child(app.target.to_string()),
@@ -110,23 +113,23 @@ pub fn render_welcome(
 
     let card_current_status = div()
         .p(px(14.0))
-        .rounded(px(style::INNER_RADIUS))
-        .bg(style::raised(&theme))
+        .rounded(px(12.0))
+        .bg(theme.surface_container())
         .border_1()
-        .border_color(style::border(&theme))
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .flex_col()
         .gap(px(4.0))
         .child(
             div()
-                .text_size(px(11.0))
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_size(px(10.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.foreground_muted())
                 .child("CURRENT STATUS"),
         )
         .child(
             div()
-                .text_size(px(16.0))
+                .text_size(px(17.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(if app.installed_version.is_some() {
                     theme.accent()
@@ -148,23 +151,23 @@ pub fn render_welcome(
 
     let card_dependencies = div()
         .p(px(14.0))
-        .rounded(px(style::INNER_RADIUS))
-        .bg(style::raised(&theme))
+        .rounded(px(12.0))
+        .bg(theme.surface_container())
         .border_1()
-        .border_color(style::border(&theme))
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .flex_col()
         .gap(px(4.0))
         .child(
             div()
-                .text_size(px(11.0))
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_size(px(10.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.foreground_muted())
                 .child("DEPENDENCIES"),
         )
         .child(
             div()
-                .text_size(px(16.0))
+                .text_size(px(17.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(if missing_count == 0 {
                     theme.green()
@@ -189,54 +192,33 @@ pub fn render_welcome(
         .flex_col()
         .size_full()
         .justify_between()
+        .p(px(26.0))
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(16.0))
+                .gap(px(18.0))
+                // View Header
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .gap(px(16.0))
+                        .flex_col()
+                        .gap(px(4.0))
                         .child(
                             div()
-                                .size(px(48.0))
-                                .rounded(px(style::INNER_RADIUS))
-                                .bg(style::raised(&theme))
-                                .border_1()
-                                .border_color(style::border(&theme))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    gpui::svg()
-                                        .path("package.svg")
-                                        .size(px(26.0))
-                                        .text_color(theme.accent()),
-                                ),
+                                .text_size(px(22.0))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme.foreground())
+                                .child("Welcome to Capsule"),
                         )
                         .child(
                             div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.0))
-                                .child(
-                                    div()
-                                        .text_size(px(18.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(theme.foreground())
-                                        .child("Welcome to Capsule"),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(13.0))
-                                        .text_color(theme.foreground_muted())
-                                        .child("Modern Dynamic Island & Desktop Shell for Linux"),
-                                ),
+                                .text_size(px(13.0))
+                                .text_color(theme.foreground_muted())
+                                .child("Modern Dynamic Island & Desktop Shell for Linux Wayland"),
                         ),
                 )
-                // 2x2 Grid using 2 flex rows
+                // 2x2 Grid
                 .child(
                     div()
                         .flex()
@@ -259,14 +241,160 @@ pub fn render_welcome(
                                 .child(div().flex_1().child(card_dependencies)),
                         ),
                 )
+                // Highlights Banner Card (eliminates the empty void!)
+                .child(
+                    div()
+                        .p(px(14.0))
+                        .rounded(px(12.0))
+                        .bg(theme.surface_container_low())
+                        .border_1()
+                        .border_color(theme.outline_variant().opacity(0.30))
+                        .flex()
+                        .flex_col()
+                        .gap(px(10.0))
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme.foreground_muted())
+                                .child("INCLUDED FEATURES"),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .gap(px(12.0))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(10.0))
+                                        .child(
+                                            div()
+                                                .size(px(32.0))
+                                                .rounded(px(8.0))
+                                                .bg(theme.accent().opacity(0.15))
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .child(
+                                                    svg()
+                                                        .path("sparkles.svg")
+                                                        .size(px(16.0))
+                                                        .text_color(theme.accent()),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_col()
+                                                .child(
+                                                    div()
+                                                        .text_size(px(12.5))
+                                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                                        .text_color(theme.foreground())
+                                                        .child("Dynamic Island"),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_size(px(10.5))
+                                                        .text_color(theme.foreground_muted())
+                                                        .child("Media, notifications, shelf"),
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(10.0))
+                                        .child(
+                                            div()
+                                                .size(px(32.0))
+                                                .rounded(px(8.0))
+                                                .bg(theme.primary().opacity(0.15))
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .child(
+                                                    svg()
+                                                        .path("monitor.svg")
+                                                        .size(px(16.0))
+                                                        .text_color(theme.primary()),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_col()
+                                                .child(
+                                                    div()
+                                                        .text_size(px(12.5))
+                                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                                        .text_color(theme.foreground())
+                                                        .child("Desktop Bar"),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_size(px(10.5))
+                                                        .text_color(theme.foreground_muted())
+                                                        .child("Dockless tray & calendar"),
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(10.0))
+                                        .child(
+                                            div()
+                                                .size(px(32.0))
+                                                .rounded(px(8.0))
+                                                .bg(theme.yellow().opacity(0.15))
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .child(
+                                                    svg()
+                                                        .path("palette.svg")
+                                                        .size(px(16.0))
+                                                        .text_color(theme.yellow()),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_col()
+                                                .child(
+                                                    div()
+                                                        .text_size(px(12.5))
+                                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                                        .text_color(theme.foreground())
+                                                        .child("Adaptive Theme"),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_size(px(10.5))
+                                                        .text_color(theme.foreground_muted())
+                                                        .child("Material You GTK & Qt sync"),
+                                                ),
+                                        ),
+                                ),
+                        ),
+                )
                 .when_some(app.error_message.as_ref(), |this, err| {
                     this.child(
                         div()
-                            .p(px(10.0))
-                            .rounded(px(style::INNER_RADIUS))
-                            .bg(style::tint(style::background(&theme), theme.red(), 0.15))
+                            .p(px(12.0))
+                            .rounded(px(10.0))
+                            .bg(theme.red().opacity(0.12))
                             .border_1()
-                            .border_color(theme.red())
+                            .border_color(theme.red().opacity(0.40))
                             .text_size(px(12.0))
                             .text_color(theme.red())
                             .child(format!("Error: {}", err)),
@@ -279,9 +407,9 @@ pub fn render_welcome(
                 .flex()
                 .items_center()
                 .justify_between()
-                .pt(px(14.0))
+                .pt(px(16.0))
                 .border_t_1()
-                .border_color(style::border(&theme))
+                .border_color(theme.outline_variant().opacity(0.30))
                 .child(
                     style::secondary_button("welcome-cancel-btn", "Cancel".to_string(), &theme)
                         .on_click(cx.listener(|this, _, _, cx| {
