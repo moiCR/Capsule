@@ -1,12 +1,13 @@
 use std::time::Duration;
 
-use gpui::{Context, IntoElement, Styled, px, svg};
+use gpui::{
+    ColorExt, Context, IntoElement, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Styled, px, svg,
+};
 use services::AppState;
 use ui::components::{Input, InputState};
 use ui::theme::Theme;
 
 use crate::island::module::launcher::LauncherModule;
-use crate::island::widgets::style;
 
 pub fn render_search(
     search_input: &InputState,
@@ -28,14 +29,30 @@ pub fn render_search(
         .w_full()
         .h_px(44.0)
         .rounded_full()
-        .bg(style::surface(theme))
-        .border_color(style::border(theme))
-        .focused_border_color(theme.accent())
+        .bg(theme.surface_container_high())
+        .border_color(theme.outline_variant().opacity(0.40))
+        .focused_border_color(theme.primary())
         .prefix(
             svg()
                 .path("search.svg")
                 .size(px(17.0))
-                .text_color(theme.foreground_muted()),
+                .text_color(theme.on_surface_variant()),
         )
+        .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+            let theme = cx.global::<Theme>().clone();
+            this.search_input.handle_mouse_down(event, window, &theme);
+            cx.notify();
+        }))
+        .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+            if this.search_input.is_dragging {
+                let theme = cx.global::<Theme>().clone();
+                this.search_input.handle_mouse_move(event, window, &theme);
+                cx.notify();
+            }
+        }))
+        .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+            this.search_input.handle_mouse_up(event);
+            cx.notify();
+        }))
         .on_clear(cx.listener(|this, _, _, cx| this.reset_search(cx)))
 }

@@ -1,11 +1,10 @@
-use super::{
-    default::{render_status, render_workspaces},
-    style,
-};
+use super::default::{render_status, render_workspaces};
 use crate::island::module::{
     CapsuleModuleEvent, CapsuleModuleId, default_expanded::DefaultExpandedModule,
 };
-use gpui::{Context, FontWeight, IntoElement, StyledImage, div, img, prelude::*, px, svg};
+use gpui::{
+    ColorExt, Context, FontWeight, IntoElement, StyledImage, div, img, prelude::*, px, svg,
+};
 use services::AppState;
 use std::{path::PathBuf, time::Duration};
 use ui::theme::Theme;
@@ -33,13 +32,13 @@ pub fn render(
         )
     };
     let no_media = state.language.get("dashboard.no_media");
-    let hover = style::hover(&theme);
+    let hover = theme.surface_container_highest();
     let app_icon = snapshot.icon.as_ref().map_or_else(
         || {
             svg()
                 .path("grid-dots.svg")
                 .size(px(16.0))
-                .text_color(theme.accent())
+                .text_color(theme.primary())
                 .into_any_element()
         },
         |path| {
@@ -105,7 +104,9 @@ pub fn render(
         .h(px(54.0))
         .px(px(10.0))
         .rounded(px(16.0))
-        .bg(style::surface(&theme))
+        .bg(theme.surface_container_high())
+        .border_1()
+        .border_color(theme.outline_variant().opacity(0.35))
         .flex()
         .items_center()
         .gap(px(10.0))
@@ -116,7 +117,7 @@ pub fn render(
             .flex_shrink_0()
             .rounded_full()
             .overflow_hidden()
-            .bg(style::raised(&theme))
+            .bg(theme.surface_container_highest())
             .flex()
             .items_center()
             .justify_center();
@@ -132,7 +133,7 @@ pub fn render(
                 svg()
                     .path("music.svg")
                     .size(px(18.0))
-                    .text_color(theme.accent()),
+                    .text_color(theme.primary()),
             )
         };
         music = music
@@ -175,7 +176,7 @@ pub fn render(
                             .w(px(2.0))
                             .h(px(2.0 + level * 18.0))
                             .rounded_full()
-                            .bg(theme.accent())
+                            .bg(theme.primary())
                     })),
             );
     } else {
@@ -225,7 +226,7 @@ pub fn render(
                         .path("bell.svg")
                         .size(px(14.0))
                         .flex_shrink_0()
-                        .text_color(theme.accent()),
+                        .text_color(theme.primary()),
                 ),
         )
         .child(

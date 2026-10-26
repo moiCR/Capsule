@@ -6,7 +6,7 @@ use crate::island::module::{
         model::{COLUMNS, PAGE_SIZE, ROWS},
     },
 };
-use gpui::{Context, IntoElement, div, prelude::*, px, svg};
+use gpui::{ColorExt, Context, IntoElement, div, prelude::*, px, svg};
 use services::AppState;
 use ui::components::{IconButton, Input};
 use ui::theme::Theme;
@@ -40,14 +40,14 @@ pub fn render(module: &EmojiModule, cx: &mut Context<EmojiModule>) -> gpui::Stat
         .h_px(40.0)
         .w_full()
         .rounded_full()
-        .bg(style::surface(&theme))
-        .border_color(style::border(&theme))
-        .focused_border_color(theme.accent())
+        .bg(theme.surface_container_high())
+        .border_color(theme.outline_variant().opacity(0.35))
+        .focused_border_color(theme.primary())
         .prefix(
             svg()
                 .path("search.svg")
                 .size(px(16.0))
-                .text_color(theme.foreground_muted()),
+                .text_color(theme.on_surface_variant()),
         )
         .on_clear(cx.listener(|module, _, _, cx| {
             module.search_input.clear();
@@ -70,7 +70,7 @@ pub fn render(module: &EmojiModule, cx: &mut Context<EmojiModule>) -> gpui::Stat
                             .path("sparkles.svg")
                             .size(px(16.0))
                             .text_color(if selected {
-                                style::on_accent(&theme)
+                                theme.primary()
                             } else {
                                 theme.foreground_muted()
                             })
@@ -90,15 +90,21 @@ pub fn render(module: &EmojiModule, cx: &mut Context<EmojiModule>) -> gpui::Stat
                         .h_full()
                         .rounded(px(style::INNER_RADIUS))
                         .bg(if selected {
-                            theme.accent()
+                            theme.primary_container()
                         } else {
-                            style::surface(&theme)
+                            theme.surface_container_high()
+                        })
+                        .border_1()
+                        .border_color(if selected {
+                            theme.primary()
+                        } else {
+                            theme.outline_variant().opacity(0.30)
                         })
                         .cursor_pointer()
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(style::hover(&theme)))
+                        .hover(|s| s.bg(theme.surface_container_highest()))
                         .on_click(
                             cx.listener(move |module, _, _, cx| module.category(category, cx)),
                         )
@@ -150,17 +156,17 @@ pub fn render(module: &EmojiModule, cx: &mut Context<EmojiModule>) -> gpui::Stat
                         .rounded(px(style::INNER_RADIUS))
                         .border_1()
                         .border_color(if selected {
-                            theme.accent()
+                            theme.primary()
                         } else {
-                            style::surface(&theme)
+                            theme.outline_variant().opacity(0.30)
                         })
                         .bg(if selected {
-                            style::selected(&theme)
+                            theme.primary_container().opacity(0.70)
                         } else {
-                            style::surface(&theme)
+                            theme.surface_container_high()
                         })
                         .cursor_pointer()
-                        .hover(|s| s.bg(style::hover(&theme)))
+                        .hover(|s| s.bg(theme.surface_container_highest()))
                         .flex()
                         .items_center()
                         .justify_center()

@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render,
-    Size, Task, Window, div, img, px, svg,
+    App, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render, Size,
+    Task, Window, div, img, px, svg,
 };
 use services::NotificationStore;
 use ui::theme::Theme;
@@ -144,7 +144,6 @@ impl Render for NotificationPopupModule {
         };
 
         let hover_icon = style::hover(&theme);
-        let hover_chip = style::hover(&theme);
 
         let header = div()
             .flex()
@@ -230,6 +229,7 @@ impl Render for NotificationPopupModule {
         }
 
         if !item.actions.is_empty() {
+            let chip_hover = theme.hover_layer(theme.primary_container());
             let mut actions_row = div().flex().items_center().gap(px(8.0)).pt(px(4.0));
             for (idx, (key, label)) in item.actions.into_iter().enumerate() {
                 let key_clone = key.clone();
@@ -238,23 +238,22 @@ impl Render for NotificationPopupModule {
                 } else {
                     "Abrir".to_string()
                 };
-                let chip_hover = hover_chip;
                 actions_row = actions_row.child(
                     div()
                         .id(format!("notif-popup-act-{id}-{idx}"))
-                        .h(px(24.0))
-                        .px(px(10.0))
-                        .rounded(px(6.0))
-                        .bg(style::surface(&theme).opacity(0.85))
+                        .h(px(26.0))
+                        .px(px(12.0))
+                        .rounded_full()
+                        .bg(theme.primary_container())
                         .border_1()
-                        .border_color(style::border(&theme).opacity(0.16))
+                        .border_color(theme.primary_container())
                         .hover(move |s| s.bg(chip_hover))
                         .cursor_pointer()
                         .flex()
                         .items_center()
                         .text_size(px(11.5))
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme.foreground())
+                        .text_color(theme.on_primary_container())
                         .child(label_str)
                         .on_click(cx.listener(move |_, _, _, cx| {
                             NotificationStore::global().invoke_action(id, key_clone.clone());

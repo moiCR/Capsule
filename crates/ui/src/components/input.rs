@@ -1,15 +1,22 @@
 use crate::theme::Theme;
+use crate::tracker::dimension_tracker::DimensionTracker;
 use gpui::{
-    AnyElement, App, ClickEvent, ColorExt, DefiniteLength, DurationWithEasing, ElementId,
-    FontWeight, Hsla, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Pixels,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, ease_in_out, millis,
+    AnyElement, App, ClickEvent, ColorExt, DefiniteLength, DurationWithEasing, ElementId, Font,
+    Hsla, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, TextRun, Window, canvas, div, ease_in_out, millis, point,
     prelude::*, px, svg,
 };
+use std::cell::Cell;
 use std::ops::Range;
+use std::rc::Rc;
 
 pub type InputClickListener = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+pub type InputMouseDownListener = Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>;
+pub type InputMouseMoveListener = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
+pub type InputMouseUpListener = Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App) + 'static>;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct InputState {
     pub chars: Vec<char>,
     pub cursor: usize,
@@ -19,6 +26,33 @@ pub struct InputState {
     pub masked: bool,
     pub focused: bool,
     pub max_len: usize,
+    pub is_dragging: bool,
+    pub centered: bool,
+    pub tracker: DimensionTracker,
+    pub scroll_offset: Rc<Cell<f32>>,
+    pub font_size: Pixels,
+    pub padding_left: f32,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            chars: Vec::new(),
+            cursor: 0,
+            selection: None,
+            selection_anchor: None,
+            placeholder: String::new(),
+            masked: false,
+            focused: false,
+            max_len: 120,
+            is_dragging: false,
+            centered: false,
+            tracker: DimensionTracker::new(),
+            scroll_offset: Rc::new(Cell::new(0.0)),
+            font_size: px(14.0),
+            padding_left: 14.0,
+        }
+    }
 }
 
 impl InputState {
@@ -35,6 +69,12 @@ impl InputState {
             masked: false,
             focused: false,
             max_len: 120,
+            is_dragging: false,
+            centered: false,
+            tracker: DimensionTracker::new(),
+            scroll_offset: Rc::new(Cell::new(0.0)),
+            font_size: px(14.0),
+            padding_left: 14.0,
         }
     }
 
@@ -58,6 +98,21 @@ impl InputState {
         self
     }
 
+    pub fn with_font_size(mut self, font_size: Pixels) -> Self {
+        self.font_size = font_size;
+        self
+    }
+
+    pub fn with_padding(mut self, padding_left: f32) -> Self {
+        self.padding_left = padding_left;
+        self
+    }
+
+    pub fn with_centered(mut self, centered: bool) -> Self {
+        self.centered = centered;
+        self
+    }
+
     pub fn text(&self) -> String {
         self.chars.iter().collect()
     }
@@ -67,6 +122,7 @@ impl InputState {
         self.cursor = self.chars.len();
         self.selection = None;
         self.selection_anchor = None;
+        self.scroll_offset.set(0.0);
     }
 
     pub fn clear(&mut self) {
@@ -74,6 +130,7 @@ impl InputState {
         self.cursor = 0;
         self.selection = None;
         self.selection_anchor = None;
+        self.scroll_offset.set(0.0);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -151,11 +208,9 @@ impl InputState {
     }
 
     pub fn backspace(&mut self) {
-        if !self.delete_selection() && self.cursor > 0 {
+        if !self.delete_selection() && self.cursor > 0 && self.cursor <= self.chars.len() {
             self.cursor -= 1;
-            if self.cursor < self.chars.len() {
-                self.chars.remove(self.cursor);
-            }
+            self.chars.remove(self.cursor);
         }
     }
 
@@ -166,7 +221,7 @@ impl InputState {
     }
 
     pub fn move_left(&mut self, select: bool) {
-        if !select {
+        if !select && self.selection.is_some() {
             if let Some(range) = self.selection.take() {
                 self.selection_anchor = None;
                 self.cursor = range.start;
@@ -178,7 +233,7 @@ impl InputState {
     }
 
     pub fn move_right(&mut self, select: bool) {
-        if !select {
+        if !select && self.selection.is_some() {
             if let Some(range) = self.selection.take() {
                 self.selection_anchor = None;
                 self.cursor = range.end.min(self.chars.len());
@@ -190,23 +245,16 @@ impl InputState {
     }
 
     pub fn move_to_start(&mut self, select: bool) {
-        if !select {
-            self.selection = None;
-            self.selection_anchor = None;
-        }
         self.update_cursor(0, select);
     }
 
     pub fn move_to_end(&mut self, select: bool) {
-        if !select {
-            self.selection = None;
-            self.selection_anchor = None;
-        }
         let len = self.chars.len();
         self.update_cursor(len, select);
     }
 
-    fn update_cursor(&mut self, new_cursor: usize, select: bool) {
+    pub fn update_cursor(&mut self, new_cursor: usize, select: bool) {
+        let new_cursor = new_cursor.min(self.chars.len());
         if select {
             let anchor = self.selection_anchor.get_or_insert(self.cursor);
             self.cursor = new_cursor;
@@ -225,10 +273,14 @@ impl InputState {
     }
 
     pub fn prev_word_boundary(&self) -> usize {
-        if self.cursor == 0 {
+        self.prev_word_boundary_from(self.cursor)
+    }
+
+    pub fn prev_word_boundary_from(&self, from: usize) -> usize {
+        let mut idx = from.min(self.chars.len());
+        if idx == 0 {
             return 0;
         }
-        let mut idx = self.cursor;
         while idx > 0 && self.chars[idx - 1].is_whitespace() {
             idx -= 1;
         }
@@ -239,11 +291,15 @@ impl InputState {
     }
 
     pub fn next_word_boundary(&self) -> usize {
+        self.next_word_boundary_from(self.cursor)
+    }
+
+    pub fn next_word_boundary_from(&self, from: usize) -> usize {
         let len = self.chars.len();
-        if self.cursor >= len {
+        let mut idx = from.min(len);
+        if idx >= len {
             return len;
         }
-        let mut idx = self.cursor;
         while idx < len && !self.chars[idx].is_whitespace() {
             idx += 1;
         }
@@ -251,6 +307,16 @@ impl InputState {
             idx += 1;
         }
         idx
+    }
+
+    pub fn move_word_backward(&mut self, select: bool) {
+        let prev = self.prev_word_boundary();
+        self.update_cursor(prev, select);
+    }
+
+    pub fn move_word_forward(&mut self, select: bool) {
+        let next = self.next_word_boundary();
+        self.update_cursor(next, select);
     }
 
     pub fn delete_word_backward(&mut self) {
@@ -272,7 +338,185 @@ impl InputState {
         }
     }
 
+    pub fn select_word_at(&mut self, index: usize) {
+        let idx = index.min(self.chars.len());
+        if self.chars.is_empty() {
+            return;
+        }
+        let mut start = idx;
+        while start > 0
+            && !self.chars[start - 1].is_whitespace()
+            && !self.chars[start - 1].is_ascii_punctuation()
+        {
+            start -= 1;
+        }
+        let mut end = idx;
+        while end < self.chars.len()
+            && !self.chars[end].is_whitespace()
+            && !self.chars[end].is_ascii_punctuation()
+        {
+            end += 1;
+        }
+        if start == end && end < self.chars.len() {
+            end += 1;
+        }
+        self.selection = Some(start..end);
+        self.selection_anchor = Some(start);
+        self.cursor = end;
+    }
+
+    pub fn char_index_from_local_point(
+        &self,
+        local_x: Pixels,
+        window: &Window,
+        theme: &Theme,
+    ) -> usize {
+        let display_str: String = if self.masked {
+            "•".repeat(self.chars.len())
+        } else {
+            self.chars.iter().collect()
+        };
+
+        if display_str.is_empty() {
+            return 0;
+        }
+
+        let run = TextRun {
+            len: display_str.len(),
+            font: Font {
+                family: theme.font_family().into(),
+                ..Default::default()
+            },
+            color: theme.foreground(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+            letter_spacing: None,
+        };
+
+        let shaped_res = window.text_system().shape_text(
+            display_str.clone(),
+            self.font_size,
+            &[run],
+            None,
+            None,
+        );
+
+        let Ok(shaped) = shaped_res else {
+            return 0;
+        };
+
+        let mut hit_x = local_x;
+        if self.centered {
+            let available_width = px(self.tracker.right() - self.tracker.left());
+            if available_width > shaped.width {
+                let offset_x = (available_width - shaped.width) / 2.0;
+                if hit_x < offset_x {
+                    return 0;
+                }
+                if hit_x > offset_x + shaped.width {
+                    return self.chars.len();
+                }
+                hit_x -= offset_x;
+            }
+        } else {
+            hit_x += px(self.scroll_offset.get());
+        }
+
+        let byte_idx = match shaped.closest_byte_index_for_pixel_point(
+            point(hit_x.max(px(0.0)), px(0.0)),
+            self.font_size * 1.5,
+        ) {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        };
+
+        let safe_byte_idx = if display_str.is_char_boundary(byte_idx.min(display_str.len())) {
+            byte_idx.min(display_str.len())
+        } else {
+            let mut b = byte_idx.min(display_str.len());
+            while b > 0 && !display_str.is_char_boundary(b) {
+                b -= 1;
+            }
+            b
+        };
+
+        let char_col = display_str[..safe_byte_idx].chars().count();
+        char_col.min(self.chars.len())
+    }
+
+    pub fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &Window,
+        theme: &Theme,
+    ) {
+        let left = px(self.tracker.left());
+        let local_x = (event.position.x - left).max(px(0.0));
+
+        let char_idx = self.char_index_from_local_point(local_x, window, theme);
+
+        if event.click_count >= 3 {
+            self.select_all();
+            self.is_dragging = false;
+        } else if event.click_count == 2 {
+            self.select_word_at(char_idx);
+            self.is_dragging = false;
+        } else if event.modifiers.shift {
+            let anchor = self.selection_anchor.unwrap_or(self.cursor);
+            self.cursor = char_idx;
+            self.selection_anchor = Some(anchor);
+            if anchor != char_idx {
+                self.selection = Some(anchor.min(char_idx)..anchor.max(char_idx));
+            } else {
+                self.selection = None;
+            }
+            self.is_dragging = true;
+        } else {
+            self.cursor = char_idx;
+            self.selection_anchor = Some(char_idx);
+            self.selection = None;
+            self.is_dragging = true;
+        }
+        self.focused = true;
+    }
+
+    pub fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &Window,
+        theme: &Theme,
+    ) {
+        if !self.is_dragging {
+            return;
+        }
+        let left = px(self.tracker.left());
+        let local_x = (event.position.x - left).max(px(0.0));
+
+        let char_idx = self.char_index_from_local_point(local_x, window, theme);
+        self.cursor = char_idx;
+        let anchor = self.selection_anchor.unwrap_or(char_idx);
+        if anchor != char_idx {
+            self.selection = Some(anchor.min(char_idx)..anchor.max(char_idx));
+        } else {
+            self.selection = None;
+        }
+    }
+
+    pub fn handle_mouse_up(&mut self, _event: &MouseUpEvent) {
+        self.is_dragging = false;
+        if let Some(ref range) = self.selection {
+            if range.start == range.end {
+                self.selection = None;
+                self.selection_anchor = None;
+            }
+        }
+    }
+
     pub fn copy(&self, cx: &mut App) {
+        if self.masked {
+            return;
+        }
         let text = self.selected_text().unwrap_or_else(|| self.text());
         if !text.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
@@ -280,6 +524,9 @@ impl InputState {
     }
 
     pub fn cut(&mut self, cx: &mut App) {
+        if self.masked {
+            return;
+        }
         let text = self.selected_text().unwrap_or_else(|| self.text());
         if !text.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
@@ -340,13 +587,11 @@ impl InputState {
                     return true;
                 }
                 "left" => {
-                    let prev = self.prev_word_boundary();
-                    self.update_cursor(prev, shift);
+                    self.move_word_backward(shift);
                     return true;
                 }
                 "right" => {
-                    let next = self.next_word_boundary();
-                    self.update_cursor(next, shift);
+                    self.move_word_forward(shift);
                     return true;
                 }
                 "home" => {
@@ -451,7 +696,12 @@ pub struct Input {
     flex_1: bool,
     padding_x: Option<Pixels>,
     gap: Option<Pixels>,
+    tracker: Option<DimensionTracker>,
+    scroll_offset: Option<Rc<Cell<f32>>>,
     on_click: Option<InputClickListener>,
+    on_mouse_down: Option<InputMouseDownListener>,
+    on_mouse_move: Option<InputMouseMoveListener>,
+    on_mouse_up: Option<InputMouseUpListener>,
     on_clear: Option<InputClickListener>,
 }
 
@@ -479,12 +729,17 @@ impl Input {
             border_color: None,
             focused_border_color: None,
             text_size: None,
-            max_visible_chars: 30,
+            max_visible_chars: 120,
             cursor_visible: None,
             flex_1: false,
             padding_x: None,
             gap: None,
+            tracker: None,
+            scroll_offset: None,
             on_click: None,
+            on_mouse_down: None,
+            on_mouse_move: None,
+            on_mouse_up: None,
             on_clear: None,
         }
     }
@@ -494,8 +749,12 @@ impl Input {
             .placeholder(state.placeholder.clone())
             .focused(state.focused)
             .masked(state.masked)
+            .centered(state.centered)
             .cursor(state.cursor)
             .selection(state.selection.clone())
+            .tracker(state.tracker.clone())
+            .scroll_offset(state.scroll_offset.clone())
+            .text_size(state.font_size)
     }
 
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
@@ -550,6 +809,16 @@ impl Input {
 
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    pub fn tracker(mut self, tracker: DimensionTracker) -> Self {
+        self.tracker = Some(tracker);
+        self
+    }
+
+    pub fn scroll_offset(mut self, scroll_offset: Rc<Cell<f32>>) -> Self {
+        self.scroll_offset = Some(scroll_offset);
         self
     }
 
@@ -651,6 +920,30 @@ impl Input {
         self
     }
 
+    pub fn on_mouse_down<F>(mut self, listener: F) -> Self
+    where
+        F: Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    {
+        self.on_mouse_down = Some(Box::new(listener));
+        self
+    }
+
+    pub fn on_mouse_move<F>(mut self, listener: F) -> Self
+    where
+        F: Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
+    {
+        self.on_mouse_move = Some(Box::new(listener));
+        self
+    }
+
+    pub fn on_mouse_up<F>(mut self, listener: F) -> Self
+    where
+        F: Fn(&MouseUpEvent, &mut Window, &mut App) + 'static,
+    {
+        self.on_mouse_up = Some(Box::new(listener));
+        self
+    }
+
     pub fn on_clear<F>(mut self, listener: F) -> Self
     where
         F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -661,7 +954,7 @@ impl Input {
 }
 
 impl RenderOnce for Input {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.global::<Theme>().clone();
 
         let chars: Vec<char> = if self.masked {
@@ -677,16 +970,16 @@ impl RenderOnce for Input {
 
         let height = self.height.unwrap_or(px(44.0));
         let rounded = self.rounded.unwrap_or(px(9999.0));
-        let bg_color = self.bg.unwrap_or_else(|| theme.surface());
+        let bg_color = self.bg.unwrap_or_else(|| theme.surface_container_high());
         let font_size = self.text_size.unwrap_or(px(14.0));
 
         let current_border = if self.error {
             theme.red()
         } else if self.focused {
-            self.focused_border_color.unwrap_or_else(|| theme.accent())
+            self.focused_border_color.unwrap_or_else(|| theme.primary())
         } else {
             self.border_color
-                .unwrap_or_else(|| theme.surface().opacity(0.35))
+                .unwrap_or_else(|| theme.outline_variant())
         };
 
         let mut container = div()
@@ -730,6 +1023,30 @@ impl RenderOnce for Input {
             container = container.on_click(on_click);
         }
 
+        if let Some(down) = self.on_mouse_down {
+            container = container.on_mouse_down(MouseButton::Left, move |evt, win, app| {
+                down(evt, win, app);
+            });
+        }
+
+        if let Some(move_fn) = self.on_mouse_move {
+            container = container.on_mouse_move(move |evt, win, app| {
+                move_fn(evt, win, app);
+            });
+        }
+
+        if let Some(up) = self.on_mouse_up {
+            let up_rc = std::rc::Rc::new(up);
+            let up_clone = up_rc.clone();
+            container = container
+                .on_mouse_up(MouseButton::Left, move |evt, win, app| {
+                    up_rc(evt, win, app);
+                })
+                .on_mouse_up_out(MouseButton::Left, move |evt, win, app| {
+                    up_clone(evt, win, app);
+                });
+        }
+
         if let Some(prefix) = self.prefix {
             container = container.child(
                 div()
@@ -742,6 +1059,7 @@ impl RenderOnce for Input {
         }
 
         let mut text_container = div()
+            .relative()
             .flex_1()
             .min_w_0()
             .h_full()
@@ -749,21 +1067,127 @@ impl RenderOnce for Input {
             .flex()
             .items_center();
 
+        if let Some(ref tracker) = self.tracker {
+            let tracker_canvas = canvas(
+                {
+                    let tracker = tracker.clone();
+                    move |bounds, _, _| {
+                        tracker.track_bounds(bounds);
+                        bounds
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0();
+
+            text_container = text_container.child(tracker_canvas);
+        }
+
         if self.centered {
             text_container = text_container.justify_center();
         }
 
+        let total_chars = chars.len();
+        let display_str: String = chars.iter().collect();
+
+        // Calculate text metrics and horizontal scroll offset if text overflows container
+        let mut scroll_offset_px = 0.0;
+        if let (Some(tracker), Some(scroll_cell)) = (&self.tracker, &self.scroll_offset) {
+            let available_width = tracker.right() - tracker.left();
+            if available_width > 20.0 && !self.centered && !display_str.is_empty() {
+                let cursor_pos = self.cursor.unwrap_or(total_chars).min(total_chars);
+                let cursor_str: String = chars[..cursor_pos].iter().collect();
+
+                let run = TextRun {
+                    len: display_str.len(),
+                    font: Font {
+                        family: theme.font_family().into(),
+                        ..Default::default()
+                    },
+                    color: theme.foreground(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                    letter_spacing: None,
+                };
+
+                let cursor_run = TextRun {
+                    len: cursor_str.len(),
+                    font: Font {
+                        family: theme.font_family().into(),
+                        ..Default::default()
+                    },
+                    color: theme.foreground(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                    letter_spacing: None,
+                };
+
+                let total_text_width: f32 = window
+                    .text_system()
+                    .shape_text(display_str.clone(), font_size, &[run], None, None)
+                    .map(|s| f32::from(s.width))
+                    .unwrap_or(0.0);
+
+                let cursor_x: f32 = if cursor_pos == 0 {
+                    0.0
+                } else if cursor_pos == total_chars {
+                    total_text_width
+                } else {
+                    window
+                        .text_system()
+                        .shape_text(cursor_str, font_size, &[cursor_run], None, None)
+                        .map(|s| f32::from(s.width))
+                        .unwrap_or(0.0)
+                };
+
+                let mut current_offset = scroll_cell.get();
+                if cursor_x > current_offset + available_width - 14.0 {
+                    current_offset = cursor_x - available_width + 14.0;
+                }
+                if cursor_x < current_offset + 10.0 {
+                    current_offset = (cursor_x - 10.0).max(0.0);
+                }
+                if total_text_width <= available_width {
+                    current_offset = 0.0;
+                } else {
+                    current_offset = current_offset
+                        .min(total_text_width - available_width + 20.0)
+                        .max(0.0);
+                }
+                scroll_cell.set(current_offset);
+                scroll_offset_px = current_offset;
+            }
+        }
+
+        let mut text_line = div()
+            .flex()
+            .items_center()
+            .min_w_0()
+            .whitespace_nowrap()
+            .text_size(font_size);
+
+        if scroll_offset_px > 0.0 {
+            text_line = text_line.ml(-px(scroll_offset_px));
+        }
+
+        if self.centered {
+            text_line = text_line.justify_center();
+        }
+
         if is_empty {
             if show_cursor && !self.centered {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .flex_shrink_0()
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(theme.accent())
-                        .child("│"),
+                        .w(px(2.0))
+                        .h(px(18.0))
+                        .bg(theme.accent())
+                        .rounded_full(),
                 );
             }
-            text_container = text_container.child(
+            text_line = text_line.child(
                 div()
                     .flex_1()
                     .min_w_0()
@@ -771,7 +1195,7 @@ impl RenderOnce for Input {
                     .whitespace_nowrap()
                     .text_size(font_size)
                     .text_color(theme.foreground_muted().opacity(if self.focused {
-                        0.6
+                        0.60
                     } else {
                         0.85
                     }))
@@ -779,137 +1203,86 @@ impl RenderOnce for Input {
                     .child(self.placeholder),
             );
         } else if let Some(ref sel) = self.selection {
-            // Visual text selection!
-            let start = sel.start.min(chars.len());
-            let end = sel.end.min(chars.len());
+            let start = sel.start.min(total_chars);
+            let end = sel.end.min(total_chars);
 
-            let max_v = self.max_visible_chars.max(10);
-            let (visible_start, visible_end) = if chars.len() > max_v {
-                if end <= max_v {
-                    (0, max_v.min(chars.len()))
-                } else if start + max_v >= chars.len() {
-                    (chars.len().saturating_sub(max_v), chars.len())
-                } else {
-                    (start, (start + max_v).min(chars.len()))
-                }
-            } else {
-                (0, chars.len())
-            };
-
-            let s_start = start.max(visible_start).min(visible_end);
-            let s_end = end.max(visible_start).min(visible_end);
-
-            let before_str: String = chars[visible_start..s_start].iter().collect();
-            let selected_str: String = chars[s_start..s_end].iter().collect();
-            let after_str: String = chars[s_end..visible_end].iter().collect();
+            let before_str: String = chars[..start].iter().collect();
+            let selected_str: String = chars[start..end].iter().collect();
+            let after_str: String = chars[end..].iter().collect();
 
             if !before_str.is_empty() {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .min_w_0()
                         .whitespace_nowrap()
-                        .text_size(font_size)
                         .text_color(theme.foreground())
                         .child(before_str),
                 );
             }
 
             if !selected_str.is_empty() {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .min_w_0()
                         .whitespace_nowrap()
-                        .text_size(font_size)
                         .bg(theme.accent().opacity(0.35))
-                        .rounded(px(3.0))
-                        .px(px(2.0))
+                        .rounded(px(2.0))
+                        .px(px(1.0))
                         .text_color(theme.foreground())
                         .child(selected_str),
                 );
             }
 
             if !after_str.is_empty() {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .min_w_0()
                         .whitespace_nowrap()
-                        .text_size(font_size)
                         .text_color(theme.foreground())
                         .child(after_str),
                 );
             }
         } else if self.focused {
-            // Active cursor editing mode!
-            let cursor_pos = self.cursor.unwrap_or(chars.len()).min(chars.len());
-
-            // Compute visible slice around cursor
-            let max_v = self.max_visible_chars.max(10);
-            let (visible_start, visible_end) = if chars.len() > max_v {
-                let half = max_v / 2;
-                if cursor_pos <= half {
-                    (0, max_v.min(chars.len()))
-                } else if cursor_pos + half >= chars.len() {
-                    (chars.len().saturating_sub(max_v), chars.len())
-                } else {
-                    (
-                        cursor_pos - half,
-                        (cursor_pos - half + max_v).min(chars.len()),
-                    )
-                }
-            } else {
-                (0, chars.len())
-            };
-
-            let before_cursor: String = chars[visible_start..cursor_pos].iter().collect();
-            let after_cursor: String = chars[cursor_pos..visible_end].iter().collect();
+            let cursor_pos = self.cursor.unwrap_or(total_chars).min(total_chars);
+            let before_cursor: String = chars[..cursor_pos].iter().collect();
+            let after_cursor: String = chars[cursor_pos..].iter().collect();
 
             if !before_cursor.is_empty() {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .min_w_0()
                         .whitespace_nowrap()
-                        .text_size(font_size)
                         .text_color(theme.foreground())
                         .child(before_cursor),
                 );
             }
 
             if show_cursor {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .flex_shrink_0()
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(theme.accent())
-                        .child("│"),
+                        .w(px(2.0))
+                        .h(px(18.0))
+                        .bg(theme.accent())
+                        .rounded_full(),
                 );
             }
 
             if !after_cursor.is_empty() {
-                text_container = text_container.child(
+                text_line = text_line.child(
                     div()
-                        .min_w_0()
                         .whitespace_nowrap()
-                        .text_size(font_size)
                         .text_color(theme.foreground())
                         .child(after_cursor),
                 );
             }
         } else {
-            // Blurred state with clean ellipsis
-            let text_val: String = chars.iter().collect();
-            text_container = text_container.child(
+            text_line = text_line.child(
                 div()
-                    .flex_1()
-                    .min_w_0()
-                    .text_ellipsis()
                     .whitespace_nowrap()
-                    .text_size(font_size)
+                    .text_ellipsis()
                     .text_color(theme.foreground())
                     .when(self.centered, |s| s.text_center())
-                    .child(text_val),
+                    .child(display_str),
             );
         }
 
+        text_container = text_container.child(text_line);
         container = container.child(text_container);
 
         if self.cleanable && !is_empty {
@@ -1047,6 +1420,23 @@ mod tests {
     }
 
     #[test]
+    fn test_select_word_at() {
+        let mut state = InputState::new("foo bar baz");
+        state.select_word_at(5); // inside "bar"
+        assert_eq!(state.selection, Some(4..7));
+        assert_eq!(state.selected_text(), Some("bar".to_string()));
+        assert_eq!(state.cursor, 7);
+
+        state.select_word_at(0); // at 'f' of "foo"
+        assert_eq!(state.selection, Some(0..3));
+        assert_eq!(state.selected_text(), Some("foo".to_string()));
+
+        state.select_word_at(10); // at 'z' of "baz"
+        assert_eq!(state.selection, Some(8..11));
+        assert_eq!(state.selected_text(), Some("baz".to_string()));
+    }
+
+    #[test]
     fn test_word_boundaries_and_word_deletion() {
         let mut state = InputState::new("foo bar baz");
         state.set_cursor(11); // end of baz
@@ -1074,5 +1464,12 @@ mod tests {
         // Cannot insert more
         state.insert("x");
         assert_eq!(state.text(), "hello");
+    }
+
+    #[test]
+    fn test_masked_input() {
+        let state = InputState::new("secret123").with_masked(true);
+        assert!(state.masked);
+        assert_eq!(state.text(), "secret123");
     }
 }

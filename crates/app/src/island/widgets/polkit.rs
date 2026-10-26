@@ -1,6 +1,6 @@
 use super::style;
 use crate::island::module::polkit::PolkitModule;
-use gpui::{AnyElement, Context, FocusHandle, IntoElement, div, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, Context, FocusHandle, IntoElement, div, prelude::*, px, svg};
 use services::AppState;
 use ui::components::{Button, ButtonVariant, Input};
 use ui::theme::Theme;
@@ -69,11 +69,11 @@ pub(crate) fn render(
         )
         .h_px(42.0)
         .rounded_full()
-        .bg(style::background(&theme))
+        .bg(theme.surface_container_high())
         .border_color(if module.error.is_some() {
             theme.red()
         } else {
-            style::tint(style::border(&theme), theme.accent(), 0.35)
+            theme.outline_variant().opacity(0.40)
         })
         .on_click(cx.listener(|this, _, window, cx| window.focus(&this.focus_handle(), cx)));
     let mut feedback = div()
@@ -115,7 +115,7 @@ pub(crate) fn render(
                         .size(px(30.0))
                         .flex_shrink_0()
                         .rounded_full()
-                        .bg(theme.accent())
+                        .bg(theme.primary_container())
                         .flex()
                         .items_center()
                         .justify_center()
@@ -123,7 +123,7 @@ pub(crate) fn render(
                             svg()
                                 .path("lock.svg")
                                 .size(px(15.0))
-                                .text_color(style::on_accent(&theme)),
+                                .text_color(theme.primary()),
                         ),
                 )
                 .child(
@@ -161,7 +161,9 @@ pub(crate) fn render(
                 .h(px(message_card_height))
                 .p(px(8.0))
                 .rounded(px(style::CARD_RADIUS))
-                .bg(style::surface(&theme))
+                .bg(theme.surface_container_high())
+                .border_1()
+                .border_color(theme.outline_variant().opacity(0.35))
                 .flex_shrink_0()
                 .flex()
                 .flex_col()

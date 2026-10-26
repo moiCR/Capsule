@@ -139,7 +139,7 @@ impl Render for TrayModule {
                             .flex_shrink_0()
                             .my(px(4.0))
                             .w_full()
-                            .bg(style::border(&theme).opacity(0.16)),
+                            .bg(theme.outline_variant()),
                     );
                 } else {
                     let id = menu_item.id;
@@ -147,7 +147,7 @@ impl Render for TrayModule {
                     let bus = bus_name.clone();
                     let m_path = menu_path.clone();
                     let clean_label = menu_item.label.replace('_', "");
-                    let hover_bg = style::hover(&theme);
+                    let hover_bg = theme.hover_layer(theme.surface_container_high());
 
                     let mut row = div()
                         .id(("tray-item-row", item_i))
@@ -156,7 +156,7 @@ impl Render for TrayModule {
                         .h(px(34.0))
                         .flex_shrink_0()
                         .px(px(10.0))
-                        .rounded(px(8.0))
+                        .rounded(px(10.0))
                         .text_size(px(13.0));
 
                     if enabled {

@@ -1,27 +1,455 @@
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use chrono::{Datelike, Duration as ChronoDuration, Local, NaiveDate};
 use gpui::prelude::*;
 use gpui::{
-    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render,
-    Size, Window, div, img, px, svg,
+    App, BoxShadow, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent,
+    Pixels, Render, Size, Task, Window, div, img, point, px, svg,
 };
-use services::{AppState, NotificationStore};
-use ui::components::Switch;
+use services::{AppState, CalendarNotesService, NotificationStore};
+use ui::components::{Switch, TextArea, TextAreaState};
 use ui::theme::Theme;
 
 use super::{SharedPanelEvent, SharedPanelItem};
 use crate::bar::style;
 
+pub const NOTIF_ENTER_DURATION: f32 = 0.18;
+pub const NOTIF_EXIT_DURATION: f32 = 0.18;
+pub const OVERLAY_DURATION: f32 = 0.18;
+
 pub struct CalendarModule {
     focus: FocusHandle,
+    seen_ids: HashSet<u32>,
+    entering: HashMap<u32, Instant>,
+    dismissing: HashMap<u32, Instant>,
+    anim_task: Option<Task<()>>,
+    selected_date: Option<NaiveDate>,
+    note_state: TextAreaState,
+    overlay_open: bool,
+    overlay_progress: f32,
+    overlay_anim_start: Option<Instant>,
+    overlay_closing: bool,
 }
 
 impl CalendarModule {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let initial_ids = NotificationStore::global()
+            .get_all_notifications()
+            .into_iter()
+            .map(|n| n.id)
+            .collect();
+
+        let mut sub = NotificationStore::global().subscribe();
+        cx.spawn(async move |this, cx| {
+            while sub.changed().await.is_ok() {
+                let _ = this.update(cx, |module, cx| {
+                    module.check_new_notifications(cx);
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+
         Self {
             focus: cx.focus_handle(),
+            seen_ids: initial_ids,
+            entering: HashMap::new(),
+            dismissing: HashMap::new(),
+            anim_task: None,
+            selected_date: None,
+            note_state: TextAreaState::new(""),
+            overlay_open: false,
+            overlay_progress: 0.0,
+            overlay_anim_start: None,
+            overlay_closing: false,
         }
+    }
+
+    pub fn check_new_notifications(&mut self, cx: &mut Context<Self>) {
+        let notifs = NotificationStore::global().get_all_notifications();
+        let now = Instant::now();
+        let mut has_new = false;
+        for notif in &notifs {
+            if !self.seen_ids.contains(&notif.id) {
+                self.seen_ids.insert(notif.id);
+                self.entering.insert(notif.id, now);
+                has_new = true;
+            }
+        }
+        let current_ids: HashSet<u32> = notifs.iter().map(|n| n.id).collect();
+        self.seen_ids
+            .retain(|id| current_ids.contains(id) || self.dismissing.contains_key(id));
+
+        if has_new {
+            self.spawn_anim_task(cx);
+        }
+    }
+
+    pub fn dismiss_notification(&mut self, id: u32, cx: &mut Context<Self>) {
+        self.dismissing.insert(id, Instant::now());
+        self.spawn_anim_task(cx);
+        cx.notify();
+    }
+
+    pub fn dismiss_all_notifications(&mut self, cx: &mut Context<Self>) {
+        let notifs = NotificationStore::global().get_all_notifications();
+        let now = Instant::now();
+        for notif in notifs {
+            self.dismissing.insert(notif.id, now);
+        }
+        self.spawn_anim_task(cx);
+        cx.notify();
+    }
+
+    pub fn open_note_subview(&mut self, date: NaiveDate, cx: &mut Context<Self>) {
+        let key = format!("{}-{:02}-{:02}", date.year(), date.month(), date.day());
+        let content = if let Some(state) = cx.try_global::<AppState>() {
+            state.calendar_notes.get_note(&key).unwrap_or_default()
+        } else {
+            CalendarNotesService::global()
+                .get_note(&key)
+                .unwrap_or_default()
+        };
+
+        let placeholder = if let Some(state) = cx.try_global::<AppState>() {
+            state.language.get("calendar_notes.placeholder")
+        } else {
+            "Escribe una nota para este día...".to_string()
+        };
+
+        self.selected_date = Some(date);
+        self.note_state = TextAreaState::new(content)
+            .with_placeholder(placeholder)
+            .with_focused(true);
+        self.overlay_open = true;
+        self.overlay_closing = false;
+        self.overlay_anim_start = Some(Instant::now());
+        if self.overlay_progress <= 0.01 {
+            self.overlay_progress = 0.01;
+        }
+        self.spawn_anim_task(cx);
+        cx.emit(SharedPanelEvent::SyncWindow);
+        cx.notify();
+    }
+
+    pub fn close_note_subview(&mut self, cx: &mut Context<Self>) {
+        self.save_current_note(cx);
+        self.overlay_closing = true;
+        self.overlay_anim_start = Some(Instant::now());
+        self.spawn_anim_task(cx);
+        cx.emit(SharedPanelEvent::SyncWindow);
+        cx.notify();
+    }
+
+    pub fn save_current_note(&mut self, cx: &mut Context<Self>) {
+        if let Some(date) = self.selected_date {
+            let key = format!("{}-{:02}-{:02}", date.year(), date.month(), date.day());
+            let text = self.note_state.text();
+            if let Some(state) = cx.try_global::<AppState>() {
+                state.calendar_notes.set_note(key, text);
+            } else {
+                CalendarNotesService::global().set_note(key, text);
+            }
+        }
+    }
+
+    pub fn delete_current_note(&mut self, cx: &mut Context<Self>) {
+        if let Some(date) = self.selected_date {
+            let key = format!("{}-{:02}-{:02}", date.year(), date.month(), date.day());
+            if let Some(state) = cx.try_global::<AppState>() {
+                state.calendar_notes.delete_note(&key);
+            } else {
+                CalendarNotesService::global().delete_note(&key);
+            }
+            self.note_state.clear();
+            cx.notify();
+        }
+    }
+
+    pub fn handle_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let key = event.keystroke.key.as_str();
+
+        if self.overlay_open {
+            if key == "escape" {
+                self.close_note_subview(cx);
+                cx.stop_propagation();
+                return;
+            }
+
+            if self.note_state.handle_key_down(event, cx) {
+                self.save_current_note(cx);
+                cx.notify();
+                cx.stop_propagation();
+            }
+            return;
+        }
+
+        if key == "escape" {
+            cx.emit(SharedPanelEvent::Close);
+            cx.stop_propagation();
+        }
+    }
+
+    fn spawn_anim_task(&mut self, cx: &mut Context<Self>) {
+        if self.anim_task.is_some() {
+            return;
+        }
+        self.anim_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                let mut keep_running = false;
+                let updated = this.update(cx, |module, cx| {
+                    keep_running = module.advance_animations();
+                    cx.notify();
+                });
+                if updated.is_err() || !keep_running {
+                    if let Some(handle) = this.upgrade() {
+                        let _ = handle.update(cx, |module, _| {
+                            module.anim_task = None;
+                        });
+                    }
+                    break;
+                }
+            }
+        }));
+    }
+
+    fn advance_animations(&mut self) -> bool {
+        let now = Instant::now();
+        let mut keep_running = false;
+
+        if let Some(start) = self.overlay_anim_start {
+            let elapsed = now.duration_since(start).as_secs_f32();
+            let raw = (elapsed / OVERLAY_DURATION).clamp(0.0, 1.0);
+            let eased = 1.0 - (1.0 - raw).powi(3);
+
+            if self.overlay_closing {
+                self.overlay_progress = (1.0 - eased).clamp(0.0, 1.0);
+                if raw >= 1.0 {
+                    self.overlay_progress = 0.0;
+                    self.overlay_open = false;
+                    self.overlay_anim_start = None;
+                    self.overlay_closing = false;
+                    self.selected_date = None;
+                } else {
+                    keep_running = true;
+                }
+            } else {
+                self.overlay_progress = eased.clamp(0.0, 1.0);
+                if raw >= 1.0 {
+                    self.overlay_progress = 1.0;
+                    self.overlay_anim_start = None;
+                } else {
+                    keep_running = true;
+                }
+            }
+        }
+
+        self.entering.retain(|_, start| {
+            let elapsed = now.duration_since(*start).as_secs_f32();
+            if elapsed < NOTIF_ENTER_DURATION {
+                keep_running = true;
+                true
+            } else {
+                false
+            }
+        });
+
+        let mut finished_dismiss = Vec::new();
+        for (&id, &start) in &self.dismissing {
+            let elapsed = now.duration_since(start).as_secs_f32();
+            if elapsed >= NOTIF_EXIT_DURATION {
+                finished_dismiss.push(id);
+            } else {
+                keep_running = true;
+            }
+        }
+
+        for id in finished_dismiss {
+            self.dismissing.remove(&id);
+            self.seen_ids.remove(&id);
+            NotificationStore::global().remove_notification(id);
+        }
+
+        keep_running
+    }
+
+    fn render_notes_overlay(&mut self, theme: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
+        let progress = self.overlay_progress.clamp(0.0, 1.0);
+        let offset_y = (1.0 - progress) * 18.0;
+        let hover_bg = style::hover(theme);
+
+        let (header_date_str, back_label) = if let Some(date) = self.selected_date {
+            let app_state = cx.try_global::<AppState>();
+            let (m_name, w_name, b_label) = if let Some(s) = app_state {
+                let l = &s.language;
+                let mn = l
+                    .get_list("datetime.months")
+                    .get(date.month().saturating_sub(1) as usize)
+                    .cloned()
+                    .unwrap_or_else(|| date.month().to_string());
+                let wn = l
+                    .get_list("datetime.days")
+                    .get(date.weekday().num_days_from_monday() as usize)
+                    .cloned()
+                    .unwrap_or_else(|| date.weekday().to_string());
+                (mn, wn, l.get("calendar_notes.back"))
+            } else {
+                (
+                    date.month().to_string(),
+                    date.weekday().to_string(),
+                    "Volver".to_string(),
+                )
+            };
+            (
+                format!("{}, {} de {} {}", w_name, date.day(), m_name, date.year()),
+                b_label,
+            )
+        } else {
+            (String::new(), "Volver".to_string())
+        };
+
+        let header = div()
+            .h(px(36.0))
+            .w_full()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.0))
+                    .child(
+                        div()
+                            .id("calendar-notes-back-btn")
+                            .h(px(30.0))
+                            .px(px(10.0))
+                            .rounded_full()
+                            .bg(theme.surface_container_high())
+                            .border_1()
+                            .border_color(theme.outline_variant().opacity(0.40))
+                            .flex()
+                            .items_center()
+                            .gap(px(5.0))
+                            .cursor_pointer()
+                            .hover(move |s| s.bg(hover_bg))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.close_note_subview(cx);
+                            }))
+                            .child(
+                                svg()
+                                    .path("chevron-left.svg")
+                                    .size(px(14.0))
+                                    .text_color(theme.foreground()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.foreground())
+                                    .child(back_label),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.foreground())
+                            .child(header_date_str),
+                    ),
+            )
+            .when(!self.note_state.is_empty(), |h| {
+                h.child(
+                    div()
+                        .id("calendar-notes-delete-btn")
+                        .size(px(30.0))
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .hover(move |s| s.bg(theme.red().opacity(0.18)))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.delete_current_note(cx);
+                        }))
+                        .child(
+                            svg()
+                                .path("trash.svg")
+                                .size(px(14.0))
+                                .text_color(theme.red()),
+                        ),
+                )
+            });
+
+        let body = div().flex_1().min_h_0().w_full().child(
+            TextArea::new("calendar-note-textarea", &self.note_state)
+                .bordered(false)
+                .bg(gpui::transparent_black())
+                .padding(px(4.0))
+                .font_size(px(15.0))
+                .line_height(px(26.0))
+                .on_mouse_down(cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                    let theme = cx.global::<Theme>().clone();
+                    this.note_state.handle_mouse_down(event, window, &theme);
+                    cx.notify();
+                }))
+                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                    if this.note_state.is_dragging {
+                        let theme = cx.global::<Theme>().clone();
+                        this.note_state.handle_mouse_move(event, window, &theme);
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_up(cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
+                    this.note_state.handle_mouse_up(event);
+                    cx.notify();
+                })),
+        );
+
+        div()
+            .id("calendar-notes-overlay-backdrop")
+            .absolute()
+            .inset_0()
+            .backdrop_blur(px(16.0 * progress))
+            .bg(gpui::black().opacity(0.30 * progress))
+            .flex()
+            .flex_col()
+            .p(px(8.0))
+            .child(
+                div()
+                    .size_full()
+                    .relative()
+                    .top(px(offset_y))
+                    .opacity(progress)
+                    .rounded(px(18.0))
+                    .bg(style::background(theme).opacity(0.96))
+                    .border_1()
+                    .border_color(style::border(theme).opacity(0.24))
+                    .shadow(vec![BoxShadow {
+                        color: gpui::black().opacity(0.40).into(),
+                        offset: point(px(0.0), px(8.0)),
+                        blur_radius: px(24.0),
+                        spread_radius: px(0.0),
+                        inset: false,
+                    }])
+                    .p(px(16.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.0))
+                    .child(header)
+                    .child(body),
+            )
     }
 }
 
@@ -37,6 +465,10 @@ impl SharedPanelItem for CalendarModule {
 
     fn focus_handle(&self) -> Option<FocusHandle> {
         Some(self.focus.clone())
+    }
+
+    fn needs_exclusive_keyboard(&self) -> bool {
+        self.overlay_open
     }
 }
 
@@ -144,6 +576,23 @@ impl Render for CalendarModule {
 
             for notif in notifications {
                 let id = notif.id;
+                let is_dismissing = self.dismissing.get(&id).copied();
+                let is_entering = self.entering.get(&id).copied();
+
+                let (opacity, offset_x, offset_y) = if let Some(start) = is_dismissing {
+                    let elapsed = start.elapsed().as_secs_f32();
+                    let raw = (elapsed / NOTIF_EXIT_DURATION).clamp(0.0, 1.0);
+                    let eased = raw.powi(2);
+                    (1.0 - eased, eased * 36.0, 0.0)
+                } else if let Some(start) = is_entering {
+                    let elapsed = start.elapsed().as_secs_f32();
+                    let raw = (elapsed / NOTIF_ENTER_DURATION).clamp(0.0, 1.0);
+                    let eased = 1.0 - (1.0 - raw).powi(3);
+                    (eased, 0.0, (1.0 - eased) * -12.0)
+                } else {
+                    (1.0, 0.0, 0.0)
+                };
+
                 let icon_el = if !notif.app_icon.is_empty()
                     && (notif.app_icon.starts_with('/') || notif.app_icon.contains('.'))
                 {
@@ -160,11 +609,15 @@ impl Render for CalendarModule {
                 };
 
                 let mut item_card = div()
-                    .p(px(10.0))
-                    .rounded(px(10.0))
-                    .bg(style::background(&theme).opacity(0.55))
+                    .relative()
+                    .opacity(opacity)
+                    .left(px(offset_x))
+                    .top(px(offset_y))
+                    .p(px(12.0))
+                    .rounded(px(12.0))
+                    .bg(theme.surface_container_high())
                     .border_1()
-                    .border_color(style::border(&theme).opacity(0.14))
+                    .border_color(theme.outline_variant())
                     .flex()
                     .flex_col()
                     .gap(px(4.0))
@@ -208,9 +661,8 @@ impl Render for CalendarModule {
                                             .size(px(12.0))
                                             .text_color(theme.foreground_muted()),
                                     )
-                                    .on_click(cx.listener(move |_, _, _, cx| {
-                                        NotificationStore::global().remove_notification(id);
-                                        cx.notify();
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.dismiss_notification(id, cx);
                                     })),
                             ),
                     )
@@ -260,11 +712,10 @@ impl Render for CalendarModule {
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.foreground())
                                 .child(label_str)
-                                .on_click(cx.listener(move |_, _, _, cx| {
+                                .on_click(cx.listener(move |this, _, _, cx| {
                                     NotificationStore::global()
                                         .invoke_action(id, key_clone.clone());
-                                    NotificationStore::global().remove_notification(id);
-                                    cx.notify();
+                                    this.dismiss_notification(id, cx);
                                 })),
                         );
                     }
@@ -333,23 +784,23 @@ impl Render for CalendarModule {
                                     .child(dnd_label),
                             ),
                     )
-                    .child(
+                    .child({
+                        let clear_btn_hover = theme.surface_container_highest();
                         div()
                             .id("shared-notif-clear-btn")
                             .h(px(28.0))
-                            .px(px(12.0))
-                            .rounded(px(7.0))
-                            .bg(style::surface(&theme).opacity(0.60))
+                            .px(px(14.0))
+                            .rounded_full()
+                            .bg(theme.surface_container_high())
                             .border_1()
-                            .border_color(style::border(&theme).opacity(0.16))
+                            .border_color(theme.outline_variant())
                             .flex()
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .hover(move |s| s.bg(hover_bg))
-                            .on_click(cx.listener(|_, _, _, cx| {
-                                NotificationStore::global().clear_all_notifications();
-                                cx.notify();
+                            .hover(move |s| s.bg(clear_btn_hover))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.dismiss_all_notifications(cx);
                             }))
                             .child(
                                 div()
@@ -357,8 +808,8 @@ impl Render for CalendarModule {
                                     .font_weight(gpui::FontWeight::MEDIUM)
                                     .text_color(theme.foreground())
                                     .child(clear_label),
-                            ),
-                    ),
+                            )
+                    }),
             );
 
         let today = now.date_naive();
@@ -387,16 +838,49 @@ impl Render for CalendarModule {
                 let is_current_month = cell_date.month() == month && cell_date.year() == year;
                 let is_today = cell_date == today;
 
+                let cell_key =
+                    format!("{}-{:02}-{:02}", cell_date.year(), cell_date.month(), cell_date.day());
+                let has_note = if let Some(state) = app_state {
+                    state.calendar_notes.has_note(&cell_key)
+                } else {
+                    CalendarNotesService::global().has_note(&cell_key)
+                };
+
                 let mut cell = div()
                     .id(format!("calendar-cell-{week}-{weekday}"))
                     .flex_1()
                     .h_full()
                     .flex()
+                    .flex_col()
                     .items_center()
                     .justify_center()
+                    .gap(px(1.0))
                     .rounded_full()
-                    .text_size(px(13.0))
-                    .child(cell_date.day().to_string());
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.open_note_subview(cell_date, cx);
+                    }))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .line_height(px(14.0))
+                            .child(cell_date.day().to_string()),
+                    );
+
+                if has_note {
+                    cell = cell.child(
+                        div()
+                            .size(px(4.0))
+                            .rounded_full()
+                            .bg(if is_today {
+                                theme.on_accent()
+                            } else {
+                                theme.accent()
+                            }),
+                    );
+                } else {
+                    cell = cell.child(div().size(px(4.0)));
+                }
 
                 if is_today {
                     cell = cell
@@ -407,10 +891,11 @@ impl Render for CalendarModule {
                     cell = cell
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(theme.foreground())
-                        .hover(move |s| s.bg(hover_bg))
-                        .cursor_pointer();
+                        .hover(move |s| s.bg(hover_bg));
                 } else {
-                    cell = cell.text_color(theme.foreground_muted().opacity(0.38));
+                    cell = cell
+                        .text_color(theme.foreground_muted().opacity(0.38))
+                        .hover(move |s| s.bg(hover_bg));
                 }
 
                 row = row.child(cell);
@@ -421,10 +906,10 @@ impl Render for CalendarModule {
         let calendar_card = div()
             .flex_1()
             .w_full()
-            .rounded(px(14.0))
-            .bg(style::surface(&theme).opacity(0.55))
+            .rounded(px(16.0))
+            .bg(theme.surface_container_low())
             .border_1()
-            .border_color(style::border(&theme).opacity(0.18))
+            .border_color(theme.outline_variant())
             .p(px(14.0))
             .flex()
             .flex_col()
@@ -547,14 +1032,11 @@ impl Render for CalendarModule {
             )
             .child(calendar_card);
 
-        div()
+        let mut root = div()
             .id("shared-panel-calendar")
+            .relative()
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|_, event: &KeyDownEvent, _, cx| {
-                if event.keystroke.key == "escape" {
-                    cx.emit(SharedPanelEvent::Close);
-                }
-            }))
+            .on_key_down(cx.listener(Self::handle_key_down))
             .size_full()
             .p(px(14.0))
             .flex()
@@ -562,6 +1044,12 @@ impl Render for CalendarModule {
             .gap(px(14.0))
             .font_family(theme.font_family())
             .child(left_column)
-            .child(right_column)
+            .child(right_column);
+
+        if self.overlay_open || self.overlay_progress > 0.001 {
+            root = root.child(self.render_notes_overlay(&theme, cx));
+        }
+
+        root
     }
 }

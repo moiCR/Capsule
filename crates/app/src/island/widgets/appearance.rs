@@ -283,12 +283,12 @@ pub(crate) fn render(
                     .h(px(props.height))
                     .rounded(px(style::CARD_RADIUS))
                     .overflow_hidden()
-                    .bg(style::surface(theme))
+                    .bg(theme.surface_container_high())
                     .border_2()
                     .border_color(if index == selected {
-                        theme.accent()
+                        theme.primary()
                     } else {
-                        theme.foreground().opacity(0.1)
+                        theme.outline_variant().opacity(0.35)
                     })
                     .opacity(props.opacity)
                     .cursor_pointer()

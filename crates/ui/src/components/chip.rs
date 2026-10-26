@@ -1,8 +1,8 @@
 use crate::theme::Theme;
 use gpui::{
-    App, ClickEvent, ColorExt, DurationWithEasing, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div,
-    ease_in_out, millis, px, svg,
+    App, ClickEvent, DurationWithEasing, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, ease_in_out, millis,
+    px, svg,
 };
 
 pub type ClickListener = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -114,17 +114,17 @@ impl RenderOnce for Chip {
 
         let (bg, hover_bg, text_col, border_col) = if self.selected {
             (
-                theme.accent(),
-                theme.accent().opacity(0.85),
-                theme.on_accent(),
-                theme.accent(),
+                theme.primary_container(),
+                theme.hover_layer(theme.primary_container()),
+                theme.on_primary_container(),
+                theme.primary_container(),
             )
         } else {
             (
-                theme.surface().opacity(0.35),
-                theme.surface().opacity(0.6),
+                theme.surface_container_low(),
+                theme.surface_container_high(),
                 theme.foreground(),
-                theme.surface().opacity(0.25),
+                theme.outline_variant(),
             )
         };
 

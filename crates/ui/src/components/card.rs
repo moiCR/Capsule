@@ -1,15 +1,24 @@
 use crate::theme::Theme;
 use gpui::{
-    AnyElement, App, ClickEvent, ColorExt, DurationWithEasing, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div,
-    ease_in_out, millis, px,
+    AnyElement, App, ClickEvent, DurationWithEasing, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, ease_in_out,
+    millis, px,
 };
 
 pub type ClickListener = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CardVariant {
+    #[default]
+    Filled,
+    Elevated,
+    Outlined,
+}
+
 #[derive(IntoElement)]
 pub struct Card {
     id: Option<ElementId>,
+    variant: CardVariant,
     radius: f32,
     elevated: bool,
     interactive: bool,
@@ -29,11 +38,13 @@ impl Default for Card {
 
 impl Card {
     pub const DEFAULT_RADIUS: f32 = 16.0;
+    pub const LARGE_RADIUS: f32 = 24.0;
     pub const INNER_RADIUS: f32 = 12.0;
 
     pub fn new() -> Self {
         Self {
             id: None,
+            variant: CardVariant::Filled,
             radius: Self::DEFAULT_RADIUS,
             elevated: false,
             interactive: false,
@@ -51,6 +62,16 @@ impl Card {
         self
     }
 
+    pub fn variant(mut self, variant: CardVariant) -> Self {
+        self.variant = variant;
+        if variant == CardVariant::Elevated {
+            self.elevated = true;
+        } else if variant == CardVariant::Outlined {
+            self.border = true;
+        }
+        self
+    }
+
     pub fn radius(mut self, radius: f32) -> Self {
         self.radius = radius;
         self
@@ -61,8 +82,16 @@ impl Card {
         self
     }
 
+    pub fn large(mut self) -> Self {
+        self.radius = Self::LARGE_RADIUS;
+        self
+    }
+
     pub fn elevated(mut self, elevated: bool) -> Self {
         self.elevated = elevated;
+        if elevated {
+            self.variant = CardVariant::Elevated;
+        }
         self
     }
 
@@ -111,10 +140,30 @@ impl RenderOnce for Card {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.global::<Theme>();
 
-        let (base_bg, hover_bg) = if self.elevated {
-            (theme.surface().opacity(0.7), theme.surface().opacity(0.9))
-        } else {
-            (theme.surface().opacity(0.4), theme.surface().opacity(0.6))
+        let (base_bg, hover_bg, border_color) = match self.variant {
+            CardVariant::Elevated => (
+                theme.surface_container_low(),
+                theme.surface_container(),
+                theme.surface_container_low(),
+            ),
+            CardVariant::Filled => (
+                if self.elevated {
+                    theme.surface_container_high()
+                } else {
+                    theme.surface_container()
+                },
+                theme.surface_container_highest(),
+                if self.border {
+                    theme.outline_variant()
+                } else {
+                    gpui::transparent_black()
+                },
+            ),
+            CardVariant::Outlined => (
+                theme.surface(),
+                theme.surface_container_low(),
+                theme.outline_variant(),
+            ),
         };
 
         if self.interactive || self.on_click.is_some() || self.id.is_some() {
@@ -142,8 +191,8 @@ impl RenderOnce for Card {
                 el = el.gap(px(g));
             }
 
-            if self.border {
-                el = el.border_1().border_color(theme.surface().opacity(0.2));
+            if self.border || self.variant == CardVariant::Outlined {
+                el = el.border_1().border_color(border_color);
             }
 
             if self.interactive || self.on_click.is_some() {
@@ -186,8 +235,8 @@ impl RenderOnce for Card {
                 el = el.gap(px(g));
             }
 
-            if self.border {
-                el = el.border_1().border_color(theme.surface().opacity(0.2));
+            if self.border || self.variant == CardVariant::Outlined {
+                el = el.border_1().border_color(border_color);
             }
 
             el.children(self.children).into_any_element()

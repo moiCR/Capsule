@@ -15,6 +15,6 @@ pub fn render(theme: &Theme) -> impl IntoElement {
             svg()
                 .path("cloud-upload.svg")
                 .size(px(32.0))
-                .text_color(theme.foreground_muted()),
+                .text_color(theme.primary()),
         )
 }

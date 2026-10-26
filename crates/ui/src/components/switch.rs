@@ -2,7 +2,7 @@ use crate::theme::Theme;
 use gpui::{
     App, ClickEvent, ColorExt, DurationWithEasing, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, ease_in_out,
-    millis, px, white,
+    millis, px, svg,
 };
 
 pub type ClickListener = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -12,6 +12,7 @@ pub struct Switch {
     id: ElementId,
     checked: bool,
     disabled: bool,
+    show_icon: bool,
     on_click: Option<ClickListener>,
 }
 
@@ -21,6 +22,7 @@ impl Switch {
             id: id.into(),
             checked: false,
             disabled: false,
+            show_icon: true,
             on_click: None,
         }
     }
@@ -32,6 +34,11 @@ impl Switch {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    pub fn show_icon(mut self, show_icon: bool) -> Self {
+        self.show_icon = show_icon;
         self
     }
 
@@ -49,41 +56,44 @@ impl RenderOnce for Switch {
         let theme = cx.global::<Theme>();
 
         let track_bg = if self.disabled {
-            theme.surface().opacity(0.4)
+            theme.surface_container_highest().opacity(0.4)
         } else if self.checked {
-            theme.accent()
+            theme.primary()
         } else {
-            theme.surface().opacity(0.65)
+            theme.surface_container_highest().opacity(0.35)
         };
 
-        let hover_bg = if self.checked {
-            theme.accent().opacity(0.85)
+        let hover_track_bg = if self.checked {
+            theme.primary_hover()
         } else {
-            theme.surface().opacity(0.85)
+            theme.surface_container_highest().opacity(0.6)
+        };
+
+        let border_color = if self.disabled {
+            theme.outline().opacity(0.3)
+        } else if self.checked {
+            theme.primary()
+        } else {
+            theme.outline()
         };
 
         let mut track = div()
             .id(self.id)
             .flex()
             .items_center()
-            .w(px(44.0))
-            .h(px(26.0))
-            .p(px(3.0))
+            .w(px(52.0))
+            .h(px(32.0))
             .rounded_full()
             .bg(track_bg)
-            .border_1()
-            .border_color(if self.checked {
-                theme.accent()
-            } else {
-                theme.surface().opacity(0.9)
-            })
+            .border_2()
+            .border_color(border_color)
             .transitions(|t| {
-                t.bg(millis(180).with_easing(ease_in_out))
-                    .border_color(millis(180).with_easing(ease_in_out))
+                t.bg(millis(200).with_easing(ease_in_out))
+                    .border_color(millis(200).with_easing(ease_in_out))
             });
 
         if !self.disabled {
-            track = track.cursor_pointer().hover(move |s| s.bg(hover_bg));
+            track = track.cursor_pointer().hover(move |s| s.bg(hover_track_bg));
 
             if let Some(on_click) = self.on_click {
                 track = track.on_click(move |evt, window, app| {
@@ -95,21 +105,39 @@ impl RenderOnce for Switch {
         }
 
         let knob_bg = if self.disabled {
-            white().opacity(0.6)
+            theme.outline().opacity(0.4)
+        } else if self.checked {
+            theme.on_primary()
         } else {
-            white()
+            theme.outline()
         };
 
-        let knob = div()
-            .size(px(20.0))
+        let knob_size = if self.checked { px(24.0) } else { px(16.0) };
+        let knob_ml = if self.checked { px(24.0) } else { px(6.0) };
+
+        let mut knob = div()
+            .size(knob_size)
             .rounded_full()
             .bg(knob_bg)
-            .shadow_sm()
-            .ml(if self.checked { px(18.0) } else { px(0.0) })
+            .ml(knob_ml)
+            .flex()
+            .items_center()
+            .justify_center()
             .transitions(|t| {
-                t.ml(millis(180).with_easing(ease_in_out))
-                    .bg(millis(180).with_easing(ease_in_out))
+                t.ml(millis(200).with_easing(ease_in_out))
+                    .bg(millis(200).with_easing(ease_in_out))
+                    .w(millis(200).with_easing(ease_in_out))
+                    .h(millis(200).with_easing(ease_in_out))
             });
+
+        if self.checked && self.show_icon && !self.disabled {
+            knob = knob.child(
+                svg()
+                    .path("check.svg")
+                    .size(px(14.0))
+                    .text_color(theme.primary()),
+            );
+        }
 
         track.child(knob)
     }

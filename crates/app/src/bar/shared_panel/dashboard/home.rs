@@ -373,28 +373,29 @@ fn top_pill_card(
     on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
     on_open_subview: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
-    let (bg_color, border_col, icon_color, fg_sub) = if active {
+    let (bg_color, border_col, icon_color, fg_main, fg_sub) = if active {
         (
-            style::surface(theme).opacity(0.85),
-            theme.accent().opacity(0.40),
-            theme.accent(),
-            theme.accent(),
+            theme.primary_container(),
+            theme.primary_container(),
+            theme.primary(),
+            theme.on_primary_container(),
+            theme.on_primary_container().opacity(0.85),
         )
     } else {
         (
-            style::surface(theme).opacity(0.50),
-            style::border(theme).opacity(0.18),
+            theme.surface_container_low(),
+            theme.outline_variant(),
             theme.foreground_muted(),
+            theme.foreground(),
             theme.foreground_muted(),
         )
     };
-    let fg_main = theme.foreground();
     let card_hover_bg = if active {
-        style::surface(theme)
+        theme.hover_layer(theme.primary_container())
     } else {
-        style::surface(theme).opacity(0.70)
+        theme.surface_container_high()
     };
-    let chevron_hover_bg = style::hover(theme);
+    let chevron_hover_bg = theme.hover_layer(gpui::transparent_black());
 
     div()
         .id((id_prefix, 0usize))
@@ -488,28 +489,28 @@ fn quick_icon_tile(
 ) -> AnyElement {
     let (bg, fg, border_col) = if active {
         (
-            theme.accent().opacity(0.18),
-            theme.accent(),
-            theme.accent().opacity(0.45),
+            theme.primary_container(),
+            theme.on_primary_container(),
+            theme.primary_container(),
         )
     } else {
         (
-            style::background(theme).opacity(0.50),
+            theme.surface_container_high(),
             theme.foreground(),
-            style::border(theme).opacity(0.16),
+            theme.outline_variant(),
         )
     };
     let hover_bg = if active {
-        theme.accent().opacity(0.28)
+        theme.hover_layer(theme.primary_container())
     } else {
-        style::hover(theme)
+        theme.surface_container_highest()
     };
 
     div()
         .id(id)
         .flex_1()
         .h(px(52.0))
-        .rounded(px(12.0))
+        .rounded(px(14.0))
         .bg(bg)
         .border_1()
         .border_color(border_col)
@@ -536,10 +537,10 @@ fn slider_card(
     on_track_up: impl Fn(&gpui::MouseUpEvent, &mut Window, &mut gpui::App) + 'static,
     on_gear_click: Option<Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static>>,
 ) -> AnyElement {
-    let hover_bg = style::hover(theme);
+    let hover_bg = theme.hover_layer(gpui::transparent_black());
     let fill_ratio = (pct as f32 / 100.0).clamp(0.0, 1.0);
     let active_color = if active {
-        theme.accent()
+        theme.primary()
     } else {
         theme.foreground_muted()
     };
@@ -555,7 +556,7 @@ fn slider_card(
         .flex_1(true)
         .label(format!("{pct}%"))
         .track_bounds(bounds)
-        .track_color(style::background(theme))
+        .track_color(theme.surface_container_highest())
         .active_color(active_color)
         .on_mouse_down(on_track_down)
         .on_mouse_up(on_track_up);
@@ -564,10 +565,10 @@ fn slider_card(
         .w_full()
         .h(px(54.0))
         .px(px(12.0))
-        .rounded(px(14.0))
-        .bg(style::surface(theme).opacity(0.65))
+        .rounded(px(16.0))
+        .bg(theme.surface_container_low())
         .border_1()
-        .border_color(style::border(theme).opacity(0.18))
+        .border_color(theme.outline_variant())
         .flex()
         .items_center()
         .gap(px(10.0))

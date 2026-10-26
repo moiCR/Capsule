@@ -1,8 +1,8 @@
 use crate::{
-    CalendarService, ClipboardService, CompositorService, ConfigService, IdleService, LangService,
-    LauncherService, LyricsService, MprisService, NetworkService, PolkitService, PowerService,
-    RecordService, ShelfService, SniHostService, SystemService, wallpaper::WallpaperService,
-    weather::WeatherService,
+    CalendarNotesService, CalendarService, ClipboardService, CompositorService, ConfigService,
+    IdleService, LangService, LauncherService, LyricsService, MprisService, NetworkService,
+    PolkitService, PowerService, RecordService, ShelfService, SniHostService, SystemService,
+    wallpaper::WallpaperService, weather::WeatherService,
 };
 
 #[derive(Clone)]
@@ -18,6 +18,7 @@ pub struct AppState {
     pub wallpaper: WallpaperService,
     pub network: NetworkService,
     pub calendar: CalendarService,
+    pub calendar_notes: CalendarNotesService,
     pub power: PowerService,
     pub clipboard: ClipboardService,
     pub idle: IdleService,
@@ -65,6 +66,7 @@ impl AppState {
             sni_host,
             wallpaper,
             network,
+            calendar_notes: calendar.notes.clone(),
             calendar,
             power,
             clipboard,

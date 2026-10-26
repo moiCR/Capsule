@@ -562,11 +562,26 @@ impl Render for Bar {
             }
         }
 
+        let total_widgets =
+            bar_config.left.len() + bar_config.center.len() + bar_config.right.len();
+        let max_zone = bar_config
+            .left
+            .len()
+            .max(bar_config.center.len())
+            .max(bar_config.right.len());
+        let bar_gap = if max_zone >= 6 || total_widgets >= 12 {
+            3.0
+        } else if max_zone >= 4 || total_widgets >= 8 {
+            5.0
+        } else {
+            style::GAP
+        };
+
         let mut left = div()
             .id("bar-left")
             .flex()
             .items_center()
-            .gap(px(style::GAP));
+            .gap(px(bar_gap));
         if !is_horizontal {
             left = left.flex_col();
         }
@@ -586,7 +601,7 @@ impl Render for Bar {
             .id("bar-center")
             .flex()
             .items_center()
-            .gap(px(style::GAP));
+            .gap(px(bar_gap));
         if !is_horizontal {
             center = center.flex_col();
         }
@@ -606,7 +621,7 @@ impl Render for Bar {
             .id("bar-right")
             .flex()
             .items_center()
-            .gap(px(style::GAP));
+            .gap(px(bar_gap));
         if !is_horizontal {
             right = right.flex_col();
         }
@@ -627,9 +642,11 @@ impl Render for Bar {
                 .child(
                     div()
                         .id("bar-left-container")
+                        .w(px(0.0))
                         .flex_1()
                         .h_full()
                         .min_w_0()
+                        .overflow_hidden()
                         .flex()
                         .items_center()
                         .justify_start()
@@ -640,6 +657,7 @@ impl Render for Bar {
                         .id("bar-center-container")
                         .flex_shrink_0()
                         .h_full()
+                        .px(px(bar_gap))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -648,9 +666,11 @@ impl Render for Bar {
                 .child(
                     div()
                         .id("bar-right-container")
+                        .w(px(0.0))
                         .flex_1()
                         .h_full()
                         .min_w_0()
+                        .overflow_hidden()
                         .flex()
                         .items_center()
                         .justify_end()
@@ -661,9 +681,11 @@ impl Render for Bar {
                 .child(
                     div()
                         .id("bar-left-container")
+                        .h(px(0.0))
                         .flex_1()
                         .w_full()
                         .min_h_0()
+                        .overflow_hidden()
                         .flex()
                         .flex_col()
                         .items_center()
@@ -675,6 +697,7 @@ impl Render for Bar {
                         .id("bar-center-container")
                         .flex_shrink_0()
                         .w_full()
+                        .py(px(bar_gap))
                         .flex()
                         .flex_col()
                         .items_center()
@@ -684,9 +707,11 @@ impl Render for Bar {
                 .child(
                     div()
                         .id("bar-right-container")
+                        .h(px(0.0))
                         .flex_1()
                         .w_full()
                         .min_h_0()
+                        .overflow_hidden()
                         .flex()
                         .flex_col()
                         .items_center()

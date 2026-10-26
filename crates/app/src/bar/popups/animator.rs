@@ -29,8 +29,8 @@ impl LauncherAnimator {
         reduced_motion: bool,
     ) -> Self {
         let initial_size = Size {
-            width: px(640.0),
-            height: px(54.0),
+            width: px(540.0),
+            height: px(460.0),
         };
         let animator = Animator::new(initial_size, duration)
             .with_animation(animation)
@@ -90,21 +90,15 @@ impl LauncherAnimator {
     }
 
     pub fn corner_radius(&self) -> Pixels {
-        px(16.0)
+        px(24.0)
     }
 
     pub fn expand_progress(&self) -> f32 {
-        ((f32::from(self.animator.size().height) - 54.0) / 40.0).clamp(0.0, 1.0)
+        1.0
     }
 
     pub fn cascade_opacity(&self) -> f32 {
-        let progress = self.expand_progress();
-        if progress <= 0.05 {
-            0.0
-        } else {
-            let reveal = ((progress - 0.05) / 0.95).clamp(0.0, 1.0);
-            reveal * self.animator.content_progress()
-        }
+        self.opacity
     }
 
     pub fn advance(&mut self, now: Instant) -> (bool, bool) {
@@ -278,10 +272,9 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(animator.width(), px(640.0));
-        assert_eq!(animator.height(), px(54.0));
-        assert_eq!(animator.corner_radius(), px(16.0));
-        assert_eq!(animator.cascade_opacity(), 0.0);
+        assert_eq!(animator.width(), px(540.0));
+        assert_eq!(animator.height(), px(460.0));
+        assert_eq!(animator.corner_radius(), px(24.0));
     }
 
     #[test]
@@ -295,21 +288,20 @@ mod tests {
             false,
         );
         let target = Size {
-            width: px(640.0),
-            height: px(400.0),
+            width: px(540.0),
+            height: px(500.0),
         };
         animator.transition_to(target, now);
 
         let (running, _) = animator.advance(now + Duration::from_millis(100));
         assert!(running);
-        assert_eq!(animator.width(), px(640.0));
-        assert!(animator.height() > px(54.0) && animator.height() < px(400.0));
-        assert!(animator.cascade_opacity() > 0.0);
+        assert_eq!(animator.width(), px(540.0));
+        assert!(animator.height() > px(460.0) && animator.height() < px(500.0));
 
         let (_, _) = animator.advance(now + Duration::from_millis(210));
-        assert_eq!(animator.width(), px(640.0));
-        assert_eq!(animator.height(), px(400.0));
-        assert_eq!(animator.corner_radius(), px(16.0));
+        assert_eq!(animator.width(), px(540.0));
+        assert_eq!(animator.height(), px(500.0));
+        assert_eq!(animator.corner_radius(), px(24.0));
     }
 
     #[test]
@@ -323,24 +315,24 @@ mod tests {
             false,
         );
         let expanded = Size {
-            width: px(640.0),
-            height: px(400.0),
+            width: px(540.0),
+            height: px(500.0),
         };
         animator.transition_to(expanded, now);
         animator.advance(now + Duration::from_millis(210));
-        assert_eq!(animator.width(), px(640.0));
+        assert_eq!(animator.width(), px(540.0));
 
         let collapsed = Size {
-            width: px(640.0),
-            height: px(54.0),
+            width: px(540.0),
+            height: px(460.0),
         };
         let t2 = now + Duration::from_millis(300);
         animator.transition_to(collapsed, t2);
         animator.advance(t2 + Duration::from_millis(100));
-        assert!(animator.height() < px(400.0) && animator.height() > px(54.0));
+        assert!(animator.height() < px(500.0) && animator.height() > px(460.0));
         animator.advance(t2 + Duration::from_millis(210));
-        assert_eq!(animator.width(), px(640.0));
-        assert_eq!(animator.height(), px(54.0));
-        assert_eq!(animator.corner_radius(), px(16.0));
+        assert_eq!(animator.width(), px(540.0));
+        assert_eq!(animator.height(), px(460.0));
+        assert_eq!(animator.corner_radius(), px(24.0));
     }
 }

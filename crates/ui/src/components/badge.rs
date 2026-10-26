@@ -123,11 +123,11 @@ impl RenderOnce for Badge {
 
         let (bg, text_col, border_col) = match self.variant {
             BadgeVariant::Neutral => (
-                theme.surface().opacity(0.6),
+                theme.surface_container_high(),
                 theme.foreground_muted(),
-                theme.surface().opacity(0.3),
+                theme.outline_variant(),
             ),
-            BadgeVariant::Accent => (theme.accent(), theme.on_accent(), theme.accent()),
+            BadgeVariant::Accent => (theme.primary(), theme.on_primary(), theme.primary()),
             BadgeVariant::Danger => (
                 theme.red().opacity(0.18),
                 theme.red(),

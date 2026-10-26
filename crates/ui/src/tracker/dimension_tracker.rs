@@ -24,6 +24,18 @@ impl DimensionTracker {
         self.left.get()
     }
 
+    pub fn top(&self) -> f32 {
+        self.top.get()
+    }
+
+    pub fn right(&self) -> f32 {
+        self.right.get()
+    }
+
+    pub fn bottom(&self) -> f32 {
+        self.bottom.get()
+    }
+
     pub fn track_bounds(&self, bounds: Bounds<Pixels>) {
         self.left.set(bounds.origin.x.into());
         self.right.set((bounds.origin.x + bounds.size.width).into());

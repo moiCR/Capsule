@@ -1,3 +1,6 @@
+pub mod notes;
+pub use notes::{CalendarNotesService, NotesData};
+
 use chrono::{Datelike, Local};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -21,6 +24,7 @@ pub struct CalendarState {
 #[derive(Clone)]
 pub struct CalendarService {
     state: Arc<Mutex<CalendarState>>,
+    pub notes: CalendarNotesService,
 }
 
 impl Default for CalendarService {
@@ -39,6 +43,7 @@ impl CalendarService {
                 nav_start: None,
                 nav_direction: NavDirection::Right,
             })),
+            notes: CalendarNotesService::new(),
         }
     }
 

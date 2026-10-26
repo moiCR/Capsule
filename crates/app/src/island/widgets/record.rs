@@ -1,5 +1,4 @@
 use crate::island::module::record::{PendingAction, Presentation, RecordModule};
-use crate::island::widgets::style;
 use gpui::{
     Animation, AnimationExt, Context, FontWeight, IntoElement, div, ease_in_out, prelude::*, px,
     svg,
@@ -38,7 +37,7 @@ fn controls(
         _ if presentation.status == RecordStatus::Paused => "record.paused",
         _ => "record.record_screen",
     });
-    let hover = style::hover(&theme);
+    let btn_hover = theme.surface_container_highest();
     let paused = presentation.status == RecordStatus::Paused;
     let mut bar = div()
         .w_full()
@@ -118,7 +117,7 @@ fn controls(
                     .size(px(28.0))
                     .flex_shrink_0()
                     .rounded_full()
-                    .bg(style::surface(&theme))
+                    .bg(theme.surface_container_high())
                     .flex()
                     .items_center()
                     .justify_center()
@@ -129,7 +128,7 @@ fn controls(
                     })
                     .when(interactive && presentation.pending.is_none(), |s| {
                         s.cursor_pointer()
-                            .hover(move |s| s.bg(hover))
+                            .hover(move |s| s.bg(btn_hover))
                             .on_click(cx.listener(|module, _, _, cx| module.primary_action(cx)))
                     })
                     .child(
@@ -145,7 +144,7 @@ fn controls(
                     .size(px(28.0))
                     .flex_shrink_0()
                     .rounded_full()
-                    .bg(style::surface(&theme))
+                    .bg(theme.surface_container_high())
                     .flex()
                     .items_center()
                     .justify_center()
@@ -156,7 +155,7 @@ fn controls(
                     })
                     .when(interactive && presentation.pending.is_none(), |s| {
                         s.cursor_pointer()
-                            .hover(move |s| s.bg(hover))
+                            .hover(move |s| s.bg(btn_hover))
                             .on_click(cx.listener(|module, _, _, cx| module.stop(cx)))
                     })
                     .child(

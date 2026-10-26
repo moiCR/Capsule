@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
     App, BoxShadow, ColorExt, Context, EventEmitter, FocusHandle, FontWeight, IntoElement,
-    KeyDownEvent, Pixels, Render, Size, Task, Window, div, point, px, svg,
+    KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Render, Size, Task, Window,
+    div, point, px, svg,
 };
 use services::{AppState, CapsuleAnimation, PolkitAuthRequest};
 use ui::components::{Button, ButtonVariant, Input, InputState};
@@ -112,11 +113,11 @@ impl BarPolkit {
             if cx.has_global::<AppState>() {
                 let cfg = cx.global::<AppState>().config.get();
                 (
-                    Duration::from_millis(cfg.ui.animation_duration_ms as u64),
-                    cfg.ui.capsule_animation,
-                    cfg.ui.spring_bounciness,
-                    cfg.ui.squash_stretch,
-                    cfg.ui.reduced_motion,
+                    Duration::from_millis(cfg.ui.bar.animation_duration_ms as u64),
+                    cfg.ui.bar.animation,
+                    cfg.ui.bar.spring_bounciness,
+                    cfg.ui.bar.squash_stretch,
+                    cfg.ui.bar.reduced_motion || cfg.ui.reduced_motion,
                 )
             } else {
                 (
@@ -410,17 +411,33 @@ impl Render for BarPolkit {
                     .path("lock.svg")
                     .size(px(16.0))
                     .flex_shrink_0()
-                    .text_color(theme.foreground_muted())
+                    .text_color(theme.on_surface_variant())
                     .into_any_element(),
             )
             .h_px(40.0)
             .rounded(px(8.0))
-            .bg(style::surface(&theme).opacity(0.60))
+            .bg(theme.surface_container_high())
             .border_color(if self.error.is_some() {
                 theme.red()
             } else {
-                style::border(&theme).opacity(0.18)
-            });
+                theme.outline_variant().opacity(0.40)
+            })
+            .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                let theme = cx.global::<Theme>().clone();
+                this.password_input.handle_mouse_down(event, window, &theme);
+                cx.notify();
+            }))
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                if this.password_input.is_dragging {
+                    let theme = cx.global::<Theme>().clone();
+                    this.password_input.handle_mouse_move(event, window, &theme);
+                    cx.notify();
+                }
+            }))
+            .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                this.password_input.handle_mouse_up(event);
+                cx.notify();
+            }));
 
         let modal_shadow = BoxShadow {
             color: gpui::black().opacity(0.35).into(),
@@ -435,9 +452,9 @@ impl Render for BarPolkit {
             .w(size.width)
             .h(size.height)
             .rounded(corner_radius)
-            .bg(style::background(&theme).opacity(0.92))
+            .bg(theme.surface_container().opacity(0.96))
             .border_1()
-            .border_color(style::border(&theme).opacity(0.18))
+            .border_color(theme.outline_variant().opacity(0.35))
             .shadow(vec![modal_shadow])
             .flex()
             .flex_col()
@@ -464,7 +481,7 @@ impl Render for BarPolkit {
                         div()
                             .size(px(32.0))
                             .rounded(px(8.0))
-                            .bg(theme.accent().opacity(0.16))
+                            .bg(theme.primary_container())
                             .flex()
                             .items_center()
                             .justify_center()
@@ -473,7 +490,7 @@ impl Render for BarPolkit {
                                 svg()
                                     .path("lock.svg")
                                     .size(px(16.0))
-                                    .text_color(theme.accent()),
+                                    .text_color(theme.primary()),
                             ),
                     )
                     .child(
@@ -504,9 +521,9 @@ impl Render for BarPolkit {
                     .w_full()
                     .p(px(10.0))
                     .rounded(px(8.0))
-                    .bg(style::surface(&theme).opacity(0.50))
+                    .bg(theme.surface_container_high().opacity(0.60))
                     .border_1()
-                    .border_color(style::border(&theme).opacity(0.14))
+                    .border_color(theme.outline_variant().opacity(0.25))
                     .flex()
                     .flex_col()
                     .gap(px(3.0))

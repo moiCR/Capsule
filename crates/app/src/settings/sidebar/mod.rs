@@ -5,7 +5,6 @@ use gpui::{
 };
 use ui::theme::Theme;
 
-use crate::island::widgets::style;
 use crate::settings::Settings;
 pub use items::{SettingsTab, SidebarItem, TabSidebarItem};
 
@@ -72,8 +71,8 @@ impl Sidebar {
             .id("settings-tabs-scroll")
             .flex()
             .flex_col()
-            .gap(px(6.0))
-            .w(px(176.0))
+            .gap(px(4.0))
+            .w(px(184.0))
             .max_w(gpui::relative(0.5))
             .h_full()
             .min_h_0()
@@ -83,10 +82,20 @@ impl Sidebar {
             .children(self.items.iter().map(|item| {
                 let tab = item.tab();
                 let selected = active_tab == tab && !has_search_query;
-                let foreground = if selected {
-                    theme.foreground()
+                let bg_color = if selected {
+                    theme.primary_container()
                 } else {
-                    theme.foreground_muted()
+                    gpui::transparent_black()
+                };
+                let foreground = if selected {
+                    theme.on_primary_container()
+                } else {
+                    theme.on_surface_variant()
+                };
+                let hover_bg = if selected {
+                    theme.primary_hover()
+                } else {
+                    theme.surface_container_high()
                 };
                 let title = item.title(cx);
                 let icon = item.icon();
@@ -99,20 +108,20 @@ impl Sidebar {
                     .w_full()
                     .min_w_0()
                     .whitespace_nowrap()
-                    .h(px(48.0))
-                    .px(px(14.0))
+                    .h(px(44.0))
+                    .px(px(16.0))
                     .flex_shrink_0()
-                    .rounded(px(10.0))
-                    .when(selected, |s| s.bg(style::surface(theme)))
+                    .rounded_full()
+                    .bg(bg_color)
                     .text_color(foreground)
-                    .text_size(px(14.0))
+                    .text_size(px(13.5))
                     .font_weight(if selected {
-                        FontWeight::MEDIUM
+                        FontWeight::SEMIBOLD
                     } else {
-                        FontWeight::NORMAL
+                        FontWeight::MEDIUM
                     })
                     .cursor_pointer()
-                    .hover(|s| s.bg(style::hover(theme)))
+                    .hover(move |s| s.bg(hover_bg))
                     .on_click(cx.listener(move |this, _, _window, cx| {
                         this.set_tab(tab, cx);
                     }))

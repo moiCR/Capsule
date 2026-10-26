@@ -69,13 +69,17 @@ pub fn render(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
     if notifs_count > 0 && !is_dnd {
         widget = widget
             .px(px(8.0))
-            .gap(px(5.0))
+            .gap(px(6.0))
             .child(svg().path(icon_path).size(px(15.0)).text_color(icon_color))
             .child(
                 div()
-                    .text_size(px(11.0))
+                    .px(px(6.0))
+                    .py(px(1.0))
+                    .rounded_full()
+                    .bg(theme.primary())
+                    .text_size(px(10.5))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(theme.accent())
+                    .text_color(theme.on_primary())
                     .child(format!("{notifs_count}")),
             );
     } else {

@@ -6,7 +6,10 @@ use std::time::{Duration, Instant};
 use ui::components::InputState;
 use ui::theme::Theme;
 
-use super::components::{render_auth_form, render_clock, render_lyrics};
+use super::components::{
+    render_auth_form, render_clock, render_lockscreen_media_player, render_lyrics,
+    render_power_menu,
+};
 
 pub struct LockScreen {
     is_primary: bool,
@@ -283,26 +286,41 @@ impl Render for LockScreen {
             .flex()
             .flex_row()
             .items_center()
-            .gap(px(10.0))
+            .gap(px(12.0))
             .opacity(top_bar_opacity)
             .when_some(battery_opt, |d, bat| {
+                let is_crit = bat.percentage <= 15;
+                let bg_color = if is_crit {
+                    theme.red().opacity(0.85)
+                } else if bat.is_charging {
+                    theme.green().opacity(0.85)
+                } else {
+                    theme.surface_container_high().opacity(0.85)
+                };
+                let text_color = if is_crit || bat.is_charging {
+                    theme.background()
+                } else {
+                    theme.foreground()
+                };
                 d.child(
                     div()
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap(px(4.0))
-                        .px(px(6.0))
-                        .py(px(2.0))
-                        .rounded(px(6.0))
-                        .bg(theme.green().opacity(0.85))
+                        .gap(px(6.0))
+                        .px(px(10.0))
+                        .py(px(4.0))
+                        .rounded_full()
+                        .bg(bg_color)
+                        .border_1()
+                        .border_color(theme.outline_variant().opacity(0.4))
                         .child(
                             div()
                                 .font_family(theme.font_family())
-                                .text_size(px(11.0))
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme.background())
-                                .child(bat.percentage.to_string()),
+                                .text_size(px(12.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(text_color)
+                                .child(format!("{}%", bat.percentage)),
                         )
                         .child(
                             svg()
@@ -315,21 +333,59 @@ impl Render for LockScreen {
                                 } else {
                                     "battery-full.svg"
                                 })
-                                .size(px(12.0))
-                                .text_color(theme.background()),
+                                .size(px(14.0))
+                                .text_color(text_color),
                         ),
                 )
             })
             .when_some(wifi_icon_opt, |d, icon| {
                 d.child(
-                    svg()
-                        .path(icon)
-                        .size(px(15.0))
-                        .text_color(theme.foreground()),
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .w(px(34.0))
+                        .h(px(34.0))
+                        .rounded_full()
+                        .bg(theme.surface_container_high().opacity(0.85))
+                        .border_1()
+                        .border_color(theme.outline_variant().opacity(0.4))
+                        .child(
+                            svg()
+                                .path(icon)
+                                .size(px(15.0))
+                                .text_color(theme.foreground()),
+                        ),
                 )
+            })
+            .when(self.is_primary, |d| {
+                d.child(render_power_menu(&theme))
             });
 
         let content = if self.is_primary {
+            let has_lyrics = if cx.has_global::<AppState>() {
+                let app_state = cx.global::<AppState>();
+                let track = app_state.mpris.get_current_track();
+                if track.has_media {
+                    app_state
+                        .lyrics
+                        .get_cached_lyrics(&track.title, &track.artist)
+                        .flatten()
+                        .map(|l| !l.synced_lines.is_empty())
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            let middle_widget = if has_lyrics {
+                render_lyrics(&theme, self.current_lyric_idx, lyric_anim_progress, cx).into_any_element()
+            } else {
+                render_lockscreen_media_player(&theme, cx).into_any_element()
+            };
+
             div()
                 .flex()
                 .flex_col()
@@ -357,19 +413,14 @@ impl Render for LockScreen {
                         .px(px(20.0))
                         .opacity(lyrics_opacity)
                         .mt(px(lyrics_y))
-                        .child(render_lyrics(
-                            &theme,
-                            self.current_lyric_idx,
-                            lyric_anim_progress,
-                            cx,
-                        )),
+                        .child(middle_widget),
                 )
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(10.0))
                         .opacity(user_opacity)
                         .mt(px(user_y))
                         .child(
@@ -377,25 +428,25 @@ impl Render for LockScreen {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .w(px(46.0))
-                                .h(px(46.0))
+                                .w(px(52.0))
+                                .h(px(52.0))
                                 .rounded_full()
-                                .bg(theme.surface().opacity(0.45))
+                                .bg(theme.surface_container_high().opacity(0.85))
                                 .border_1()
-                                .border_color(theme.surface().opacity(0.35))
+                                .border_color(theme.outline_variant().opacity(0.4))
                                 .child(
                                     svg()
                                         .path("user.svg")
-                                        .size(px(22.0))
-                                        .text_color(theme.foreground().opacity(0.95)),
+                                        .size(px(24.0))
+                                        .text_color(theme.on_surface_variant()),
                                 ),
                         )
                         .child(
                             div()
                                 .font_family(theme.font_family())
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_size(px(14.0))
-                                .text_color(theme.foreground().opacity(0.9))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_size(px(15.0))
+                                .text_color(theme.foreground())
                                 .child(self.username.clone()),
                         )
                         .child(render_auth_form(

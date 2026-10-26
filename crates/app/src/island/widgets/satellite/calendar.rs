@@ -1,4 +1,3 @@
-use crate::island::widgets::style;
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{Context, IntoElement, div, prelude::*, px, svg};
 use ui::theme::Theme;
@@ -15,7 +14,7 @@ fn control(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> impl IntoElement {
-    let hover = theme.surface();
+    let hover = theme.surface_container_highest();
     div()
         .id(id)
         .size(px(28.0))
@@ -93,9 +92,9 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                     .items_center()
                     .justify_center()
                     .rounded_full()
-                    .when(selected, |s| s.bg(theme.accent()))
+                    .when(selected, |s| s.bg(theme.primary()))
                     .text_color(if selected {
-                        style::on_accent(&theme)
+                        theme.on_primary()
                     } else {
                         theme.foreground()
                     })
@@ -141,7 +140,7 @@ pub fn render(height: gpui::Pixels, cx: &mut Context<DashboardModule>) -> impl I
                             svg()
                                 .path("calendar-days.svg")
                                 .size(px(16.0))
-                                .text_color(theme.accent()),
+                                .text_color(theme.primary()),
                         )
                         .child(
                             div()

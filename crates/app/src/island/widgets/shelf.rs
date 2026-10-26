@@ -81,7 +81,6 @@ fn card(
         .ui
         .cards_round
         .clamp(0.0, 18.0);
-    let hover = style::hover(theme);
     let remove_id = item.id.clone();
     let payload = DraggedFile {
         path: item.path.clone(),
@@ -129,11 +128,17 @@ fn card(
         .items_center()
         .gap(px(10.0))
         .bg(if selected {
-            style::selected(theme)
+            theme.primary_container().opacity(0.65)
         } else {
-            style::surface(theme)
+            theme.surface_container_high()
         })
-        .hover(move |s| s.bg(hover))
+        .border_1()
+        .border_color(if selected {
+            theme.primary()
+        } else {
+            theme.outline_variant().opacity(0.35)
+        })
+        .hover(move |s| s.bg(theme.surface_container_highest()))
         .cursor_grab()
         .on_hover(cx.listener(move |module, &hovered, _, cx| {
             if hovered && module.mouse_moved {

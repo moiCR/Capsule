@@ -25,8 +25,21 @@ pub fn render(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
             .into_any_element();
     }
 
-    let display_title = if window_title.chars().count() > 36 {
-        let truncated: String = window_title.chars().take(35).collect();
+    let max_len = if let Some(state) = cx.try_global::<AppState>() {
+        let right_len = state.config.get().ui.bar.right.len();
+        if right_len >= 5 {
+            16
+        } else if right_len >= 4 {
+            24
+        } else {
+            36
+        }
+    } else {
+        36
+    };
+
+    let display_title = if window_title.chars().count() > max_len {
+        let truncated: String = window_title.chars().take(max_len.saturating_sub(1)).collect();
         format!("{truncated}…")
     } else {
         window_title

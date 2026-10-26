@@ -2,15 +2,19 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, BoxShadow, ColorExt, Context, EventEmitter, FocusHandle, FontWeight, IntoElement,
-    KeyDownEvent, Render, ScrollHandle, Size, Task, Window, div, point, px, svg,
+    AnyElement, BoxShadow, ColorExt, Context, DurationWithEasing, EventEmitter, FocusHandle,
+    FontWeight, IntoElement, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render,
+    ScrollHandle, Size, Task, Window, div, point, px, svg,
 };
 use services::{AppState, Application, CapsuleAnimation, LauncherService};
 use ui::components::{Input, InputState};
 use ui::theme::Theme;
 
 use super::{PopupEvent, animator::LauncherAnimator};
-use crate::bar::style;
+use crate::island::widgets::launcher::{COLUMNS, GRID_GAP, TILE_HEIGHT, next_selection};
+
+pub const LAUNCHER_WIDTH: f32 = 540.0;
+pub const LAUNCHER_HEIGHT: f32 = 460.0;
 
 pub struct BarLauncher {
     pub search_input: InputState,
@@ -18,12 +22,13 @@ pub struct BarLauncher {
     pub apps: Vec<Application>,
     pub calculator: Option<String>,
     pub selected: usize,
-    pub show_all: bool,
+    pub mouse_moved: bool,
     pub scroll: ScrollHandle,
     pub service: LauncherService,
     pub animator: Option<LauncherAnimator>,
     pub is_open: bool,
     pub focus: FocusHandle,
+    pub launch_error: Option<String>,
     pub _watch_task: Option<Task<()>>,
 }
 
@@ -41,10 +46,8 @@ impl BarLauncher {
         let watch_task = cx.spawn(async move |this, cx| {
             while let Ok(()) = watch_receiver.recv().await {
                 let _ = this.update(cx, |launcher, cx| {
-                    if !launcher.query.is_empty() || launcher.show_all {
-                        launcher.apps = launcher.service.search(&launcher.query);
-                        cx.notify();
-                    }
+                    launcher.apps = launcher.service.search(&launcher.query);
+                    cx.notify();
                 });
             }
         });
@@ -55,12 +58,13 @@ impl BarLauncher {
             apps: Vec::new(),
             calculator: None,
             selected: 0,
-            show_all: false,
+            mouse_moved: false,
             scroll: ScrollHandle::new(),
             service,
             animator: None,
             is_open: false,
             focus: cx.focus_handle(),
+            launch_error: None,
             _watch_task: Some(watch_task),
         }
     }
@@ -87,11 +91,11 @@ impl BarLauncher {
             if cx.has_global::<AppState>() {
                 let cfg = cx.global::<AppState>().config.get();
                 (
-                    Duration::from_millis(cfg.ui.animation_duration_ms as u64),
-                    cfg.ui.capsule_animation,
-                    cfg.ui.spring_bounciness,
-                    cfg.ui.squash_stretch,
-                    cfg.ui.reduced_motion,
+                    Duration::from_millis(cfg.ui.bar.animation_duration_ms as u64),
+                    cfg.ui.bar.animation,
+                    cfg.ui.bar.spring_bounciness,
+                    cfg.ui.bar.squash_stretch,
+                    cfg.ui.bar.reduced_motion || cfg.ui.reduced_motion,
                 )
             } else {
                 (
@@ -106,10 +110,11 @@ impl BarLauncher {
         self.is_open = true;
         self.search_input.clear();
         self.query.clear();
-        self.apps.clear();
+        self.apps = self.service.search("");
         self.calculator = None;
         self.selected = 0;
-        self.show_all = false;
+        self.mouse_moved = false;
+        self.launch_error = None;
         self.scroll.scroll_to_item(0);
 
         let mut anim = LauncherAnimator::new(
@@ -120,8 +125,8 @@ impl BarLauncher {
             reduced_motion,
         );
         let target_size = Size {
-            width: px(640.0),
-            height: px(54.0),
+            width: px(LAUNCHER_WIDTH),
+            height: px(LAUNCHER_HEIGHT),
         };
         anim.transition_to(target_size, Instant::now());
         anim.advance(Instant::now());
@@ -170,86 +175,53 @@ impl BarLauncher {
             self.search_input.set_text(&query);
         }
         self.query = query.clone();
-        if query.is_empty() {
-            self.show_all = false;
-        }
-        let is_expanded = !query.is_empty() || self.show_all;
-        if !is_expanded {
-            self.apps.clear();
-            self.calculator = None;
-        } else {
-            self.calculator = services::launcher::calculator::evaluate(&query);
-            self.apps = self.service.search(&query);
-        }
+        self.calculator = services::launcher::calculator::evaluate(&query);
+        self.apps = self.service.search(&query);
         self.selected = 0;
+        self.mouse_moved = false;
+        self.launch_error = None;
         self.scroll.scroll_to_item(0);
-        let target_size = if is_expanded {
-            let count = self.count();
-            let target_h = match count {
-                0 => 230.0,
-                n => (54.0 + 1.0 + 16.0 + n as f32 * 50.0 + (n.saturating_sub(1) as f32) * 2.0)
-                    .clamp(121.0, 480.0),
-            };
-            Size {
-                width: px(640.0),
-                height: px(target_h),
-            }
-        } else {
-            Size {
-                width: px(640.0),
-                height: px(54.0),
-            }
-        };
-        if let Some(ref mut anim) = self.animator {
-            anim.transition_to(target_size, Instant::now());
-            cx.emit(PopupEvent::RequestAnimationFrame);
-        }
         cx.notify();
     }
 
     pub fn reset_search(&mut self, cx: &mut Context<Self>) {
         self.search_input.clear();
-        self.show_all = false;
         self.update_search(String::new(), cx);
+        self.mouse_moved = false;
+
+        let service = self.service.clone();
+        cx.spawn(async move |this, cx| {
+            if service.refresh().await.is_ok() {
+                let _ = this.update(cx, |this, cx| {
+                    if this.query.is_empty() {
+                        this.apps = this.service.search("");
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
-    pub fn navigate(&mut self, delta: i32, cx: &mut Context<Self>) {
-        if self.query.is_empty() && !self.show_all {
-            self.show_all = true;
-            self.apps = self.service.search("");
-            self.selected = 0;
-            let target_h = match self.count() {
-                0 => 230.0,
-                n => (54.0 + 1.0 + 16.0 + n as f32 * 50.0 + (n.saturating_sub(1) as f32) * 2.0)
-                    .clamp(121.0, 480.0),
-            };
-            let target_size = Size {
-                width: px(640.0),
-                height: px(target_h),
-            };
-            if let Some(ref mut anim) = self.animator {
-                anim.transition_to(target_size, Instant::now());
-                cx.emit(PopupEvent::RequestAnimationFrame);
-            }
+    pub fn select(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index < self.count() && self.selected != index {
+            self.selected = index;
+            self.scroll.scroll_to_item(index / COLUMNS);
             cx.notify();
-            return;
         }
-        let count = self.count();
-        if count == 0 {
-            return;
-        }
-        let current = self.selected as i32;
-        let next = (current + delta).clamp(0, count as i32 - 1) as usize;
-        self.selected = next;
-        self.scroll.scroll_to_item(next);
-        cx.notify();
+    }
+
+    pub fn navigate(&mut self, horizontal: i32, vertical: i32, cx: &mut Context<Self>) {
+        self.mouse_moved = false;
+        let next = next_selection(self.selected, self.count(), horizontal, vertical);
+        self.select(next, cx);
     }
 
     pub fn activate_selected(&mut self, cx: &mut Context<Self>) {
-        if self.selected == 0 && self.calculator.is_some() {
-            if let Some(res) = &self.calculator {
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(res.clone()));
-            }
+        if self.selected == 0
+            && let Some(res) = &self.calculator
+        {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(res.clone()));
             self.close(cx);
             return;
         }
@@ -258,21 +230,39 @@ impl BarLauncher {
             .selected
             .saturating_sub(usize::from(self.calculator.is_some()));
 
-        if let Some(app) = self.apps.get(index).cloned() {
-            let _ = app.launch();
-            self.close(cx);
-        }
-    }
+        let Some(app) = self.apps.get(index).cloned() else {
+            return;
+        };
 
-    pub fn activate_item(&mut self, index: usize, cx: &mut Context<Self>) {
-        self.selected = index;
-        self.activate_selected(cx);
+        if let Err(e) = app.launch() {
+            services::log_error!("BarLauncher", "Failed to launch application: {:?}", e);
+            self.launch_error = Some(if cx.has_global::<AppState>() {
+                cx.global::<AppState>().language.get("launcher.launch_failed")
+            } else {
+                "Error al abrir la aplicación".to_string()
+            });
+            cx.notify();
+            return;
+        }
+        self.close(cx);
     }
 
     pub fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
+        let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+        let shift = event.keystroke.modifiers.shift;
 
-        if key == "escape" || (key == "f4" && event.keystroke.modifiers.alt) {
+        if key == "escape" {
+            if !self.search_input.is_empty() {
+                self.reset_search(cx);
+            } else {
+                self.close(cx);
+            }
+            cx.stop_propagation();
+            return;
+        }
+
+        if key == "f4" && event.keystroke.modifiers.alt {
             self.close(cx);
             cx.stop_propagation();
             return;
@@ -284,14 +274,20 @@ impl BarLauncher {
             return;
         }
 
-        if key == "down" {
-            self.navigate(1, cx);
+        if (key == "up" || key == "down") && !shift && !control {
+            self.navigate(0, if key == "up" { -1 } else { 1 }, cx);
             cx.stop_propagation();
             return;
         }
 
-        if key == "up" {
-            self.navigate(-1, cx);
+        if (key == "left" || key == "right") && !shift && !control && self.search_input.is_empty() {
+            self.navigate(if key == "left" { -1 } else { 1 }, 0, cx);
+            cx.stop_propagation();
+            return;
+        }
+
+        if key == "tab" && !control {
+            self.navigate(if shift { -1 } else { 1 }, 0, cx);
             cx.stop_propagation();
             return;
         }
@@ -307,218 +303,173 @@ impl BarLauncher {
         self.handle_key_down(event, cx);
     }
 
-    fn render_calc_row(
+    fn render_calculator_tile(
         &self,
         result: &str,
         is_selected: bool,
+        duration: Duration,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (row_bg, border_color) = if is_selected {
-            (
-                style::surface(theme).opacity(0.85),
-                style::border(theme).opacity(0.18),
-            )
+        let background = if is_selected {
+            theme.primary_container()
         } else {
-            (gpui::transparent_black(), gpui::transparent_black())
+            theme.surface_container()
         };
-
-        let copy_hint = if cx.has_global::<AppState>() {
-            cx.global::<AppState>().language.get("launcher.copy_hint")
+        let border_color = if is_selected {
+            theme.primary()
         } else {
-            "Enter para copiar".to_string()
+            theme.outline_variant().opacity(0.35)
+        };
+        let hover_bg = if is_selected {
+            theme.primary_hover()
+        } else {
+            theme.surface_container_highest()
         };
 
         div()
-            .id("spotlight-calc-row")
-            .w_full()
-            .h(px(50.0))
+            .id("bar-launcher-calc-tile")
+            .flex_1()
+            .min_w_0()
+            .h(px(TILE_HEIGHT))
             .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(10.0))
             .px(px(8.0))
-            .rounded(px(10.0))
-            .bg(row_bg)
+            .rounded(px(16.0))
+            .bg(background)
             .border_1()
             .border_color(border_color)
-            .hover(move |s| {
-                if !is_selected {
-                    s.bg(style::surface(theme).opacity(0.35))
-                } else {
-                    s
-                }
-            })
-            .flex()
-            .items_center()
-            .gap(px(10.0))
             .cursor_pointer()
+            .transitions(|t| t.bg(duration.with_easing(gpui::ease_in_out)))
+            .hover(move |s| s.bg(hover_bg))
+            .on_hover(cx.listener(|this, &hovered, _, cx| {
+                if hovered && this.mouse_moved {
+                    this.select(0, cx);
+                }
+            }))
             .on_click(cx.listener(|this, _, _, cx| {
-                this.activate_item(0, cx);
+                this.select(0, cx);
+                this.activate_selected(cx);
             }))
             .child(
                 div()
-                    .w(px(3.5))
-                    .h(px(20.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .bg(if is_selected {
-                        theme.accent()
-                    } else {
-                        gpui::transparent_black()
-                    }),
-            )
-            .child(
-                div()
-                    .size(px(34.0))
-                    .flex_shrink_0()
-                    .rounded(px(8.0))
-                    .bg(style::background(theme).opacity(0.55))
-                    .border_1()
-                    .border_color(style::border(theme).opacity(0.15))
+                    .h(px(44.0))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(
-                        svg()
-                            .path("calculator.svg")
-                            .size(px(18.0))
-                            .text_color(theme.accent()),
-                    ),
+                    .text_size(px(26.0))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(theme.primary())
+                    .child("="),
             )
             .child(
                 div()
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .justify_center()
-                    .gap(px(1.5))
-                    .min_w_0()
-                    .child(
-                        div()
-                            .text_size(px(15.0))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(theme.foreground())
-                            .child(format!("= {result}")),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(theme.foreground_muted())
-                            .child(copy_hint),
-                    ),
+                    .w_full()
+                    .text_size(px(12.0))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(if is_selected {
+                        theme.on_primary_container()
+                    } else {
+                        theme.foreground()
+                    })
+                    .text_center()
+                    .text_ellipsis()
+                    .child(result.to_string()),
             )
             .into_any_element()
     }
 
-    fn render_app_row(
+    fn render_app_tile(
         &self,
         app: &Application,
         index: usize,
         is_selected: bool,
+        duration: Duration,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (row_bg, border_color) = if is_selected {
-            (
-                style::surface(theme).opacity(0.85),
-                style::border(theme).opacity(0.18),
-            )
+        let background = if is_selected {
+            theme.primary_container()
         } else {
-            (gpui::transparent_black(), gpui::transparent_black())
+            theme.surface_container()
+        };
+        let border_color = if is_selected {
+            theme.primary()
+        } else {
+            theme.outline_variant().opacity(0.35)
+        };
+        let hover_bg = if is_selected {
+            theme.primary_hover()
+        } else {
+            theme.surface_container_highest()
         };
 
-        let icon_inner = if let Some(icon_path) = &app.icon_path {
-            gpui::img(icon_path.clone())
-                .size(px(24.0))
-                .rounded(px(5.0))
-                .into_any_element()
-        } else {
-            svg()
+        let icon = match &app.icon_path {
+            Some(path) => gpui::img(path.clone())
+                .size(px(44.0))
+                .rounded(px(10.0))
+                .into_any_element(),
+            None => svg()
                 .path(if app.terminal {
                     "cpu.svg"
                 } else {
                     "package.svg"
                 })
-                .size(px(18.0))
-                .text_color(theme.foreground_muted())
-                .into_any_element()
+                .size(px(40.0))
+                .text_color(theme.primary())
+                .into_any_element(),
         };
 
-        let icon_element = div()
-            .size(px(34.0))
+        div()
+            .id(("bar-launcher-app-tile", index))
+            .flex_1()
+            .min_w_0()
+            .h(px(TILE_HEIGHT))
             .flex_shrink_0()
-            .rounded(px(8.0))
-            .bg(style::background(theme).opacity(0.55))
-            .border_1()
-            .border_color(style::border(theme).opacity(0.15))
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
-            .child(icon_inner);
-
-        let name = app.name.clone();
-        let comment = app.generic_name.as_ref().or(app.comment.as_ref()).cloned();
-
-        div()
-            .id(("spotlight-app-row", index))
-            .w_full()
-            .h(px(50.0))
-            .flex_shrink_0()
+            .gap(px(10.0))
             .px(px(8.0))
-            .rounded(px(10.0))
-            .bg(row_bg)
+            .rounded(px(16.0))
+            .bg(background)
             .border_1()
             .border_color(border_color)
-            .hover(move |s| {
-                if !is_selected {
-                    s.bg(style::surface(theme).opacity(0.35))
-                } else {
-                    s
-                }
-            })
-            .flex()
-            .items_center()
-            .gap(px(10.0))
             .cursor_pointer()
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.activate_item(index, cx);
+            .transitions(|t| t.bg(duration.with_easing(gpui::ease_in_out)))
+            .hover(move |s| s.bg(hover_bg))
+            .on_hover(cx.listener(move |this, &hovered, _, cx| {
+                if hovered && this.mouse_moved {
+                    this.select(index, cx);
+                }
             }))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.select(index, cx);
+                this.activate_selected(cx);
+            }))
+            .child(icon)
             .child(
                 div()
-                    .w(px(3.5))
-                    .h(px(20.0))
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .bg(if is_selected {
-                        theme.accent()
+                    .w_full()
+                    .text_size(px(12.0))
+                    .font_weight(if is_selected {
+                        FontWeight::SEMIBOLD
                     } else {
-                        gpui::transparent_black()
-                    }),
-            )
-            .child(icon_element)
-            .child(
-                div()
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .justify_center()
-                    .gap(px(1.5))
-                    .min_w_0()
-                    .child(
-                        div()
-                            .text_size(px(14.0))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(theme.foreground())
-                            .line_clamp(1)
-                            .child(name),
-                    )
-                    .when_some(comment, |el, c| {
-                        el.child(
-                            div()
-                                .text_size(px(11.5))
-                                .text_color(theme.foreground_muted())
-                                .line_clamp(1)
-                                .child(c),
-                        )
-                    }),
+                        FontWeight::NORMAL
+                    })
+                    .text_color(if is_selected {
+                        theme.on_primary_container()
+                    } else {
+                        theme.foreground()
+                    })
+                    .text_center()
+                    .text_ellipsis()
+                    .child(app.name.clone()),
             )
             .into_any_element()
     }
@@ -534,157 +485,217 @@ impl Render for BarLauncher {
         let placeholder = if cx.has_global::<AppState>() {
             cx.global::<AppState>()
                 .language
-                .get("launcher.spotlight_placeholder")
+                .get("launcher.search_placeholder")
         } else {
-            "Buscar aplicaciones o calcular...".to_string()
+            "Buscar aplicaciones...".to_string()
         };
 
-        let size = anim.size();
-        let corner_radius = anim.corner_radius();
-        let cascade_opacity = anim.cascade_opacity();
+        let hints = if cx.has_global::<AppState>() {
+            let state = cx.global::<AppState>();
+            format!(
+                "{}    {}    {}",
+                state.language.get("launcher.grid_navigate_hint"),
+                state.language.get("launcher.open_hint"),
+                state.language.get("launcher.close_hint")
+            )
+        } else {
+            "←↑↓→ navegar    ↵ abrir    esc cerrar".to_string()
+        };
+
+        let no_apps = if cx.has_global::<AppState>() {
+            cx.global::<AppState>().language.get("launcher.no_apps")
+        } else {
+            "No se encontraron aplicaciones".to_string()
+        };
+
         let anim_opacity = anim.opacity;
         let anim_offset_y = anim.offset_y;
-        let expand_progress = anim.expand_progress();
         let blur_progress = (anim.backdrop_opacity / 0.40).clamp(0.0, 1.0);
+        let duration = Duration::from_millis(200);
 
-        let mut spotlight_box = div()
-            .id("spotlight-container")
-            .w(size.width)
-            .h(size.height)
-            .rounded(corner_radius)
-            .bg(style::background(&theme).opacity(0.92))
+        let search_bar = Input::from_state("bar-launcher-search", &self.search_input)
+            .placeholder(placeholder)
+            .cleanable(true)
+            .w_full()
+            .h_px(44.0)
+            .rounded_full()
+            .bg(theme.surface_container())
+            .border_color(theme.outline_variant().opacity(0.40))
+            .focused_border_color(theme.primary())
+            .prefix(
+                svg()
+                    .path("search.svg")
+                    .size(px(17.0))
+                    .text_color(theme.on_surface_variant()),
+            )
+            .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                let theme = cx.global::<Theme>().clone();
+                this.search_input.handle_mouse_down(event, window, &theme);
+                cx.notify();
+            }))
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                if this.search_input.is_dragging {
+                    let theme = cx.global::<Theme>().clone();
+                    this.search_input.handle_mouse_move(event, window, &theme);
+                    cx.notify();
+                }
+            }))
+            .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                this.search_input.handle_mouse_up(event);
+                cx.notify();
+            }))
+            .on_clear(cx.listener(|this, _, _, cx| this.reset_search(cx)));
+
+        let count = self.count();
+        let content = if count == 0 {
+            div()
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(12.0))
+                .child(
+                    svg()
+                        .path("search.svg")
+                        .size(px(36.0))
+                        .text_color(theme.foreground_muted().opacity(0.40)),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .text_color(theme.foreground_muted())
+                        .child(no_apps),
+                )
+                .into_any_element()
+        } else {
+            let mut grid = div()
+                .id("bar-launcher-grid")
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(px(GRID_GAP))
+                .overflow_y_scroll()
+                .track_scroll(&self.scroll);
+
+            let row_count = count.div_ceil(COLUMNS);
+            for row_index in 0..row_count {
+                let mut row = div()
+                    .id(("bar-launcher-grid-row", row_index))
+                    .w_full()
+                    .h(px(TILE_HEIGHT))
+                    .flex_shrink_0()
+                    .flex()
+                    .gap(px(GRID_GAP));
+
+                for col in 0..COLUMNS {
+                    let index = row_index * COLUMNS + col;
+                    if index >= count {
+                        row = row.child(div().flex_1().min_w_0());
+                    } else if index == 0 && let Some(result) = &self.calculator {
+                        row = row.child(self.render_calculator_tile(
+                            result,
+                            self.selected == index,
+                            duration,
+                            &theme,
+                            cx,
+                        ));
+                    } else {
+                        let app_index = index - usize::from(self.calculator.is_some());
+                        row = row.child(self.render_app_tile(
+                            &self.apps[app_index],
+                            index,
+                            self.selected == index,
+                            duration,
+                            &theme,
+                            cx,
+                        ));
+                    }
+                }
+                grid = grid.child(row);
+            }
+            grid.into_any_element()
+        };
+
+        let footer = div()
+            .id("bar-launcher-footer")
+            .h(px(20.0))
+            .w_full()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .text_color(if self.launch_error.is_some() {
+                        theme.red()
+                    } else {
+                        theme.foreground_muted()
+                    })
+                    .child(self.launch_error.clone().unwrap_or(hints)),
+            )
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(theme.foreground_muted())
+                    .child(if self.apps.len() == 1 {
+                        "1 aplicación".to_string()
+                    } else {
+                        format!("{} aplicaciones", self.apps.len())
+                    }),
+            );
+
+        let dialog_box = div()
+            .id("bar-launcher-dialog")
+            .w(px(LAUNCHER_WIDTH))
+            .h(px(LAUNCHER_HEIGHT))
+            .rounded(px(24.0))
+            .bg(theme.surface_container_high())
             .border_1()
-            .border_color(style::border(&theme).opacity(0.18))
-            .shadow(vec![BoxShadow {
-                color: gpui::black().opacity(0.40).into(),
-                offset: point(px(0.0), px(16.0)),
-                blur_radius: px(36.0),
-                spread_radius: px(0.0),
-                inset: false,
-            }])
+            .border_color(theme.outline_variant().opacity(0.40))
+            .shadow(vec![
+                BoxShadow {
+                    color: gpui::black().opacity(0.35).into(),
+                    offset: point(px(0.0), px(20.0)),
+                    blur_radius: px(48.0),
+                    spread_radius: px(0.0),
+                    inset: false,
+                },
+                BoxShadow {
+                    color: gpui::black().opacity(0.15).into(),
+                    offset: point(px(0.0), px(4.0)),
+                    blur_radius: px(12.0),
+                    spread_radius: px(0.0),
+                    inset: false,
+                },
+            ])
             .flex()
             .flex_col()
+            .p(px(16.0))
+            .gap(px(12.0))
+            .font_family(theme.font_family())
             .overflow_hidden()
             .opacity(anim_opacity)
             .relative()
             .top(px(anim_offset_y))
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
-            .on_click(|_, _, cx| cx.stop_propagation());
-
-        let input_component = div()
-            .id("spotlight-search-header")
-            .w_full()
-            .h(px(54.0))
-            .flex_shrink_0()
-            .px(px(16.0))
-            .flex()
-            .items_center()
-            .child(
-                Input::from_state("spotlight-input", &self.search_input)
-                    .placeholder(placeholder)
-                    .prefix(
-                        svg()
-                            .path("search.svg")
-                            .size(px(18.0))
-                            .text_color(theme.foreground_muted())
-                            .into_any_element(),
-                    )
-                    .padding_x(px(0.0))
-                    .gap(px(10.0))
-                    .flex_1(true)
-                    .h_px(44.0)
-                    .text_size(px(15.5))
-                    .bg(gpui::transparent_black())
-                    .border_color(gpui::transparent_black())
-                    .focused_border_color(gpui::transparent_black()),
-            );
-
-        spotlight_box = spotlight_box.child(input_component);
-
-        if expand_progress > 0.05 {
-            let divider = div()
-                .id("spotlight-divider")
-                .w_full()
-                .h(px(1.0))
-                .flex_shrink_0()
-                .bg(style::border(&theme).opacity(0.16));
-
-            spotlight_box = spotlight_box.child(divider);
-
-            let mut cascade_list = div()
-                .id("spotlight-cascade-list")
-                .flex_1()
-                .min_h_0()
-                .w_full()
-                .p(px(8.0))
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .overflow_y_scroll()
-                .track_scroll(&self.scroll)
-                .opacity(cascade_opacity);
-
-            if let Some(calc_res) = self.calculator.clone() {
-                let is_selected = self.selected == 0;
-                let calc_row = self.render_calc_row(&calc_res, is_selected, &theme, cx);
-                cascade_list = cascade_list.child(calc_row);
-            }
-
-            let calc_offset = usize::from(self.calculator.is_some());
-
-            if self.apps.is_empty() && self.calculator.is_none() {
-                let empty_text = if cx.has_global::<AppState>() {
-                    cx.global::<AppState>().language.get("launcher.no_apps")
-                } else {
-                    "No se encontraron aplicaciones".to_string()
-                };
-
-                cascade_list = cascade_list.child(
-                    div()
-                        .w_full()
-                        .flex_1()
-                        .h_full()
-                        .py(px(24.0))
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(10.0))
-                        .child(
-                            svg()
-                                .path("search.svg")
-                                .size(px(28.0))
-                                .text_color(theme.foreground_muted().opacity(0.35)),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(13.5))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(theme.foreground_muted())
-                                .child(empty_text),
-                        ),
-                );
-            } else {
-                let apps = self.apps.clone();
-                for (index, app) in apps.iter().enumerate() {
-                    let global_index = index + calc_offset;
-                    let is_selected = self.selected == global_index;
-                    cascade_list = cascade_list.child(self.render_app_row(
-                        app,
-                        global_index,
-                        is_selected,
-                        &theme,
-                        cx,
-                    ));
-                }
-            }
-
-            spotlight_box = spotlight_box.child(cascade_list);
-        }
+            .on_click(|_, _, cx| cx.stop_propagation())
+            .on_mouse_move(cx.listener(|this, _, _, _| {
+                this.mouse_moved = true;
+            }))
+            .child(search_bar)
+            .child(content)
+            .child(footer);
 
         div()
-            .id("spotlight-backdrop")
+            .id("bar-launcher-backdrop")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))
             .absolute()
@@ -695,11 +706,11 @@ impl Render for BarLauncher {
             .justify_center()
             .child(
                 div()
-                    .id("spotlight-backdrop-click")
+                    .id("bar-launcher-backdrop-dim")
                     .absolute()
                     .inset_0()
-                    .backdrop_blur(px(20.0 * blur_progress))
-                    .bg(gpui::black().opacity(0.20 * blur_progress))
+                    .backdrop_blur(px(16.0 * blur_progress))
+                    .bg(gpui::black().opacity(0.35 * blur_progress))
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
@@ -707,7 +718,7 @@ impl Render for BarLauncher {
                         }),
                     ),
             )
-            .child(spotlight_box)
+            .child(dialog_box)
             .into_any_element()
     }
 }

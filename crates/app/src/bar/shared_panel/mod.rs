@@ -345,11 +345,11 @@ impl SharedPanelManager {
             if cx.has_global::<AppState>() {
                 let cfg = cx.global::<AppState>().config.get();
                 (
-                    Duration::from_millis(cfg.ui.animation_duration_ms as u64),
-                    cfg.ui.capsule_animation,
-                    cfg.ui.spring_bounciness,
-                    cfg.ui.squash_stretch,
-                    cfg.ui.reduced_motion,
+                    Duration::from_millis(cfg.ui.bar.animation_duration_ms as u64),
+                    cfg.ui.bar.animation,
+                    cfg.ui.bar.spring_bounciness,
+                    cfg.ui.bar.squash_stretch,
+                    cfg.ui.bar.reduced_motion || cfg.ui.reduced_motion,
                 )
             } else {
                 (

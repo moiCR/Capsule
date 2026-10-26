@@ -101,11 +101,20 @@ pub(crate) fn button(
             .animation_duration_ms as u64,
     );
     let background = if active {
-        super::style::selected(theme)
+        theme.primary_container()
     } else {
-        super::style::surface(theme)
+        theme.surface_container_high()
     };
-    let hover = super::style::hover(theme);
+    let border_color = if active {
+        theme.primary()
+    } else {
+        theme.outline_variant().opacity(0.35)
+    };
+    let hover_bg = if active {
+        theme.primary_hover()
+    } else {
+        theme.surface_container_highest()
+    };
     div()
         .id(id)
         .flex()
@@ -116,9 +125,11 @@ pub(crate) fn button(
         .px(px(10.0))
         .rounded(px(18.0))
         .bg(background)
+        .border_1()
+        .border_color(border_color)
         .cursor_pointer()
         .transitions(|t| t.bg(duration.with_easing(ease_in_out)))
-        .hover(move |s| s.bg(hover))
+        .hover(move |s| s.bg(hover_bg))
         .on_click(cx.listener(move |this, _, _, cx| this.dispatch(action.clone(), cx)))
         .child(
             svg()
@@ -126,13 +137,23 @@ pub(crate) fn button(
                 .size(px(16.0))
                 .flex_shrink_0()
                 .text_color(if active {
-                    theme.accent()
+                    theme.primary()
                 } else {
                     theme.foreground_muted()
                 }),
         )
         .when(!label.is_empty(), |s| {
-            s.child(div().min_w_0().text_ellipsis().child(label))
+            s.child(
+                div()
+                    .min_w_0()
+                    .text_ellipsis()
+                    .text_color(if active {
+                        theme.on_primary_container()
+                    } else {
+                        theme.foreground()
+                    })
+                    .child(label),
+            )
         })
         .into_any_element()
 }
@@ -144,7 +165,7 @@ pub(crate) fn icon_action(
     theme: &Theme,
     cx: &mut Context<DashboardModule>,
 ) -> AnyElement {
-    let hover = super::style::hover(theme);
+    let hover = theme.surface_container_highest();
     div()
         .id(id)
         .size(px(32.0))
@@ -152,7 +173,8 @@ pub(crate) fn icon_action(
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(8.0))
+        .rounded_full()
+        .bg(theme.surface_container_high())
         .opacity(if enabled { 1.0 } else { 0.35 })
         .transitions(|t| t.bg(millis(120).with_easing(ease_in_out)))
         .when(enabled, |s| {
@@ -167,7 +189,7 @@ pub(crate) fn icon_action(
             svg()
                 .path(icon)
                 .size(px(18.0))
-                .text_color(theme.foreground_muted()),
+                .text_color(theme.on_surface_variant()),
         )
         .into_any_element()
 }

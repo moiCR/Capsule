@@ -9,7 +9,6 @@ use services::{AppState, MediaTrack, MprisService};
 use ui::theme::Theme;
 
 use super::{SharedPanelEvent, SharedPanelItem};
-use crate::bar::style;
 
 pub struct MediaModule {
     focus: FocusHandle,
@@ -104,26 +103,27 @@ impl Render for MediaModule {
 
         let art_element = if let Some(art_path) = &track.local_art_path {
             img(PathBuf::from(art_path))
-                .size(px(68.0))
-                .rounded(px(12.0))
+                .size(px(72.0))
+                .rounded(px(16.0))
                 .border_1()
-                .border_color(style::border(&theme).opacity(0.18))
+                .border_color(theme.outline_variant())
+                .shadow_md()
                 .into_any_element()
         } else {
             div()
-                .size(px(68.0))
-                .rounded(px(12.0))
-                .bg(style::surface(&theme).opacity(0.60))
+                .size(px(72.0))
+                .rounded(px(16.0))
+                .bg(theme.surface_container_high())
                 .border_1()
-                .border_color(style::border(&theme).opacity(0.18))
+                .border_color(theme.outline_variant())
                 .flex()
                 .items_center()
                 .justify_center()
                 .child(
                     svg()
                         .path("music.svg")
-                        .size(px(28.0))
-                        .text_color(theme.accent()),
+                        .size(px(32.0))
+                        .text_color(theme.primary()),
                 )
                 .into_any_element()
         };
@@ -139,25 +139,24 @@ impl Render for MediaModule {
             "play.svg"
         };
 
-        let hover_btn = style::hover(&theme);
-        let prev_hover = hover_btn;
-        let next_hover = hover_btn;
+        let btn_tonal_hover = theme.surface_container_highest();
+        let btn_primary_hover = theme.primary_hover();
 
         let seek_len = len;
         let bar_w = 390.0;
         let progress_bar = div()
             .id("shared-media-seek")
             .w_full()
-            .h(px(5.0))
+            .h(px(6.0))
             .rounded_full()
-            .bg(style::surface(&theme).opacity(0.60))
+            .bg(theme.surface_container_highest())
             .cursor_pointer()
             .relative()
             .child(
                 div()
                     .h_full()
                     .rounded_full()
-                    .bg(theme.accent())
+                    .bg(theme.primary())
                     .w(px(fraction * bar_w)),
             )
             .on_mouse_down(
@@ -264,21 +263,22 @@ impl Render for MediaModule {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.0))
+                            .gap(px(10.0))
                             .child(
                                 div()
                                     .id("shared-media-prev-btn")
-                                    .size(px(32.0))
+                                    .size(px(36.0))
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .rounded(px(8.0))
+                                    .rounded_full()
+                                    .bg(theme.surface_container_high())
                                     .cursor_pointer()
-                                    .hover(move |s| s.bg(prev_hover))
+                                    .hover(move |s| s.bg(btn_tonal_hover))
                                     .child(
                                         svg()
                                             .path("skip-back.svg")
-                                            .size(px(15.0))
+                                            .size(px(16.0))
                                             .text_color(theme.foreground()),
                                     )
                                     .on_click(cx.listener(move |_, _, _, _| {
@@ -291,18 +291,20 @@ impl Render for MediaModule {
                             .child(
                                 div()
                                     .id("shared-media-play-btn")
-                                    .size(px(38.0))
+                                    .size(px(46.0))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .rounded_full()
-                                    .bg(theme.accent())
+                                    .bg(theme.primary())
+                                    .shadow_md()
                                     .cursor_pointer()
+                                    .hover(move |s| s.bg(btn_primary_hover))
                                     .child(
                                         svg()
                                             .path(play_icon)
-                                            .size(px(17.0))
-                                            .text_color(theme.on_accent()),
+                                            .size(px(20.0))
+                                            .text_color(theme.on_primary()),
                                     )
                                     .on_click(cx.listener(move |_, _, _, _| {
                                         let bus = bus_play.clone();
@@ -314,17 +316,18 @@ impl Render for MediaModule {
                             .child(
                                 div()
                                     .id("shared-media-next-btn")
-                                    .size(px(32.0))
+                                    .size(px(36.0))
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .rounded(px(8.0))
+                                    .rounded_full()
+                                    .bg(theme.surface_container_high())
                                     .cursor_pointer()
-                                    .hover(move |s| s.bg(next_hover))
+                                    .hover(move |s| s.bg(btn_tonal_hover))
                                     .child(
                                         svg()
                                             .path("skip-forward.svg")
-                                            .size(px(15.0))
+                                            .size(px(16.0))
                                             .text_color(theme.foreground()),
                                     )
                                     .on_click(cx.listener(move |_, _, _, _| {

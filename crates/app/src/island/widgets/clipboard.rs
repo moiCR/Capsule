@@ -4,8 +4,8 @@ use crate::island::module::{
 };
 use crate::island::widgets::style;
 use gpui::{
-    AnyElement, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out, img,
-    prelude::*, px, svg,
+    AnyElement, ColorExt, Context, IntoElement, MotionDurationExt, StyledImage, div, ease_in_out,
+    img, prelude::*, px, svg,
 };
 use ui::components::Input;
 use ui::theme::Theme;
@@ -77,7 +77,6 @@ pub(crate) fn render(
     let config = cx.global::<services::AppState>().config.get();
     let duration = std::time::Duration::from_millis(config.ui.animation_duration_ms as u64);
     let preview_radius = px(style::INNER_RADIUS - 2.0);
-    let hover = style::hover(theme);
     let mut header = div()
         .h(px(HEADER_HEIGHT))
         .flex_shrink_0()
@@ -107,20 +106,26 @@ pub(crate) fn render(
             div()
                 .id(id)
                 .h(px(TABS_HEIGHT))
-                .px(px(8.0))
+                .px(px(12.0))
                 .rounded_full()
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .bg(if active {
-                    theme.accent()
+                    theme.primary_container()
                 } else {
-                    style::surface(theme)
+                    theme.surface_container_high()
+                })
+                .border_1()
+                .border_color(if active {
+                    theme.primary()
+                } else {
+                    theme.outline_variant().opacity(0.35)
                 })
                 .text_color(if active {
-                    style::on_accent(theme)
+                    theme.on_primary_container()
                 } else {
-                    theme.foreground_muted()
+                    theme.foreground()
                 })
                 .on_click(cx.listener(move |module, _, _, cx| module.switch_tab(tab, cx)))
                 .child(div().text_size(px(12.0)).child(module.text(label, cx))),
@@ -151,15 +156,15 @@ pub(crate) fn render(
                 .items_center()
                 .justify_center()
                 .rounded_full()
-                .bg(style::surface(theme))
+                .bg(theme.surface_container_high())
                 .cursor_pointer()
-                .hover(move |s| s.bg(hover))
+                .hover(move |s| s.bg(theme.surface_container_highest()))
                 .on_click(cx.listener(|_, _, _, cx| cx.emit(CapsuleModuleEvent::Close)))
                 .child(
                     svg()
                         .path("close.svg")
                         .size(px(13.0))
-                        .text_color(theme.foreground_muted()),
+                        .text_color(theme.on_surface_variant()),
                 ),
         );
     let search = Input::from_state("clipboard-search", &module.search_input)
@@ -168,14 +173,14 @@ pub(crate) fn render(
         .h_px(HEADER_HEIGHT)
         .w_full()
         .rounded_full()
-        .bg(style::surface(theme))
-        .border_color(style::border(theme))
-        .focused_border_color(theme.accent())
+        .bg(theme.surface_container_high())
+        .border_color(theme.outline_variant().opacity(0.35))
+        .focused_border_color(theme.primary())
         .prefix(
             svg()
                 .path("search.svg")
                 .size(px(14.0))
-                .text_color(theme.foreground_muted()),
+                .text_color(theme.on_surface_variant()),
         )
         .on_clear(cx.listener(|this, _, _, cx| {
             this.search_input.clear();
@@ -417,19 +422,19 @@ pub(crate) fn render(
                     .overflow_hidden()
                     .border_2()
                     .border_color(if selected {
-                        theme.accent()
+                        theme.primary()
                     } else {
-                        style::border(theme)
+                        theme.outline_variant().opacity(0.35)
                     })
                     .bg(if selected {
-                        style::selected(theme)
+                        theme.primary_container().opacity(0.65)
                     } else {
-                        style::surface(theme)
+                        theme.surface_container_high()
                     })
                     .transitions(|t| t.bg(duration.with_easing(ease_in_out)))
                     .when(!module.busy, |s| {
                         s.cursor_pointer()
-                            .hover(move |s| s.bg(hover))
+                            .hover(move |s| s.bg(theme.surface_container_highest()))
                             .on_mouse_move(
                                 cx.listener(move |module, _, _, cx| {
                                     module.select(index, false, cx)

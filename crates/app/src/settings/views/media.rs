@@ -284,18 +284,18 @@ impl SettingsView for MediaView {
                         .items_center()
                         .gap(px(12.0))
                         .bg(if is_selected {
-                            style::accent_card(&theme)
+                            theme.primary_container().opacity(0.65)
                         } else {
-                            style::surface(&theme)
+                            theme.surface_container_high()
                         })
                         .border_1()
                         .border_color(if is_selected {
-                            theme.accent().opacity(0.4)
+                            theme.primary()
                         } else {
-                            style::border(&theme)
+                            theme.outline_variant().opacity(0.35)
                         })
                         .cursor_pointer()
-                        .hover(|s| s.bg(style::hover(&theme)))
+                        .hover(|s| s.bg(theme.surface_container_highest()))
                         .on_click(cx.listener(move |_this, _, _, cx| {
                             let target = sink_name.clone();
                             if cx.has_global::<AppState>() {
@@ -309,15 +309,15 @@ impl SettingsView for MediaView {
                             div()
                                 .size(px(28.0))
                                 .rounded_full()
-                                .bg(style::background(&theme))
+                                .bg(theme.surface_container_highest())
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .child(svg().path(icon).size(px(15.0)).text_color(
                                     if is_selected {
-                                        theme.accent()
+                                        theme.primary()
                                     } else {
-                                        theme.foreground_muted()
+                                        theme.on_surface_variant()
                                     },
                                 )),
                         )
@@ -372,18 +372,18 @@ impl SettingsView for MediaView {
                         .items_center()
                         .gap(px(12.0))
                         .bg(if is_selected {
-                            style::accent_card(&theme)
+                            theme.primary_container().opacity(0.65)
                         } else {
-                            style::surface(&theme)
+                            theme.surface_container_high()
                         })
                         .border_1()
                         .border_color(if is_selected {
-                            theme.accent().opacity(0.4)
+                            theme.primary()
                         } else {
-                            style::border(&theme)
+                            theme.outline_variant().opacity(0.35)
                         })
                         .cursor_pointer()
-                        .hover(|s| s.bg(style::hover(&theme)))
+                        .hover(|s| s.bg(theme.surface_container_highest()))
                         .on_click(cx.listener(move |_this, _, _, cx| {
                             let target = source_name.clone();
                             if cx.has_global::<AppState>() {
@@ -397,15 +397,15 @@ impl SettingsView for MediaView {
                             div()
                                 .size(px(28.0))
                                 .rounded_full()
-                                .bg(style::background(&theme))
+                                .bg(theme.surface_container_highest())
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .child(svg().path("mic.svg").size(px(15.0)).text_color(
                                     if is_selected {
-                                        theme.accent()
+                                        theme.primary()
                                     } else {
-                                        theme.foreground_muted()
+                                        theme.on_surface_variant()
                                     },
                                 )),
                         )

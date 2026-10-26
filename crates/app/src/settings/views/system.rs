@@ -75,9 +75,9 @@ impl SettingsView for SystemView {
             .p(px(3.0))
             .gap(px(4.0))
             .rounded_full()
-            .bg(theme.surface().opacity(0.35))
+            .bg(theme.surface_container_high())
             .border_1()
-            .border_color(theme.surface().opacity(0.25));
+            .border_color(theme.outline_variant().opacity(0.35));
 
         for (prof, label, icon) in profiles {
             let is_active = current_profile == prof;
@@ -89,19 +89,19 @@ impl SettingsView for SystemView {
                     .flex()
                     .flex_row()
                     .items_center()
-                    .gap(px(5.0))
-                    .px(px(12.0))
+                    .gap(px(6.0))
+                    .px(px(14.0))
                     .py(px(5.0))
                     .rounded_full()
                     .bg(if is_active {
-                        theme.accent()
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .transitions(|t| t.bg(millis(160).with_easing(ease_in_out)))
                     .hover(|s| {
                         if !is_active {
-                            s.bg(theme.surface().opacity(0.4))
+                            s.bg(theme.surface_container_highest())
                         } else {
                             s
                         }
@@ -120,9 +120,9 @@ impl SettingsView for SystemView {
                             .path(icon)
                             .size(px(13.0))
                             .text_color(if is_active {
-                                theme.background()
+                                theme.on_primary_container()
                             } else {
-                                theme.foreground_muted()
+                                theme.on_surface_variant()
                             })
                             .transitions(|t| t.text_color(millis(160).with_easing(ease_in_out))),
                     )
@@ -135,7 +135,7 @@ impl SettingsView for SystemView {
                                 FontWeight::MEDIUM
                             })
                             .text_color(if is_active {
-                                theme.background()
+                                theme.on_primary_container()
                             } else {
                                 theme.foreground()
                             })

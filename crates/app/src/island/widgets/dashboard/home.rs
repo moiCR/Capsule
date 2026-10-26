@@ -4,7 +4,7 @@ use super::{
 };
 use crate::island::satellite::SatelliteId as View;
 use crate::island::{module::dashboard::DashboardModule, widgets::style};
-use gpui::{AnyElement, Context, IntoElement, div, img, prelude::*, px, svg};
+use gpui::{AnyElement, ColorExt, Context, IntoElement, div, img, prelude::*, px, svg};
 use std::path::PathBuf;
 use ui::components::Slider;
 use ui::theme::Theme;
@@ -33,7 +33,7 @@ fn connectivity(
         toggle,
         detail,
     } = control;
-    let hover = style::hover(theme);
+    let hover = theme.surface_container_highest();
     let open = detail
         .clone()
         .map(Action::Satellite)
@@ -44,7 +44,9 @@ fn connectivity(
         .h(px(CONTROLS))
         .flex_shrink_0()
         .rounded(px(18.0))
-        .bg(style::surface(theme))
+        .bg(theme.surface_container_high())
+        .border_1()
+        .border_color(theme.outline_variant().opacity(0.35))
         .px(px(12.0))
         .flex()
         .items_center()
@@ -59,9 +61,9 @@ fn connectivity(
                 .flex_shrink_0()
                 .rounded_full()
                 .bg(if enabled {
-                    theme.accent()
+                    theme.primary()
                 } else {
-                    style::background(theme)
+                    theme.surface_container_highest()
                 })
                 .flex()
                 .items_center()
@@ -71,9 +73,9 @@ fn connectivity(
                     this.dispatch(toggle.clone(), cx);
                 }))
                 .child(svg().path(icon).size(px(20.0)).text_color(if enabled {
-                    style::on_accent(theme)
+                    theme.on_primary()
                 } else {
-                    theme.foreground_muted()
+                    theme.on_surface_variant()
                 })),
         )
         .child(
@@ -133,10 +135,10 @@ fn slider(
     let active = if !brightness && module.snapshot.audio.is_muted {
         theme.foreground_muted()
     } else {
-        theme.accent()
+        theme.primary()
     };
-    let track_color = style::background(theme);
-    let hover = style::hover(theme);
+    let track_color = theme.surface_container_high();
+    let hover = theme.surface_container_highest();
     let track = Slider::new(if brightness {
         "dashboard-brightness-slider"
     } else {
@@ -239,7 +241,7 @@ fn slider(
                             .size(px(32.0))
                             .flex_shrink_0()
                             .rounded_full()
-                            .bg(style::background(theme))
+                            .bg(theme.surface_container_high())
                             .flex()
                             .items_center()
                             .justify_center()

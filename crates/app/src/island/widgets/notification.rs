@@ -1,6 +1,8 @@
 use super::style;
 use crate::island::module::{CapsuleModuleEvent, notification::NotificationModule};
-use gpui::{AnyElement, Context, FontWeight, IntoElement, div, img, prelude::*, px, svg};
+use gpui::{
+    AnyElement, ColorExt, Context, FontWeight, IntoElement, div, img, prelude::*, px, svg,
+};
 use services::{NotificationItem, NotificationStore};
 use std::path::PathBuf;
 use ui::components::{
@@ -264,7 +266,7 @@ fn card(
         svg()
             .path("bell.svg")
             .size(px(20.0))
-            .text_color(theme.accent())
+            .text_color(theme.primary())
             .into_any_element()
     };
     let mut content = div()
@@ -319,7 +321,9 @@ fn card(
                 .min_h(px(100.0))
                 .p(px(14.0))
                 .rounded(px(style::CARD_RADIUS))
-                .bg(style::surface(theme))
+                .bg(theme.surface_container_high())
+                .border_1()
+                .border_color(theme.outline_variant().opacity(0.35))
         })
         .child(
             div()
@@ -333,7 +337,7 @@ fn card(
                         .size(px(32.0))
                         .flex_shrink_0()
                         .rounded_full()
-                        .bg(style::selected(theme))
+                        .bg(theme.primary_container())
                         .flex()
                         .items_center()
                         .justify_center()

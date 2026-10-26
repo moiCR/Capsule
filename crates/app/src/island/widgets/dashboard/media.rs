@@ -1,6 +1,5 @@
 use super::{DashboardAction as Action, icon_action};
 use crate::island::module::dashboard::DashboardModule;
-use crate::island::widgets::style;
 use gpui::{
     AnyElement, ColorExt, Context, IntoElement, PathBuilder, StyledImage, div, img, point,
     prelude::*, px, svg,
@@ -48,7 +47,9 @@ pub fn render(
         .gap(px(12.0))
         .justify_center()
         .rounded(px(radius))
-        .bg(style::surface(theme));
+        .bg(theme.surface_container_high())
+        .border_1()
+        .border_color(theme.outline_variant().opacity(0.35));
     let Some(track) = module.player() else {
         return card
             .justify_center()
@@ -64,8 +65,8 @@ pub fn render(
     };
     let phase = module.wave_phase;
     let amplitude = if track.is_playing { 3.0 } else { 0.0 };
-    let active = theme.accent();
-    let inactive = theme.foreground_muted().opacity(0.3);
+    let active = theme.primary();
+    let inactive = theme.outline_variant();
     let bounds_tracker = module.seek_bounds.clone();
     let progress = div()
         .id("dashboard-seek")
@@ -185,11 +186,12 @@ pub fn render(
                     .size(px(36.0))
                     .flex_shrink_0()
                     .rounded_full()
-                    .bg(theme.accent())
+                    .bg(theme.primary())
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
+                    .hover(move |s| s.bg(theme.primary_hover()))
                     .on_click(cx.listener(|this, _, _, cx| this.dispatch(Action::Media(0), cx)))
                     .child(
                         svg()
@@ -199,7 +201,7 @@ pub fn render(
                                 "play.svg"
                             })
                             .size(px(22.0))
-                            .text_color(style::on_accent(theme)),
+                            .text_color(theme.on_primary()),
                     ),
             ),
     )

@@ -67,7 +67,7 @@ pub(crate) fn render_satellite(
                                 .flex()
                                 .items_center()
                                 .gap(px(8.0))
-                                .child(svg().path(icon).size(px(16.0)).text_color(theme.accent()))
+                                .child(svg().path(icon).size(px(16.0)).text_color(theme.primary()))
                                 .child(
                                     div()
                                         .text_size(px(13.0))

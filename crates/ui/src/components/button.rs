@@ -14,6 +14,8 @@ pub enum ButtonVariant {
     Secondary,
     Ghost,
     Danger,
+    Outlined,
+    Elevated,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -175,36 +177,48 @@ impl RenderOnce for Button {
 
         let (base_bg, hover_bg, text_col, border_col) = if self.selected {
             (
-                theme.accent(),
-                theme.accent().opacity(0.9),
-                theme.on_accent(),
-                theme.accent(),
+                theme.primary(),
+                theme.primary_hover(),
+                theme.on_primary(),
+                theme.primary(),
             )
         } else {
             match self.variant {
                 ButtonVariant::Primary => (
-                    theme.accent(),
-                    theme.accent().opacity(0.85),
-                    theme.on_accent(),
-                    theme.accent(),
+                    theme.primary(),
+                    theme.primary_hover(),
+                    theme.on_primary(),
+                    theme.primary(),
                 ),
                 ButtonVariant::Secondary => (
-                    theme.surface().opacity(0.4),
-                    theme.surface().opacity(0.65),
-                    theme.foreground(),
-                    theme.surface().opacity(0.2),
+                    theme.primary_container(),
+                    theme.hover_layer(theme.primary_container()),
+                    theme.on_primary_container(),
+                    theme.primary_container(),
                 ),
                 ButtonVariant::Ghost => (
                     gpui::transparent_black(),
-                    theme.surface().opacity(0.3),
-                    theme.foreground(),
+                    theme.hover_layer(gpui::transparent_black()),
+                    theme.primary(),
                     gpui::transparent_black(),
                 ),
+                ButtonVariant::Outlined => (
+                    gpui::transparent_black(),
+                    theme.hover_layer(gpui::transparent_black()),
+                    theme.primary(),
+                    theme.outline(),
+                ),
+                ButtonVariant::Elevated => (
+                    theme.surface_container_low(),
+                    theme.hover_layer(theme.surface_container_low()),
+                    theme.primary(),
+                    theme.surface_container_low(),
+                ),
                 ButtonVariant::Danger => (
-                    theme.red().opacity(0.15),
-                    theme.red().opacity(0.25),
+                    theme.red().opacity(0.18),
+                    theme.red().opacity(0.28),
                     theme.red(),
-                    theme.red().opacity(0.3),
+                    theme.red().opacity(0.35),
                 ),
             }
         };
@@ -361,30 +375,40 @@ impl RenderOnce for IconButton {
 
         let (base_bg, hover_bg, icon_col) = if self.selected {
             (
-                theme.accent(),
-                theme.accent().opacity(0.85),
-                theme.on_accent(),
+                theme.primary(),
+                theme.primary_hover(),
+                theme.on_primary(),
             )
         } else {
             match self.variant {
                 ButtonVariant::Primary => (
-                    theme.accent(),
-                    theme.accent().opacity(0.85),
-                    theme.on_accent(),
+                    theme.primary(),
+                    theme.primary_hover(),
+                    theme.on_primary(),
                 ),
                 ButtonVariant::Secondary => (
-                    theme.surface().opacity(0.35),
-                    theme.surface().opacity(0.6),
+                    theme.surface_container_high(),
+                    theme.hover_layer(theme.surface_container_high()),
                     theme.foreground(),
                 ),
                 ButtonVariant::Ghost => (
                     gpui::transparent_black(),
-                    theme.surface().opacity(0.35),
+                    theme.hover_layer(gpui::transparent_black()),
                     theme.foreground(),
                 ),
+                ButtonVariant::Outlined => (
+                    gpui::transparent_black(),
+                    theme.hover_layer(gpui::transparent_black()),
+                    theme.primary(),
+                ),
+                ButtonVariant::Elevated => (
+                    theme.surface_container_low(),
+                    theme.hover_layer(theme.surface_container_low()),
+                    theme.primary(),
+                ),
                 ButtonVariant::Danger => (
-                    theme.red().opacity(0.15),
-                    theme.red().opacity(0.25),
+                    theme.red().opacity(0.18),
+                    theme.red().opacity(0.28),
                     theme.red(),
                 ),
             }

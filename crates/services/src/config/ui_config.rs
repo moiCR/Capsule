@@ -101,7 +101,7 @@ pub enum BarZone {
     Right,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BarConfig {
     #[serde(default = "default_bar_left")]
     pub left: Vec<BarWidgetId>,
@@ -111,6 +111,24 @@ pub struct BarConfig {
     pub right: Vec<BarWidgetId>,
     #[serde(default)]
     pub convex: bool,
+    #[serde(default = "default_bar_animation", alias = "animation")]
+    pub animation: CapsuleAnimation,
+    #[serde(default = "default_bar_duration_ms", alias = "animation_duration_ms")]
+    pub animation_duration_ms: u32,
+    #[serde(default = "default_spring_bounciness")]
+    pub spring_bounciness: f32,
+    #[serde(default)]
+    pub squash_stretch: bool,
+    #[serde(default)]
+    pub reduced_motion: bool,
+}
+
+fn default_bar_animation() -> CapsuleAnimation {
+    CapsuleAnimation::Fluid
+}
+
+fn default_bar_duration_ms() -> u32 {
+    220
 }
 
 fn default_bar_left() -> Vec<BarWidgetId> {
@@ -137,6 +155,11 @@ impl Default for BarConfig {
             center: default_bar_center(),
             right: default_bar_right(),
             convex: false,
+            animation: default_bar_animation(),
+            animation_duration_ms: default_bar_duration_ms(),
+            spring_bounciness: default_spring_bounciness(),
+            squash_stretch: false,
+            reduced_motion: false,
         }
     }
 }
@@ -573,5 +596,22 @@ mod tests {
         let encoded = toml::to_string(&default_config).expect("serialize");
         let decoded: UIConfig = toml::from_str(&encoded).expect("deserialize");
         assert_eq!(decoded.bar, default_config.bar);
+    }
+
+    #[test]
+    fn bar_config_animation_is_independent() {
+        let mut cfg = UIConfig::default();
+        cfg.capsule_animation = CapsuleAnimation::Expo;
+        cfg.animation_duration_ms = 400;
+
+        cfg.bar.animation = CapsuleAnimation::Spring;
+        cfg.bar.animation_duration_ms = 180;
+        cfg.bar.squash_stretch = false;
+
+        assert_eq!(cfg.capsule_animation, CapsuleAnimation::Expo);
+        assert_eq!(cfg.bar.animation, CapsuleAnimation::Spring);
+        assert_ne!(cfg.animation_duration_ms, cfg.bar.animation_duration_ms);
+        assert!(cfg.squash_stretch);
+        assert!(!cfg.bar.squash_stretch);
     }
 }

@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
 use gpui::{Bounds, Hsla, PathBuilder, Pixels, Size, div, point, prelude::*, px};
-use ui::theme::Theme;
+#[allow(unused_imports)]
+pub use ui::theme::{SHAPE_FULL, SHAPE_LG, SHAPE_MD, SHAPE_SM, SHAPE_XL, SHAPE_XS, Theme};
 
-fn opaque(mut color: Hsla) -> Hsla {
+pub(crate) fn opaque(mut color: Hsla) -> Hsla {
     color.alpha = 1.0;
     color
 }
@@ -218,24 +219,56 @@ pub(crate) fn panel_header(icon: &'static str, title: String, theme: &Theme) -> 
         )
 }
 
+pub(crate) fn surface_container(theme: &Theme) -> Hsla {
+    theme.surface_container()
+}
+
+pub(crate) fn surface_container_high(theme: &Theme) -> Hsla {
+    theme.surface_container_high()
+}
+
+pub(crate) fn surface_container_highest(theme: &Theme) -> Hsla {
+    theme.surface_container_highest()
+}
+
+pub(crate) fn outline_variant(theme: &Theme) -> Hsla {
+    theme.outline_variant()
+}
+
+pub(crate) fn primary(theme: &Theme) -> Hsla {
+    theme.primary()
+}
+
+pub(crate) fn on_primary(theme: &Theme) -> Hsla {
+    theme.on_primary()
+}
+
+pub(crate) fn primary_container(theme: &Theme) -> Hsla {
+    theme.primary_container()
+}
+
+pub(crate) fn on_primary_container(theme: &Theme) -> Hsla {
+    theme.on_primary_container()
+}
+
 pub(crate) fn circle_button(
     id: impl Into<gpui::ElementId>,
     icon: &'static str,
     diameter: f32,
     theme: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
-    let hover = hover(theme);
+    let hover_bg = theme.surface_container_highest();
     div()
         .id(id)
         .size(px(diameter))
         .flex_shrink_0()
         .rounded_full()
-        .bg(raised(theme))
+        .bg(theme.surface_container_high())
         .flex()
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .hover(move |s| s.bg(hover))
+        .hover(move |s| s.bg(hover_bg))
         .child(
             gpui::svg()
                 .path(icon)
@@ -250,8 +283,8 @@ pub(crate) fn primary_button(
     enabled: bool,
     theme: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
-    let accent = opaque(theme.accent());
-    let pressed = tint(accent, theme.foreground(), 0.12);
+    let primary_col = theme.primary();
+    let hover_col = theme.primary_hover();
     div()
         .id(id)
         .h(px(32.0))
@@ -263,11 +296,11 @@ pub(crate) fn primary_button(
         .justify_center()
         .text_size(px(12.0))
         .font_weight(gpui::FontWeight::MEDIUM)
-        .bg(accent)
-        .text_color(on_accent(theme))
+        .bg(primary_col)
+        .text_color(theme.on_primary())
         .opacity(if enabled { 1.0 } else { 0.45 })
         .when(enabled, |s| {
-            s.cursor_pointer().hover(move |s| s.bg(pressed))
+            s.cursor_pointer().hover(move |s| s.bg(hover_col))
         })
         .child(label)
 }
@@ -290,11 +323,12 @@ pub(crate) fn chip(
         .text_size(px(11.0))
         .cursor_pointer()
         .when(selected, |s| {
-            s.bg(opaque(theme.accent())).text_color(on_accent(theme))
+            s.bg(theme.primary_container()).text_color(theme.on_primary_container())
         })
         .when(!selected, |s| {
-            s.border_1()
-                .border_color(border(theme))
+            s.bg(theme.surface_container_low())
+                .border_1()
+                .border_color(theme.outline_variant())
                 .text_color(theme.foreground())
                 .hover(move |s| s.bg(hover))
         })
@@ -306,7 +340,7 @@ pub(crate) fn check_badge(diameter: f32, theme: &Theme) -> gpui::Div {
         .size(px(diameter))
         .flex_shrink_0()
         .rounded_full()
-        .bg(opaque(theme.accent()))
+        .bg(theme.primary())
         .flex()
         .items_center()
         .justify_center()
@@ -314,7 +348,7 @@ pub(crate) fn check_badge(diameter: f32, theme: &Theme) -> gpui::Div {
             gpui::svg()
                 .path("check.svg")
                 .size(px((diameter * 0.6).round()))
-                .text_color(on_accent(theme)),
+                .text_color(theme.on_primary()),
         )
 }
 
@@ -327,7 +361,7 @@ pub(crate) fn radio(selected: bool, diameter: f32, theme: &Theme) -> gpui::Div {
             .flex_shrink_0()
             .rounded_full()
             .border_2()
-            .border_color(theme.foreground_muted())
+            .border_color(theme.outline_variant())
     }
 }
 
@@ -338,9 +372,9 @@ pub(crate) fn search_field(theme: &Theme) -> gpui::Div {
         .flex_shrink_0()
         .px(px(14.0))
         .rounded_full()
-        .bg(surface(theme))
+        .bg(theme.surface_container_high())
         .border_1()
-        .border_color(border(theme))
+        .border_color(theme.outline_variant())
         .flex()
         .items_center()
         .gap(px(10.0))

@@ -1,16 +1,14 @@
 use gpui::{
-    AnyElement, App, Context, ElementId, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Styled, Window, div, img, prelude::*, px, svg,
+    AnyElement, App, ColorExt, Context, ElementId, IntoElement, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Styled, Window, div, img, prelude::*, px, svg,
 };
-use services::{AppState, CapsuleAnimation, ShellMode, WallpaperTransition};
+use services::{AppState, ShellMode, WallpaperTransition};
 use ui::components::{Button, ButtonSize, ButtonVariant};
 use ui::theme::Theme;
-use ui::tracker::DimensionTracker;
 
 use super::SettingsView;
 use super::common::{
-    card, control_row, heading, hero_header, row_divider, segmented_selector, slider_row,
-    toggle_row,
+    card, control_row, heading, hero_header, row_divider, segmented_selector, toggle_row,
 };
 use crate::island::widgets::style;
 use crate::settings::Settings;
@@ -23,82 +21,14 @@ fn text(key: &str, cx: &App) -> String {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum AppearanceSlider {
-    AnimDuration,
-}
-
 pub struct AppearanceView {
     pub appearance_error: Option<String>,
-    active_slider: Option<(AppearanceSlider, DimensionTracker, f32, f32, f32)>,
-    anim_duration_tracker: DimensionTracker,
 }
 
 impl AppearanceView {
     pub fn new() -> Self {
         Self {
             appearance_error: None,
-            active_slider: None,
-            anim_duration_tracker: DimensionTracker::new(),
-        }
-    }
-
-    fn slider_control_row(
-        &self,
-        id: &'static str,
-        label: &str,
-        value_text: &str,
-        slider_kind: AppearanceSlider,
-        value: f32,
-        range: (f32, f32, f32),
-        tracker: &DimensionTracker,
-        theme: &Theme,
-        cx: &mut Context<Settings>,
-    ) -> AnyElement {
-        let (min, max, step) = range;
-        let fraction = ((value - min) / (max - min)).clamp(0.0, 1.0);
-        let tracker_clone = tracker.clone();
-        slider_row(
-            ElementId::Name(id.into()),
-            label,
-            value_text,
-            fraction,
-            tracker,
-            theme,
-            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-                if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                    view.active_slider = Some((slider_kind, tracker_clone.clone(), min, max, step));
-                    view.update_slider_value(event.position.x.into(), cx);
-                }
-            }),
-            cx.listener(|this, event: &gpui::MouseUpEvent, _, cx| {
-                if let Some(view) = this.view_as_mut::<AppearanceView>() {
-                    if view.handle_mouse_up(event, cx) {
-                        cx.notify();
-                    }
-                }
-            }),
-        )
-    }
-
-    fn update_slider_value(&mut self, x: f32, cx: &mut Context<Settings>) {
-        if let Some((slider, tracker, min, max, step)) = &self.active_slider {
-            let left = tracker.left();
-            let width = tracker.width(0.0);
-            if width > 0.0 {
-                let frac = ((x - left) / width).clamp(0.0, 1.0);
-                let raw_val = min + frac * (max - min);
-                let stepped = (raw_val / step).round() * step;
-                let val = stepped.clamp(*min, *max);
-
-                if cx.has_global::<AppState>() {
-                    let s = *slider;
-                    let _ = cx.global::<AppState>().config.update(|cfg| match s {
-                        AppearanceSlider::AnimDuration => cfg.ui.animation_duration_ms = val as u32,
-                    });
-                }
-                cx.notify();
-            }
         }
     }
 }
@@ -114,19 +44,11 @@ impl SettingsView for AppearanceView {
         self
     }
 
-    fn handle_mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<Settings>) -> bool {
-        if self.active_slider.is_some() {
-            self.update_slider_value(event.position.x.into(), cx);
-            return true;
-        }
+    fn handle_mouse_move(&mut self, _event: &MouseMoveEvent, _cx: &mut Context<Settings>) -> bool {
         false
     }
 
     fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _cx: &mut Context<Settings>) -> bool {
-        if self.active_slider.is_some() {
-            self.active_slider = None;
-            return true;
-        }
         false
     }
 
@@ -206,9 +128,9 @@ impl SettingsView for AppearanceView {
                                 .aspect_ratio(16.0 / 9.0)
                                 .rounded(px(16.0))
                                 .overflow_hidden()
-                                .bg(style::surface(&theme))
+                                .bg(theme.surface_container_high())
                                 .border_1()
-                                .border_color(style::border(&theme))
+                                .border_color(theme.outline_variant().opacity(0.35))
                                 .flex()
                                 .flex_col()
                                 .items_center()
@@ -406,90 +328,6 @@ impl SettingsView for AppearanceView {
                             }
                             cx.notify();
                         }),
-                    ))
-                    .child(row_divider(&theme))
-                    .child(control_row(
-                        &text("settings.animation_style", cx),
-                        Some(&text("settings.animation_style_hint", cx)),
-                        segmented_selector(
-                            "animation-curve-selector",
-                            [
-                                (
-                                    CapsuleAnimation::Fluid,
-                                    "curve-fluid",
-                                    text("settings.animation_fluid", cx),
-                                ),
-                                (
-                                    CapsuleAnimation::Cubic,
-                                    "curve-cubic",
-                                    text("settings.animation_cubic", cx),
-                                ),
-                                (
-                                    CapsuleAnimation::Expo,
-                                    "curve-expo",
-                                    text("settings.animation_expo", cx),
-                                ),
-                                (
-                                    CapsuleAnimation::Back,
-                                    "curve-back",
-                                    text("settings.animation_back", cx),
-                                ),
-                                (
-                                    CapsuleAnimation::Spring,
-                                    "curve-spring",
-                                    text("settings.animation_spring", cx),
-                                ),
-                            ],
-                            config.ui.capsule_animation,
-                            &theme,
-                            cx,
-                            |_settings, anim, _window, cx| {
-                                if cx.has_global::<AppState>() {
-                                    let _ = cx.global::<AppState>().config.update(|cfg| {
-                                        cfg.ui.capsule_animation = anim;
-                                    });
-                                }
-                                cx.notify();
-                            },
-                        ),
-                        &theme,
-                    ))
-                    .child(row_divider(&theme))
-                    .child(control_row(
-                        &text("settings.speed_presets_title", cx),
-                        None,
-                        segmented_selector(
-                            "speed-preset",
-                            [
-                                (120u32, "snappy", text("settings.speed_snappy", cx)),
-                                (250u32, "balanced", text("settings.speed_balanced", cx)),
-                                (400u32, "smooth", text("settings.speed_smooth", cx)),
-                            ],
-                            config.ui.animation_duration_ms,
-                            &theme,
-                            cx,
-                            |_settings, ms, _window, cx| {
-                                if cx.has_global::<AppState>() {
-                                    let _ = cx.global::<AppState>().config.update(|cfg| {
-                                        cfg.ui.animation_duration_ms = ms;
-                                    });
-                                }
-                                cx.notify();
-                            },
-                        ),
-                        &theme,
-                    ))
-                    .child(row_divider(&theme))
-                    .child(self.slider_control_row(
-                        "slider-anim-duration",
-                        &text("settings.animation_short", cx),
-                        &format!("{:.0} ms", config.ui.animation_duration_ms),
-                        AppearanceSlider::AnimDuration,
-                        config.ui.animation_duration_ms as f32,
-                        (0.0, 1000.0, 25.0),
-                        &self.anim_duration_tracker,
-                        &theme,
-                        cx,
                     ))
                     .child(row_divider(&theme))
                     .child(toggle_row(

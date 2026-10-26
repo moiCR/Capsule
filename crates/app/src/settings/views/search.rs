@@ -172,7 +172,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
         id: "motion-duration",
         title_key: "settings.anim_duration_title",
         desc_key: "settings.motion_heading",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "animacion",
             "animaciones",
@@ -195,13 +195,30 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "snappy",
             "suave",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
+    },
+    SearchDefinition {
+        id: "bar-motion",
+        title_key: "settings.motion_heading",
+        desc_key: "settings.animation_style_hint",
+        tab: SettingsTab::Bar,
+        keywords: &[
+            "barra",
+            "bar",
+            "animacion",
+            "velocidad",
+            "curva",
+            "motion",
+            "duracion",
+            "popup",
+        ],
+        control: SearchControl::Navigate(SettingsTab::Bar),
     },
     SearchDefinition {
         id: "content-transition",
         title_key: "settings.content_transition_title",
         desc_key: "settings.content_transition_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "transicion",
             "contenido",
@@ -212,13 +229,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "scale",
             "crossfade",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "spring-bounciness",
         title_key: "settings.spring_bounciness_title",
         desc_key: "settings.spring_bounciness_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "rebote",
             "bounciness",
@@ -227,13 +244,13 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "spring",
             "resorte",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "squash-stretch",
         title_key: "settings.squash_stretch_title",
         desc_key: "settings.squash_stretch_hint",
-        tab: SettingsTab::Appearance,
+        tab: SettingsTab::Island,
         keywords: &[
             "squash",
             "stretch",
@@ -244,7 +261,7 @@ const SEARCH_DEFINITIONS: &[SearchDefinition] = &[
             "compresion",
             "inercial",
         ],
-        control: SearchControl::Navigate(SettingsTab::Appearance),
+        control: SearchControl::Navigate(SettingsTab::Island),
     },
     SearchDefinition {
         id: "stagger-animation",
@@ -719,7 +736,7 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                     .h(px(28.0))
                     .px(px(12.0))
                     .rounded_full()
-                    .bg(style::surface(theme))
+                    .bg(theme.surface_container_high())
                     .border_1()
                     .border_color(style::border(theme))
                     .hover(|s| s.bg(style::hover(theme)).border_color(theme.accent()))
@@ -771,7 +788,7 @@ pub fn render_search_results(query: &str, theme: &Theme, cx: &mut Context<Settin
                 div()
                     .size(px(52.0))
                     .rounded_full()
-                    .bg(style::surface(theme))
+                    .bg(theme.surface_container_high())
                     .flex()
                     .items_center()
                     .justify_center()

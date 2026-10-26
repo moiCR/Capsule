@@ -17,11 +17,24 @@ pub fn render(theme: &Theme, cx: &mut Context<Bar>) -> AnyElement {
         return div().id("bar-widget-media-empty").into_any_element();
     }
 
+    let max_w = if let Some(state) = cx.try_global::<AppState>() {
+        let left_len = state.config.get().ui.bar.left.len();
+        if left_len >= 5 {
+            px(110.0)
+        } else if left_len >= 4 {
+            px(150.0)
+        } else {
+            px(220.0)
+        }
+    } else {
+        px(220.0)
+    };
+
     let mut text_container = div()
         .flex()
         .items_center()
         .gap(px(5.0))
-        .max_w(px(220.0))
+        .max_w(max_w)
         .overflow_hidden();
 
     text_container = text_container.child(

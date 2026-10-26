@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{
-    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render,
-    ScrollHandle, Size, Window, div, img, px, svg,
+    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Render, ScrollHandle, Size, Window, div, img, px, svg,
 };
 use services::{AppState, ClipboardItem, Snippet};
 use ui::components::{Input, InputState};
@@ -351,7 +351,23 @@ impl Render for ClipboardModule {
                 .text_size(px(13.5))
                 .bg(gpui::transparent_black())
                 .border_color(gpui::transparent_black())
-                .focused_border_color(gpui::transparent_black()),
+                .focused_border_color(gpui::transparent_black())
+                .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    let theme = cx.global::<Theme>().clone();
+                    this.search_input.handle_mouse_down(event, window, &theme);
+                    cx.notify();
+                }))
+                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                    if this.search_input.is_dragging {
+                        let theme = cx.global::<Theme>().clone();
+                        this.search_input.handle_mouse_move(event, window, &theme);
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                    this.search_input.handle_mouse_up(event);
+                    cx.notify();
+                })),
         );
 
         let clear_hover = theme.red().opacity(0.18);
@@ -419,12 +435,12 @@ impl Render for ClipboardModule {
             self.filtered_history().into_iter().cloned().collect();
         let snippet_items: Vec<Snippet> = self.filtered_snippets().into_iter().cloned().collect();
 
-        let tab_hover_1 = style::surface(&theme).opacity(0.40);
+        let tab_hover_1 = theme.hover_layer(gpui::transparent_black());
         let tab_history_btn = div()
             .id("clip-tab-history")
-            .h(px(26.0))
-            .px(px(10.0))
-            .rounded(px(6.0))
+            .h(px(28.0))
+            .px(px(14.0))
+            .rounded_full()
             .cursor_pointer()
             .flex()
             .items_center()
@@ -436,18 +452,18 @@ impl Render for ClipboardModule {
                 gpui::FontWeight::MEDIUM
             })
             .bg(if is_history {
-                style::surface(&theme).opacity(0.85)
+                theme.primary_container()
             } else {
                 gpui::transparent_black()
             })
             .border_1()
             .border_color(if is_history {
-                style::border(&theme).opacity(0.18)
+                theme.primary_container()
             } else {
                 gpui::transparent_black()
             })
             .text_color(if is_history {
-                theme.foreground()
+                theme.on_primary_container()
             } else {
                 theme.foreground_muted()
             })
@@ -460,12 +476,12 @@ impl Render for ClipboardModule {
             }))
             .child(history_label);
 
-        let tab_hover_2 = style::surface(&theme).opacity(0.40);
+        let tab_hover_2 = theme.hover_layer(gpui::transparent_black());
         let tab_snippets_btn = div()
             .id("clip-tab-snippets")
-            .h(px(26.0))
-            .px(px(10.0))
-            .rounded(px(6.0))
+            .h(px(28.0))
+            .px(px(14.0))
+            .rounded_full()
             .cursor_pointer()
             .flex()
             .items_center()
@@ -477,18 +493,18 @@ impl Render for ClipboardModule {
                 gpui::FontWeight::MEDIUM
             })
             .bg(if !is_history {
-                style::surface(&theme).opacity(0.85)
+                theme.primary_container()
             } else {
                 gpui::transparent_black()
             })
             .border_1()
             .border_color(if !is_history {
-                style::border(&theme).opacity(0.18)
+                theme.primary_container()
             } else {
                 gpui::transparent_black()
             })
             .text_color(if !is_history {
-                theme.foreground()
+                theme.on_primary_container()
             } else {
                 theme.foreground_muted()
             })
@@ -586,7 +602,10 @@ impl Render for ClipboardModule {
                         let card_body = if is_image {
                             let img_view = if let Some(ref path) = item.image_path {
                                 img(path.clone())
-                                    .size_full()
+                                    .w(px(CARD_WIDTH))
+                                    .h(px(94.0))
+                                    .aspect_ratio(CARD_WIDTH / 94.0)
+                                    .rounded_t(px(12.0))
                                     .object_fit(gpui::ObjectFit::Cover)
                                     .into_any_element()
                             } else {
@@ -613,9 +632,12 @@ impl Render for ClipboardModule {
                                         .w_full()
                                         .h(px(94.0))
                                         .flex_shrink_0()
-                                        .rounded_t_xl()
+                                        .rounded_t(px(12.0))
                                         .overflow_hidden()
                                         .bg(style::surface(&theme))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
                                         .child(img_view),
                                 )
                                 .child(
@@ -829,6 +851,7 @@ impl Render for ClipboardModule {
                             .h(px(CARD_HEIGHT))
                             .flex_shrink_0()
                             .rounded(px(12.0))
+                            .overflow_hidden()
                             .bg(if is_selected {
                                 style::surface(&theme).opacity(0.85)
                             } else {
@@ -904,6 +927,7 @@ impl Render for ClipboardModule {
                         .h(px(CARD_HEIGHT))
                         .flex_shrink_0()
                         .rounded(px(12.0))
+                        .overflow_hidden()
                         .bg(if is_selected {
                             style::surface(&theme).opacity(0.85)
                         } else {

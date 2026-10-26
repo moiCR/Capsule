@@ -35,6 +35,7 @@ pub enum IslandSlider {
     SatelliteRound,
     CardsRound,
     SpringBounciness,
+    AnimDuration,
 }
 
 pub struct IslandView {
@@ -51,6 +52,7 @@ pub struct IslandView {
     satellite_round_tracker: DimensionTracker,
     cards_round_tracker: DimensionTracker,
     spring_bounciness_tracker: DimensionTracker,
+    anim_duration_tracker: DimensionTracker,
 }
 
 impl IslandView {
@@ -67,6 +69,7 @@ impl IslandView {
             satellite_round_tracker: DimensionTracker::new(),
             cards_round_tracker: DimensionTracker::new(),
             spring_bounciness_tracker: DimensionTracker::new(),
+            anim_duration_tracker: DimensionTracker::new(),
         }
     }
 
@@ -228,6 +231,7 @@ impl IslandView {
                         IslandSlider::SatelliteRound => cfg.ui.satellite_round = val,
                         IslandSlider::CardsRound => cfg.ui.cards_round = val,
                         IslandSlider::SpringBounciness => cfg.ui.spring_bounciness = val,
+                        IslandSlider::AnimDuration => cfg.ui.animation_duration_ms = val as u32,
                     });
                 }
                 cx.notify();
@@ -256,14 +260,14 @@ fn silhouette(
         .h(px(height))
         .flex_shrink_0()
         .when(!concave, |s| {
-            s.child(div().size_full().bg(theme.accent()).rounded(px(radius)))
+            s.child(div().size_full().bg(theme.primary()).rounded(px(radius)))
         })
         .when(concave, |s| {
             s.child(style::concave_background(
                 gpui::size(px(width), px(height)),
                 radius,
                 bottom,
-                theme.accent(),
+                theme.primary(),
             ))
         })
 }
@@ -552,6 +556,46 @@ impl SettingsView for IslandView {
                             },
                         ),
                         &theme,
+                    ))
+                    .child(row_divider(&theme))
+                    .child(control_row(
+                        &text("settings.speed_presets_title", cx),
+                        None,
+                        segmented_selector(
+                            "island-speed-preset",
+                            [
+                                (120u32, "snappy", text("settings.speed_snappy", cx)),
+                                (250u32, "balanced", text("settings.speed_balanced", cx)),
+                                (400u32, "smooth", text("settings.speed_smooth", cx)),
+                            ],
+                            config.ui.animation_duration_ms,
+                            &theme,
+                            cx,
+                            |settings, ms, window, cx| {
+                                if cx.has_global::<AppState>() {
+                                    let _ = cx.global::<AppState>().config.update(|cfg| {
+                                        cfg.ui.animation_duration_ms = ms;
+                                    });
+                                }
+                                if let Some(view) = settings.view_as_mut::<IslandView>() {
+                                    view.play_motion_preview(window, cx);
+                                }
+                                cx.notify();
+                            },
+                        ),
+                        &theme,
+                    ))
+                    .child(row_divider(&theme))
+                    .child(self.slider_control_row(
+                        "slider-anim-duration",
+                        &text("settings.animation_short", cx),
+                        &format!("{:.0} ms", config.ui.animation_duration_ms),
+                        IslandSlider::AnimDuration,
+                        config.ui.animation_duration_ms as f32,
+                        (0.0, 1000.0, 25.0),
+                        &self.anim_duration_tracker,
+                        &theme,
+                        cx,
                     ))
                     .child(row_divider(&theme))
                     .child(control_row(

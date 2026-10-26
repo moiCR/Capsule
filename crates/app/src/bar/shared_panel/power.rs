@@ -9,7 +9,6 @@ use services::AppState;
 use ui::theme::Theme;
 
 use super::{PowerAction, PowerHold, SharedPanelEvent, SharedPanelItem};
-use crate::bar::style;
 
 pub struct PowerModule {
     pub power_hold: Option<PowerHold>,
@@ -166,7 +165,7 @@ impl Render for PowerModule {
             .gap(px(8.0))
             .w_full();
 
-        let hover_bg = style::hover(&theme);
+        let btn_hover_bg = theme.surface_container_high();
 
         for (action, btn_id, icon, is_danger) in buttons {
             let is_held = current_hold
@@ -182,17 +181,17 @@ impl Render for PowerModule {
             let bar_color = if is_danger {
                 theme.red()
             } else {
-                theme.accent()
+                theme.primary()
             };
             let sweep_color = if is_danger {
-                theme.red().opacity(0.22)
+                theme.red().opacity(0.28)
             } else {
-                theme.accent().opacity(0.22)
+                theme.primary_container()
             };
             let icon_color = if is_danger {
                 theme.red()
             } else if is_held {
-                theme.accent()
+                theme.primary()
             } else {
                 theme.foreground()
             };
@@ -203,20 +202,20 @@ impl Render for PowerModule {
                 .h(px(58.0))
                 .relative()
                 .overflow_hidden()
-                .rounded(px(12.0))
+                .rounded(px(16.0))
                 .bg(if is_held {
-                    style::surface(&theme).opacity(0.85)
+                    theme.primary_container().opacity(0.5)
                 } else {
-                    style::surface(&theme).opacity(0.50)
+                    theme.surface_container_low()
                 })
                 .border_1()
                 .border_color(if is_held {
                     bar_color
                 } else {
-                    style::border(&theme).opacity(0.18)
+                    theme.outline_variant()
                 })
                 .cursor_pointer()
-                .hover(move |s| s.bg(hover_bg));
+                .hover(move |s| s.bg(btn_hover_bg));
 
             if progress > 0.0 {
                 btn = btn.child(

@@ -88,9 +88,9 @@ pub fn render_wifi(
                 .h(px(28.0))
                 .px(px(10.0))
                 .rounded(px(8.0))
-                .bg(style::surface(theme).opacity(0.60))
+                .bg(theme.surface_container_high())
                 .border_1()
-                .border_color(style::border(theme).opacity(0.18))
+                .border_color(theme.outline_variant())
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -155,23 +155,23 @@ pub fn render_wifi(
                     .flex_shrink_0()
                     .pl(px(6.0))
                     .pr(px(10.0))
-                    .rounded(px(10.0))
+                    .rounded(px(12.0))
                     .bg(if is_connected {
-                        style::surface(theme).opacity(0.85)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_connected {
-                        style::border(theme).opacity(0.18)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .hover(move |s| {
                         if !is_connected {
-                            s.bg(style::surface(theme).opacity(0.35))
+                            s.bg(theme.surface_container_high())
                         } else {
-                            s
+                            s.bg(theme.hover_layer(theme.primary_container()))
                         }
                     })
                     .flex()
@@ -379,9 +379,9 @@ pub fn render_bluetooth(theme: &Theme, cx: &mut Context<DashboardModule>) -> Any
                 .h(px(28.0))
                 .px(px(10.0))
                 .rounded(px(8.0))
-                .bg(style::surface(theme).opacity(0.60))
+                .bg(theme.surface_container_high())
                 .border_1()
-                .border_color(style::border(theme).opacity(0.18))
+                .border_color(theme.outline_variant())
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -444,23 +444,23 @@ pub fn render_bluetooth(theme: &Theme, cx: &mut Context<DashboardModule>) -> Any
                     .flex_shrink_0()
                     .pl(px(6.0))
                     .pr(px(10.0))
-                    .rounded(px(10.0))
+                    .rounded(px(12.0))
                     .bg(if is_connected {
-                        style::surface(theme).opacity(0.85)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_connected {
-                        style::border(theme).opacity(0.18)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .hover(move |s| {
                         if !is_connected {
-                            s.bg(style::surface(theme).opacity(0.35))
+                            s.bg(theme.surface_container_high())
                         } else {
-                            s
+                            s.bg(theme.hover_layer(theme.primary_container()))
                         }
                     })
                     .flex()
@@ -644,23 +644,23 @@ pub fn render_audio_output(theme: &Theme, cx: &mut Context<DashboardModule>) -> 
                     .flex_shrink_0()
                     .pl(px(6.0))
                     .pr(px(10.0))
-                    .rounded(px(10.0))
+                    .rounded(px(12.0))
                     .bg(if is_selected {
-                        style::surface(theme).opacity(0.85)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_selected {
-                        style::border(theme).opacity(0.18)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .hover(move |s| {
                         if !is_selected {
-                            s.bg(style::surface(theme).opacity(0.35))
+                            s.bg(theme.surface_container_high())
                         } else {
-                            s
+                            s.bg(theme.hover_layer(theme.primary_container()))
                         }
                     })
                     .flex()
@@ -841,23 +841,23 @@ pub fn render_audio_input(theme: &Theme, cx: &mut Context<DashboardModule>) -> A
                     .flex_shrink_0()
                     .pl(px(6.0))
                     .pr(px(10.0))
-                    .rounded(px(10.0))
+                    .rounded(px(12.0))
                     .bg(if is_selected {
-                        style::surface(theme).opacity(0.85)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .border_1()
                     .border_color(if is_selected {
-                        style::border(theme).opacity(0.18)
+                        theme.primary_container()
                     } else {
                         gpui::transparent_black()
                     })
                     .hover(move |s| {
                         if !is_selected {
-                            s.bg(style::surface(theme).opacity(0.35))
+                            s.bg(theme.surface_container_high())
                         } else {
-                            s
+                            s.bg(theme.hover_layer(theme.primary_container()))
                         }
                     })
                     .flex()

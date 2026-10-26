@@ -2,7 +2,6 @@ use gpui::{ColorExt, Context, FontWeight, IntoElement, ParentElement, Styled, di
 use ui::components::{IconButton, Input};
 use ui::theme::Theme;
 
-use crate::island::widgets::style;
 use crate::settings::Settings;
 
 pub fn render_header(
@@ -27,7 +26,7 @@ pub fn render_header(
                 .px(px(6.0))
                 .py(px(2.0))
                 .rounded(px(4.0))
-                .bg(style::raised(theme))
+                .bg(theme.surface_container_highest())
                 .text_size(px(11.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(theme.foreground_muted().opacity(0.7))
@@ -45,17 +44,17 @@ pub fn render_header(
         .max_w_px(420.0)
         .h_px(44.0)
         .rounded_full()
-        .bg(style::surface(theme))
-        .border_color(style::border(theme))
-        .focused_border_color(theme.accent())
+        .bg(theme.surface_container_high())
+        .border_color(theme.outline_variant().opacity(0.35))
+        .focused_border_color(theme.primary())
         .prefix(
             svg()
                 .path("search.svg")
                 .size(px(15.0))
                 .text_color(if is_searching {
-                    theme.accent()
+                    theme.primary()
                 } else {
-                    theme.foreground_muted()
+                    theme.on_surface_variant()
                 }),
         )
         .on_click(cx.listener(|this, _, window, cx| {

@@ -24,7 +24,7 @@ pub mod tray;
 pub mod wallpaper;
 pub mod weather;
 
-pub use calendar::CalendarService;
+pub use calendar::{CalendarNotesService, CalendarService};
 
 pub use network::{BluetoothDeviceItem, NetworkService, NetworkStatus, WifiAccessPoint};
 pub use shelf::{ShelfItem, ShelfService};

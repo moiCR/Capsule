@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{
-    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, Pixels, Render,
-    Size, Window, div, px, svg,
+    App, ColorExt, Context, EventEmitter, FocusHandle, IntoElement, KeyDownEvent, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Render, Size, Window, div, px, svg,
 };
 use services::{AppState, EmojiItem, EmojiService};
 use ui::components::{Input, InputState};
@@ -251,16 +251,32 @@ impl Render for EmojiModule {
                     .text_size(px(13.5))
                     .bg(gpui::transparent_black())
                     .border_color(gpui::transparent_black())
-                    .focused_border_color(gpui::transparent_black()),
+                    .focused_border_color(gpui::transparent_black())
+                    .on_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                        let theme = cx.global::<Theme>().clone();
+                        this.search_input.handle_mouse_down(event, window, &theme);
+                        cx.notify();
+                    }))
+                    .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                        if this.search_input.is_dragging {
+                            let theme = cx.global::<Theme>().clone();
+                            this.search_input.handle_mouse_move(event, window, &theme);
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                        this.search_input.handle_mouse_up(event);
+                        cx.notify();
+                    })),
             );
 
         let divider = div()
             .w_full()
             .h(px(1.0))
             .flex_shrink_0()
-            .bg(style::border(&theme).opacity(0.16));
+            .bg(theme.outline_variant());
 
-        let cat_hover_bg = style::surface(&theme).opacity(0.35);
+        let cat_hover_bg = theme.surface_container_high();
         let mut cat_row = div()
             .w_full()
             .h(px(28.0))
@@ -276,7 +292,7 @@ impl Render for EmojiModule {
                     .path("sparkles.svg")
                     .size(px(14.0))
                     .text_color(if is_active {
-                        theme.accent()
+                        theme.primary()
                     } else {
                         theme.foreground_muted()
                     })
@@ -295,19 +311,19 @@ impl Render for EmojiModule {
                 .flex_1()
                 .min_w_0()
                 .h_full()
-                .rounded(px(7.0))
+                .rounded_full()
                 .cursor_pointer()
                 .flex()
                 .items_center()
                 .justify_center()
                 .bg(if is_active {
-                    style::surface(&theme).opacity(0.85)
+                    theme.primary_container()
                 } else {
                     gpui::transparent_black()
                 })
                 .border_1()
                 .border_color(if is_active {
-                    style::border(&theme).opacity(0.18)
+                    theme.primary_container()
                 } else {
                     gpui::transparent_black()
                 })

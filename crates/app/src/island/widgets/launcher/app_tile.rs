@@ -2,8 +2,8 @@ use crate::island::widgets::style;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, Context, ElementId, IntoElement, MotionDurationExt, div, ease_in_out, prelude::*,
-    px, svg,
+    AnyElement, ColorExt, Context, ElementId, IntoElement, MotionDurationExt, div, ease_in_out,
+    prelude::*, px, svg,
 };
 use services::Application;
 use ui::theme::Theme;
@@ -33,14 +33,19 @@ fn tile(
         icon,
     } = content;
     let background = if selected {
-        theme.accent()
+        theme.primary_container()
     } else {
-        style::surface(theme)
+        theme.surface_container_high()
     };
-    let hover = if selected {
-        style::tint(theme.accent(), theme.background(), 0.08)
+    let border_color = if selected {
+        theme.primary()
     } else {
-        style::hover(theme)
+        theme.outline_variant().opacity(0.35)
+    };
+    let hover_bg = if selected {
+        theme.primary_hover()
+    } else {
+        theme.surface_container_highest()
     };
     div()
         .id(id)
@@ -56,9 +61,11 @@ fn tile(
         .px(px(8.0))
         .rounded(px(style::CARD_RADIUS))
         .bg(background)
+        .border_1()
+        .border_color(border_color)
         .cursor_pointer()
         .transitions(|transitions| transitions.bg(duration.with_easing(ease_in_out)))
-        .hover(move |style| style.bg(hover))
+        .hover(move |style| style.bg(hover_bg))
         .on_hover(cx.listener(move |this, &hovered, _, cx| {
             if hovered && this.mouse_moved {
                 this.select(index, cx);
@@ -74,7 +81,7 @@ fn tile(
                 .w_full()
                 .text_size(px(12.0))
                 .text_color(if selected {
-                    style::on_accent(theme)
+                    theme.on_primary_container()
                 } else {
                     theme.foreground()
                 })
@@ -97,7 +104,7 @@ pub fn render_app_tile(
         None => svg()
             .path("question-mark.svg")
             .size(px(44.0))
-            .text_color(theme.accent())
+            .text_color(theme.primary())
             .into_any_element(),
     };
     tile(
@@ -124,7 +131,7 @@ pub fn render_calculator_tile(
     let icon = div()
         .h(px(44.0))
         .text_size(px(24.0))
-        .text_color(theme.accent())
+        .text_color(theme.primary())
         .child("=")
         .into_any_element();
     tile(
